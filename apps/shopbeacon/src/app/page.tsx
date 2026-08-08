@@ -4,7 +4,7 @@ import { CheckoutButton } from "@/components/CheckoutButton";
 
 export default function HomePage() {
   const live = checkoutAllowed();
-  const mode = "subscription";
+  const mode = "subscription" as "usage" | "subscription";
   return (
     <main>
       <header

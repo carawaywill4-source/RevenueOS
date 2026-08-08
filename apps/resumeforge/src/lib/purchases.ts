@@ -12,7 +12,11 @@ type Purchase = {
 };
 
 const file = () =>
-  path.join(process.env.REVENUEOS_LEDGER_DIR || ".data/revenueos", "purchases.json");
+  path.join(
+    process.env.REVENUEOS_LEDGER_DIR ||
+      (process.env.VERCEL ? "/tmp/revenueos" : ".data/revenueos"),
+    "purchases.json",
+  );
 
 async function load(): Promise<Purchase[]> {
   try {

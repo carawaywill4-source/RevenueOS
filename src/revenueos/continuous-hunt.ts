@@ -1,11 +1,13 @@
 import {
   buildOwnerReportSummary,
   evaluateFirstCustomerMode,
+  resolveFirstCustomerStage,
   runPursuitTick,
   type DrainResult,
   type OwnerReportSummary,
   type PlanAndEnqueueResult,
 } from "@revenueos/core";
+import { buildPortfolioAllocation } from "@/lib/portfolio";
 import {
   MAX_AUTONOMOUS_DAILY_COST_USD,
   type GrowthSnapshot,
@@ -183,6 +185,20 @@ export async function runContinuousHunt(opts?: {
     ? await store.listPursuits("tributeready")
     : [];
   const hour = observation.hourPulse;
+  const fcm = plan.firstCustomerMode ?? evaluateFirstCustomerMode(observation);
+  const portfolio = buildPortfolioAllocation({
+    metricsBySiteId: {
+      tributeready: {
+        revenueUsd: observation.money.revenueUsd,
+        contributionProfitUsd: observation.money.estimatedProfitUsd,
+        purchases: observation.money.purchases,
+        landingViews: observation.funnel.landingViews,
+        activePursuits: drain.advanced,
+        waitingForEvidence: drain.stillWaiting,
+        claimableBacklog: drain.claimableRemaining,
+      },
+    },
+  });
   const ownerReport = buildOwnerReportSummary({
     siteId: "tributeready",
     windowStart,
@@ -192,7 +208,14 @@ export async function runContinuousHunt(opts?: {
     hourRevenueUsd: hour?.revenueUsd ?? 0,
     hourPurchases: hour?.purchases ?? 0,
     hourLandingViews: hour?.landingViews ?? 0,
+    hourCheckouts: hour?.checkouts ?? observation.funnel.checkouts,
     hadExecutableCapacity: plan.concurrentSlots > 0,
+    firstCustomerMode: fcm.active,
+    firstCustomerStage: resolveFirstCustomerStage(observation),
+    effortNext: [
+      ...portfolio.notes,
+      ...portfolio.effortOrder.slice(0, 5).map((id) => `effort → ${id}`),
+    ],
   });
 
   return {

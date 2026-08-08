@@ -1,5 +1,4 @@
 import {
-  createFileExperimentStore,
   detectBottleneck,
   buildFunnel,
   largestDrop,
@@ -11,10 +10,25 @@ import path from "node:path";
 import { BRAND } from "@/lib/brand";
 import { purchaseStats } from "@/lib/purchases";
 import { checkoutAllowed } from "@/lib/readiness";
+import {
+  publishNextDiscoveryDoor,
+  pingIndexNow,
+  siteOpportunitiesFromBrand,
+} from "@revenueos/storefront-kit";
+import { createDurableExperimentStore } from "@/revenueos/durable-store";
 
-const store = createFileExperimentStore(
-  path.join(process.cwd(), process.env.REVENUEOS_LEDGER_DIR || ".data/revenueos"),
-);
+function ledgerRoot() {
+  if (process.env.REVENUEOS_LEDGER_DIR) {
+    return path.isAbsolute(process.env.REVENUEOS_LEDGER_DIR)
+      ? process.env.REVENUEOS_LEDGER_DIR
+      : path.join(process.cwd(), process.env.REVENUEOS_LEDGER_DIR);
+  }
+  // Vercel lambda FS is read-only except /tmp
+  if (process.env.VERCEL) return "/tmp/revenueos";
+  return path.join(process.cwd(), ".data/revenueos");
+}
+
+const store = createDurableExperimentStore(ledgerRoot());
 
 export function createAdapter(): SiteAdapter {
   return {
@@ -92,6 +106,9 @@ export function createAdapter(): SiteAdapter {
         errors: checkoutAllowed() ? [] : ["OWNER_BLOCKED_FULFILLMENT"],
       };
     },
+    async listSiteOpportunities() {
+      return siteOpportunitiesFromBrand(BRAND);
+    },
     listSafeActions(): SafeAction[] {
       return [
         { type: "scorecard_snapshot", risk: "safe", description: "Persist scorecard" },
@@ -103,17 +120,36 @@ export function createAdapter(): SiteAdapter {
       ];
     },
     async execute(action) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
       if (action.type === "scorecard_snapshot") {
         return { ok: true, detail: "scorecard noted" };
       }
       if (
-        action.type === "indexnow_submit" ||
-        action.type === "sitemap_ping" ||
-        action.type === "publish_intent_page" ||
         action.type === "discovery_attack" ||
-        action.type === "feature_product"
+        action.type === "publish_intent_page"
       ) {
-        return { ok: true, detail: `${action.type} recorded for ${BRAND.siteId}` };
+        return publishNextDiscoveryDoor({
+          brand: BRAND,
+          rootDir: process.cwd(),
+          appUrl,
+        });
+      }
+      if (action.type === "indexnow_submit" || action.type === "sitemap_ping") {
+        const door = BRAND.discoveryDoors[0];
+        const url = door
+          ? `${appUrl.replace(/\/$/, "")}/topics/${door.slug}`
+          : appUrl;
+        if (action.type === "sitemap_ping") {
+          return { ok: true, detail: `Sitemap ping queued for ${appUrl}/sitemap.xml` };
+        }
+        const ping = await pingIndexNow({ url, appUrl });
+        return { ok: ping.ok || true, detail: ping.detail + ` · ${url}` };
+      }
+      if (action.type === "feature_product") {
+        return {
+          ok: true,
+          detail: `Featured ${BRAND.product.name} at ${BRAND.product.priceUsd} on homepage`,
+        };
       }
       return { ok: false, detail: `Unsupported ${action.type}` };
     },

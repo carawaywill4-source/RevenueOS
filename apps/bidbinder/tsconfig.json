@@ -27,10 +27,10 @@
         "./src/*"
       ],
       "@revenueos/core": [
-        "../../packages/revenueos/src/index.ts"
+        "./vendor/revenueos/src/index.ts"
       ],
       "@revenueos/storefront-kit": [
-        "../../packages/storefront-kit/src/index.ts"
+        "./vendor/storefront-kit/src/index.ts"
       ]
     }
   },

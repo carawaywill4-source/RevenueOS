@@ -258,6 +258,7 @@ export async function planAndEnqueuePursuits(
   opportunities = applyFirstCustomerPressure({
     opportunities,
     mode: firstCustomerMode,
+    observation,
   });
 
   const hypotheses = opportunitiesToHypotheses(opportunities);

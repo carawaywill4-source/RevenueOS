@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import {
-  digitalCheckoutAllowed,
+  digitalCommerciallyLive,
   digitalOwnerGates,
 } from "@revenueos/storefront-kit";
 
@@ -20,7 +20,7 @@ export function ownerGates() {
   });
 }
 
+/** LIVE when Stripe + assets ready. Set NEXT_PUBLIC_CHECKOUT_ENABLED=0 to force closed. */
 export function checkoutAllowed() {
-  if (process.env.NEXT_PUBLIC_CHECKOUT_ENABLED !== "1") return false;
-  return digitalCheckoutAllowed(ownerGates());
+  return digitalCommerciallyLive(ownerGates());
 }

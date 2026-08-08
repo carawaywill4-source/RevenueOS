@@ -557,7 +557,11 @@ export function buildOwnerReportSummary(input: {
   hourRevenueUsd: number;
   hourPurchases: number;
   hourLandingViews: number;
+  hourCheckouts?: number;
   hadExecutableCapacity: boolean;
+  firstCustomerMode?: boolean;
+  firstCustomerStage?: string;
+  effortNext?: string[];
 }): OwnerReportSummary {
   const events = input.events;
   const actionsAttempted = events.filter((e) => e.eventType === "claimed").length;
@@ -595,6 +599,40 @@ export function buildOwnerReportSummary(input: {
       return `${e.eventType}: ${detail}`;
     });
 
+  const distributionLines = events
+    .filter(
+      (e) =>
+        e.eventType === "executed" &&
+        typeof e.detail.actionType === "string" &&
+        [
+          "publish_intent_page",
+          "discovery_attack",
+          "indexnow_submit",
+          "sitemap_ping",
+          "feature_product",
+          "publish_bundle",
+        ].includes(String(e.detail.actionType)),
+    )
+    .slice(0, 10)
+    .map((e) => `${e.detail.actionType}: ${e.detail.detail ?? "ok"}`);
+
+  const audiencesPursued = [
+    ...new Set(
+      input.pursuits
+        .map((j) => j.persona || j.channel || j.patternKey || j.title)
+        .filter(Boolean),
+    ),
+  ].slice(0, 8) as string[];
+
+  const learningChanges = events
+    .filter((e) => e.eventType === "attributed" || e.eventType === "learned")
+    .slice(0, 8)
+    .map((e) => {
+      const verdict =
+        typeof e.detail.verdict === "string" ? e.detail.verdict : e.eventType;
+      return `${verdict}: pursuit ${e.pursuitId}`;
+    });
+
   const nextQueue = claimable
     .sort((a, b) => b.priority - a.priority)
     .slice(0, 8)
@@ -608,7 +646,8 @@ export function buildOwnerReportSummary(input: {
   const idle =
     actionsCompleted === 0 &&
     experimentsLaunched === 0 &&
-    attributionsClosed === 0;
+    attributionsClosed === 0 &&
+    distributionLines.length === 0;
   const operationalFailure =
     input.hourPurchases <= 0 && input.hadExecutableCapacity && idle;
 
@@ -631,9 +670,16 @@ export function buildOwnerReportSummary(input: {
     workLines,
     ownerAsks,
     nextQueue,
+    audiencesPursued,
+    distributionLines,
+    learningChanges,
+    effortNext: input.effortNext ?? nextQueue.slice(0, 3),
+    firstCustomerMode: Boolean(input.firstCustomerMode),
+    firstCustomerStage: input.firstCustomerStage,
+    hourCheckouts: input.hourCheckouts ?? 0,
     operationalFailure,
     operationalFailureReason: operationalFailure
-      ? "Zero sales this hour, unused safe capacity, and no pursuit progress — operator failure."
+      ? "Zero sales this hour and RevenueOS only watched statistics — operator failure."
       : undefined,
     hourRevenueUsd: input.hourRevenueUsd,
     hourPurchases: input.hourPurchases,
@@ -645,8 +691,11 @@ export function formatOwnerReport(summary: OwnerReportSummary): string {
   const lines = [
     `OWNER REPORT — ${summary.siteId}`,
     `Window: ${summary.windowStart.slice(0, 16)} → ${summary.windowEnd.slice(0, 16)} UTC`,
+    summary.firstCustomerMode
+      ? `Mode: FIRST_CUSTOMER (${summary.firstCustomerStage ?? "buyer_exposure"})`
+      : "Mode: evidence-driven optimization",
     "",
-    "WHAT REVENUEOS DID",
+    "WHAT REVENUEOS DID (not woke-and-decided)",
     `• Actions attempted: ${summary.actionsAttempted}`,
     `• Actions completed: ${summary.actionsCompleted}`,
     `• Experiments launched: ${summary.experimentsLaunched}`,
@@ -654,10 +703,26 @@ export function formatOwnerReport(summary: OwnerReportSummary): string {
     `• Attributions closed: ${summary.attributionsClosed}`,
     `• Lessons learned: ${summary.lessonsLearned}`,
     "",
-    "MONEY THIS HOUR",
-    `• Revenue: $${summary.hourRevenueUsd.toFixed(2)}`,
-    `• Purchases: ${summary.hourPurchases}`,
+    "BUYERS / AUDIENCES PURSUED",
+    ...(summary.audiencesPursued.length
+      ? summary.audiencesPursued.map((a) => `• ${a}`)
+      : ["• (none logged this hour — failure if FIRST_CUSTOMER)"]),
+    "",
+    "PUBLISHED / DISTRIBUTED / TESTED",
+    ...(summary.distributionLines.length
+      ? summary.distributionLines.map((a) => `• ${a}`)
+      : ["• (no distribution actions completed)"]),
+    "",
+    "FUNNEL THIS HOUR",
     `• Landing views: ${summary.hourLandingViews}`,
+    `• Checkouts: ${summary.hourCheckouts}`,
+    `• Purchases: ${summary.hourPurchases}`,
+    `• Revenue: $${summary.hourRevenueUsd.toFixed(2)}`,
+    "",
+    "WHAT CHANGED BECAUSE OF LEARNING",
+    ...(summary.learningChanges.length
+      ? summary.learningChanges.map((a) => `• ${a}`)
+      : ["• (no attribution closed this hour)"]),
     "",
     "ACTIVE WORK",
     `• Active pursuits: ${summary.activePursuits}`,
@@ -669,13 +734,17 @@ export function formatOwnerReport(summary: OwnerReportSummary): string {
     lines.push("", "WORK LOG");
     for (const line of summary.workLines) lines.push(`• ${line}`);
   }
-  if (summary.ownerAsks.length) {
-    lines.push("", "OWNER ACTIONS REQUIRED");
-    for (const ask of summary.ownerAsks) lines.push(`• ${ask}`);
+  if (summary.effortNext.length) {
+    lines.push("", "PORTFOLIO EFFORT NEXT");
+    for (const item of summary.effortNext) lines.push(`• ${item}`);
   }
   if (summary.nextQueue.length) {
     lines.push("", "NEXT PURSUIT QUEUE");
     for (const item of summary.nextQueue) lines.push(`• ${item}`);
+  }
+  if (summary.ownerAsks.length) {
+    lines.push("", "OWNER ACTIONS REQUIRED (credentials/money/legal only)");
+    for (const ask of summary.ownerAsks) lines.push(`• ${ask}`);
   }
   if (summary.operationalFailure) {
     lines.push("", `OPERATIONAL FAILURE: ${summary.operationalFailureReason}`);

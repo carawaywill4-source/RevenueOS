@@ -2113,6 +2113,7 @@ test("owner report summary shape answers what/learn/next", async () => {
   const text = formatOwnerReport(summary);
   assert.match(text, /WHAT REVENUEOS DID/);
   assert.match(text, /NEXT PURSUIT QUEUE/);
+  assert.match(text, /FUNNEL THIS HOUR/);
   // Progress happened → not operational failure even with $0 sales.
   assert.equal(summary.operationalFailure, false);
 });

@@ -43,6 +43,8 @@ export async function GET(request: Request) {
     hourPurchases: plan.observation.hourPulse?.purchases ?? 0,
     hourLandingViews: plan.observation.hourPulse?.landingViews ?? 0,
     hadExecutableCapacity: plan.concurrentSlots > 0,
+    firstCustomerMode: plan.firstCustomerMode.active,
+    firstCustomerStage: plan.firstCustomerMode.stage,
   });
   return NextResponse.json({
     ok: true,

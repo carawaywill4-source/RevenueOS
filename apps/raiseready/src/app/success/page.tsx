@@ -29,9 +29,12 @@ export default async function SuccessPage({
     <main className="wrap">
       <h1>You're in</h1>
       <p>Thanks for buying {BRAND.product.name}.</p>
-      {token ? (
+      {token && session_id ? (
         <p>
-          <a className="btn" href={`/api/download?token=${token}`}>
+          <a
+            className="btn"
+            href={`/api/download?token=${token}&session_id=${session_id}`}
+          >
             Download your files
           </a>
         </p>
