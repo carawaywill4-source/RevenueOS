@@ -34,7 +34,11 @@ export type OrganicMasteryReport = {
   level: OrganicMasteryLevel;
   score: number;
   mission: string;
-  /** What must be true before ads would multiply instead of waste. */
+  /**
+   * Strategic judgment only: would paid amplify a working organic close?
+   * Never permission to spend — `spend_ads` stays owner-gated until the owner
+   * grants a budget (see policy.ts OWNER_GATE_TYPES).
+   */
   adsReadiness: "locked" | "almost" | "ready";
   drills: string[];
   gaps: string[];
@@ -173,20 +177,24 @@ export function scoreOrganicMastery(input: {
 
   if (adsReadiness !== "ready") {
     drills.push(
-      "Ads remain locked. Master organic lead→sale until paid traffic would multiply a working close, not subsidize a broken one.",
+      "Paid is strategically locked. Master organic lead→sale until ads would multiply a working close, not subsidize a broken one. (Spend stays owner-gated either way.)",
+    );
+  } else {
+    drills.push(
+      "Paid is strategically justified — still not authorized. Owner must grant a spend_ads budget before any paid test runs.",
     );
   }
 
   const verdict =
     level === "lethal"
-      ? `ORGANIC LETHAL (${score}/100): repeatable organic leads→sales proven. Ads would amplify a weapon.`
+      ? `ORGANIC LETHAL (${score}/100): repeatable organic leads→sales proven. Paid is strategically justified; spend still needs owner budget.`
       : level === "master"
-        ? `ORGANIC MASTER (${score}/100): selling from organic. Keep compounding doors that print; ads nearly unlocked.`
+        ? `ORGANIC MASTER (${score}/100): selling from organic. Keep compounding doors that print; paid nearly strategically justified (spend still owner-gated).`
         : level === "journeyman"
           ? `ORGANIC JOURNEYMAN (${score}/100): first sales exist — not mastery yet. Tighten CVR and expand only winning clusters.`
           : level === "apprentice"
             ? `ORGANIC APPRENTICE (${score}/100): tools moving, money not mastered. Refuse vanity. Close or kill.`
-            : `ORGANIC NOVICE (${score}/100): failing at organic leads→sales. This is the whole job until mastery. Ads locked.`;
+            : `ORGANIC NOVICE (${score}/100): failing at organic leads→sales. This is the whole job until mastery. Paid strategically locked.`;
 
   return {
     level,

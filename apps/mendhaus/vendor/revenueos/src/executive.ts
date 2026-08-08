@@ -480,11 +480,12 @@ export async function runCycle(adapter: SiteAdapter) {
       ? await adapter.listUnavailableCapabilities()
       : []),
   ];
-  // Ads stay an explicit gap until organic mastery unlocks them.
+  // Strategic deferral of paid — not the same as spend authorization.
+  // spend_ads remains owner-gated even after adsReadiness === "ready".
   if (organicMastery.adsReadiness !== "ready") {
     declaredUnavailable.push({
       capability: "paid_ads",
-      reason: `Organic mastery ${organicMastery.level} (${organicMastery.score}/100) — ads locked until organic leads→sales is a weapon. ${organicMasteryCurriculumNote(organicMastery)}`,
+      reason: `Organic mastery ${organicMastery.level} (${organicMastery.score}/100) — paid strategically deferred until organic leads→sales is a weapon. Spend stays owner-gated regardless. ${organicMasteryCurriculumNote(organicMastery)}`,
     });
   }
   const capabilityGapsTouched = recordGapsFromOpportunities({

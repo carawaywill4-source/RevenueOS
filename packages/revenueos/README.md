@@ -82,12 +82,32 @@ The `example-static` adapter is a complete, product-free reference. If it
 compiles and `runCycle` learns against it, a new customer only needs their own
 adapter.
 
-## Safe autonomous actions (MVP)
+## Safe autonomous actions
 
-- scorecard snapshot, IndexNow submit, record experiment / lesson, email review.
+The brain may only auto-execute types in `AUTONOMOUS_SAFE_TYPES`
+(`src/policy.ts`). Hosts must implement each type they advertise in
+`listSafeActions()` — the allowlist is permission, not a promise that every
+adapter has the limb.
 
-Page rewrites, price changes, commercial outreach, account creation, and ad
-spend are **owner-gated** or **forbidden**.
+**Autonomous (when the host implements them):**
+`scorecard_snapshot`, `email_daily_review`, `journal_decision`,
+`indexnow_submit`, `market_research`, `publish_intent_page`, `discovery_attack`,
+`sitemap_ping`, `retire_discovery_door`, `merch_optimize`, `activate_kit_deal`,
+`clear_promo`, `set_homepage_focus`, `set_free_shipping_threshold`.
+(`record_experiment` / `record_lesson` are ledger writes inside `runCycle`, not
+host limbs.)
+
+**Owner-gated (strategic judgment may recommend; never auto-spend):**
+`rewrite_page_copy`, `change_price`, `send_commercial_outreach`,
+`create_account`, `spend_ads`.
+
+**Ads readiness vs authorization:** `organicMastery.adsReadiness` is a
+*strategic* signal (organic leads→sales is strong enough that paid would
+amplify, not subsidize). It does **not** authorize spend. `spend_ads` stays
+owner-gated until the owner explicitly grants a budget — judgment and
+permission stay separate.
+
+Unknown action types are **forbidden**.
 
 ## Usage
 

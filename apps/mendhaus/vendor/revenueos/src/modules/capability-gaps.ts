@@ -24,8 +24,9 @@ export const KNOWN_CAPABILITY_GAPS = {
     importance: "high" as CapabilityImportance,
   },
   paid_ads: {
-    desiredAction: "Run paid acquisition tests under a spend cap",
-    reason: "Policy keeps spend_ads owner-gated; EV pressure accumulates as a gap, not an auto-spend.",
+    desiredAction: "Run paid acquisition tests under an owner-granted spend budget",
+    reason:
+      "Strategic adsReadiness and spend authorization are separate. Until organic mastery is ready, paid is strategically deferred; even when ready, spend_ads stays owner-gated until a budget is granted — never auto-spend.",
     expectedValueUsd: 800,
     importance: "medium" as CapabilityImportance,
   },
