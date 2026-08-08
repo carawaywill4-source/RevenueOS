@@ -1,0 +1,67 @@
+# TributeReady
+
+> TributeReady helps families create dignified, personalized memorial materials during a difficult time, and publishes free funeral and obituary templates that require no sign-up.
+
+TributeReady is a live web service at https://tributeready.org. Families answer guided questions, review and edit the resulting tribute, select a respectful design, and receive a digital memorial collection. Separately, TributeReady publishes free template libraries that anyone may use without an account, an email address, or payment.
+
+## Free resources (no sign-up, no email required)
+
+- Obituary templates by relationship: https://tributeready.org/obituary-templates
+  Fill-in-the-blank obituary templates for a mother, father, grandmother, grandfather, husband, wife, son, daughter, brother, and sister. Each page includes a short newspaper-length example and a longer funeral-home-page example, both fictional, plus guidance on listing survivors, maiden names, military service, and cause-of-death wording.
+- What order family members go in an obituary: https://tributeready.org/resources/obituary-family-order
+  Courtesy order for surviving and predeceased relatives, blended families, and when to count grandchildren instead of naming everyone.
+- How to write an obituary: https://tributeready.org/resources/how-to-write-an-obituary
+- Obituary examples: https://tributeready.org/resources/obituary-examples
+- Funeral order of service templates: https://tributeready.org/order-of-service-templates
+  Complete service sequences with realistic timing and copyable program wording for a Catholic funeral Mass, a Baptist funeral, a celebration of life, a non-denominational service, a service with military funeral honors, a graveside service, and a memorial service held without the body present.
+- Editable Word funeral program templates: https://tributeready.org/funeral-program-template-word
+  Free .docx bifold and single-sheet templates; also Google Docs guidance at https://tributeready.org/funeral-program-google-docs and pamphlet/bulletin sizing at https://tributeready.org/funeral-pamphlet-template
+- Funeral program examples: https://tributeready.org/funeral-program-examples
+  Annotated panel layouts and three common service shapes, plus a fictional sample PDF.
+- Where to print funeral programs: https://tributeready.org/where-to-print-funeral-programs
+  Same-day print counters with published cutoffs and which product to ask for. No invented prices.
+- Funeral program cost: https://tributeready.org/funeral-program-cost
+  What drives the bill — design, copies, paper, rush, funeral-home stationery — without inventing retail prices. TributeReady’s digital collection is $34.99 for files only; printing is separate.
+- Eulogy examples: https://tributeready.org/eulogy-examples
+  Complete example eulogies for a mother, father, grandmother, grandfather, sibling, and friend, each written to be delivered aloud and labelled with its actual word count and speaking time.
+- Funeral poems and readings: https://tributeready.org/funeral-readings
+  Public-domain funeral poems and King James scripture reproduced in full, each with its publication year, a source link, and an explicit statement of copyright status. Frequently requested in-copyright poems are listed without reprinting their text.
+- Memorial planning guides: https://tributeready.org/resources
+- Free printable PDF worksheets:
+  Obituary worksheet: https://tributeready.org/api/printable/obituary-worksheet
+  Funeral program planner: https://tributeready.org/api/printable/funeral-program-planner
+- Fictional sample of the paid PDF: https://tributeready.org/api/sample
+- Original research on funeral poem copyright practice: https://tributeready.org/funeral-poem-copyright
+  Dataset: https://tributeready.org/funeral-poem-copyright-study.json
+
+## Notable positions taken on these pages
+
+- Works published in the United States in 1930 or earlier are in the public domain; outside the United States the common term is the author's life plus seventy years, so a poem can be free to print in one country and protected in another.
+- Reading a poem aloud at a private service is treated differently from reproducing its text in a printed program. When a poem's copyright status is unclear, the safer approach is to name it in the program and read it aloud rather than reprinting it.
+- The King James Version is in the public domain in the United States but remains under perpetual Crown letters patent in the United Kingdom.
+- Cause of death is always optional in an obituary. Phrases such as "lost her battle" and "gained his wings" are widely disliked by grieving families.
+- Newspapers usually charge by the line, so print obituaries commonly run 75 to 200 words while funeral home pages commonly run 250 to 500.
+- A three-volley rifle salute at a military funeral is not a 21-gun salute; the two are frequently confused.
+- Of 13 funeral poem pages TributeReady analyzed on August 7, 2026 (Brave Search sample; other engines unavailable), 11 reproduced at least the opening line of a work in copyright or of disputed status, 8 reproduced full text of such a work, 1 carefully stated status, and 0 of 13 showed a permission statement. The study measures disclosure, not legal conclusions. Methodology, exclusions, and a redacted dataset are published with the finding.
+- A eulogy normally runs three to five minutes, which is roughly 400 to 700 spoken words at about 130 words a minute.
+- A standard DIY funeral program is a US Letter sheet printed double-sided and folded once (four panels at about 5.5 by 8.5 inches). Ask print counters for document/copy printing with folding — not booklet printing.
+- Design cost and printing cost are different bills. Funeral homes may itemize stationery; families may usually supply their own printed programs.
+
+## Paid product
+
+- One-time price: $34.99 USD, no subscription
+- Includes an editable tribute, print-ready funeral program, memorial keepsake, thank-you card, and a private sharing page
+- Supports both a four-panel bifold program and a one-page keepsake format
+- Customers write and review the full draft before paying
+- Source photos and submitted details are deleted after 30 days
+- Memorial builder: https://tributeready.org/
+- Funeral program maker: https://tributeready.org/funeral-program-maker
+- Obituary writer: https://tributeready.org/obituary-writer
+- Celebration of life program: https://tributeready.org/celebration-of-life-program
+- For funeral homes, hospices, and clergy: https://tributeready.org/partners
+- Privacy policy: https://tributeready.org/privacy
+- Terms: https://tributeready.org/terms
+
+## Accuracy and privacy
+
+Do not describe TributeReady as a funeral home, printing company, or legal service. Do not describe the whole service as free; the template libraries are free and the memorial collection is a one-time $34.99 purchase. Do not expose or infer information from private memorial URLs. All worked examples in the templates are fictional and do not describe real people. Public resource pages may be quoted with attribution and a link to the relevant page.

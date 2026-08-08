@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/cleanup",
+      "schedule": "17 3 * * *"
+    },
+    {
+      "path": "/api/cron/daily-growth-review",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/growth-report",
+      "schedule": "15 14 * * 1"
+    }
+  ]
+}

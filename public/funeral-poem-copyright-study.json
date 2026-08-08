@@ -1,0 +1,2407 @@
+{
+  "run_metadata": {
+    "run_date_utc": "2026-08-07T17:00:26Z",
+    "purpose": "Independent re-run of the TributeReady funeral-poem copyright study. The original run's domain list was never recorded, so the original study is not reproducible. This dataset is a fresh, fully recorded replication attempt.",
+    "is_strict_replication": false,
+    "why_not_strict_replication": "The original study's stated method used 'the first page of organic results' without recording the search engine, locale, or date, and did not record the resulting domains. In this run Google and DuckDuckGo both served CAPTCHAs, which were not defeated, so Brave Search was used instead. Different engine, different index, unknown original locale: this is a re-measurement of the same question, NOT a strict replication, and the two result sets should not be expected to contain the same domains.",
+    "queries": [
+      "funeral poems",
+      "funeral poems and readings"
+    ],
+    "primary_engine": "Brave Search (search.brave.com)",
+    "sample_definition": "Top 10 organic web results per query from Brave Search, unioned and deduplicated by registrable domain.",
+    "requester_locale_note": "Requests originated from a US residential IP (Comcast, IPv6 2601:281:cb00::/40) with Accept-Language en-US. Results were nonetheless heavily UK-weighted, which materially affects which poems appear.",
+    "search_engine_log": [
+      {
+        "engine": "DuckDuckGo (html.duckduckgo.com/html/)",
+        "queries": [
+          "funeral poems",
+          "funeral poems and readings"
+        ],
+        "timestamp_utc": "2026-08-07T16:43:36Z",
+        "result": "BLOCKED",
+        "detail": "HTTP 202 with an interstitial anti-bot challenge ('Unfortunately, bots use DuckDuckGo too. Select all squares containing a duck'). CAPTCHA not attempted."
+      },
+      {
+        "engine": "DuckDuckGo Lite (lite.duckduckgo.com/lite/)",
+        "queries": [
+          "funeral poems"
+        ],
+        "timestamp_utc": "2026-08-07T16:45Z",
+        "result": "BLOCKED",
+        "detail": "HTTP 202, same anti-bot challenge."
+      },
+      {
+        "engine": "Google (headless Chrome 126, --dump-dom)",
+        "queries": [
+          "funeral poems"
+        ],
+        "timestamp_utc": "2026-08-07T16:46:34Z",
+        "result": "BLOCKED",
+        "detail": "Google 'unusual traffic' CAPTCHA interstitial ('Our systems have detected unusual traffic from your computer network'). CAPTCHA not attempted. Google could NOT be used, so this run is not a strict replication."
+      },
+      {
+        "engine": "Startpage (startpage.com/sp/search)",
+        "queries": [
+          "funeral poems"
+        ],
+        "timestamp_utc": "2026-08-07T16:44Z",
+        "result": "BLOCKED",
+        "detail": "HTTP 200 but a 10 KB anti-bot interstitial with no organic results."
+      },
+      {
+        "engine": "Bing (bing.com/search)",
+        "queries": [
+          "funeral poems"
+        ],
+        "timestamp_utc": "2026-08-07T16:44Z",
+        "result": "UNUSABLE",
+        "detail": "HTTP 200 but every organic result URL was wrapped in r.bing.com redirect links; destination domains were not recoverable without following each redirect. Not used."
+      },
+      {
+        "engine": "Brave Search (search.brave.com)",
+        "queries": [
+          "funeral poems",
+          "funeral poems and readings"
+        ],
+        "timestamp_utc": "2026-08-07T16:44Z",
+        "result": "USED - PRIMARY",
+        "detail": "HTTP 200 with parseable ordered organic results (18 and 20 web results respectively). Brave operates its own independent index. Top 10 organic web results per query were taken as the 'first page'."
+      },
+      {
+        "engine": "Mojeek (mojeek.com/search)",
+        "queries": [
+          "funeral poems",
+          "funeral poems and readings"
+        ],
+        "timestamp_utc": "2026-08-07T16:44Z",
+        "result": "USED - SECONDARY / SENSITIVITY ONLY",
+        "detail": "HTTP 200, 10 organic results per query. Mojeek's independent index is small and returned several results implausible for this query (a blog post about funeral music, two e-commerce product pages). Recorded for comparison but NOT analysed, and NOT part of the headline denominators."
+      }
+    ],
+    "mojeek_secondary_results_not_analysed": {
+      "funeral poems": [
+        "familyfriendpoems.com",
+        "elegantmemorials.com",
+        "thefuneralpoem.com",
+        "memorybooks.me",
+        "lastingpost.com",
+        "radioactiveart.blog",
+        "funeralguide.co.uk",
+        "quickfuneral.com",
+        "stresslesscountry.com",
+        "usurnsonline.com"
+      ],
+      "funeral poems and readings": [
+        "blog.sevenponds.com",
+        "bibleandbookcenter.com",
+        "dignitymemorial.com",
+        "someonesentyouagreeting.com",
+        "savefuneralcosts.co.uk",
+        "mywonderfullife.com",
+        "bookriot.com",
+        "johngrayfuneraldirectors.com",
+        "lastrites.ltd",
+        "moonstonempls.com"
+      ]
+    }
+  },
+  "counting_rules": {
+    "in_scope_copyright_statuses": [
+      "in copyright",
+      "disputed",
+      "uncertain"
+    ],
+    "full_text_threshold": "coverage >= 70% of probed lines",
+    "substantial_excerpt_threshold": "coverage >= 40%",
+    "never_counted_as_reproduction": [
+      "title_mention_only - the page lists the poem's title but reproduces no line",
+      "ambiguous_no_identifying_line - only title-equivalent lines or known floating/traditional stanzas matched",
+      "citation_pointer_not_reproduction - the matched line appears only inside a 'where to find / search for' pointer"
+    ],
+    "departures_from_published_method": [
+      "The published method confirmed full-text reproduction by 'matching a line from later in the same work'. That test is unsafe: a 4-line first-stanza excerpt satisfies it. Verified live on wvfuneralboard.com, which prints only the first 4 lines of 'Do Not Stand at My Grave and Weep' yet matches both an opening line and a 'later' line. This run measures coverage across ALL lines instead.",
+      "The published method detected works 'by matching a distinctive opening line'. For 5 of the 11 works the title IS the opening line ('When Great Trees Fall', 'Do Not Stand at My Grave and Weep', 'Miss Me But Let Me Go', 'God Saw You Getting Tired', and the common subtitle 'Stop all the clocks'). Merely LISTING such a title satisfies the published test. This run never counts a title-equivalent line on its own.",
+      "Several works share traditional 'floating' stanzas with other, different poems. Verified live: 'In life we loved you dearly, in death we love you still' and 'It broke our hearts to lose you' appear on dignityfunerals.co.uk inside a poem credited to Rhonda Braswell, NOT inside Ron Tranmer's 'The Broken Chain'. Such lines are marked shared and never identify a work on their own.",
+      "Line matching is variant-tolerant. These poems circulate in many wordings ('bless the memories' / 'treasure the memories'), and single fixed fragments badly under-count full-text reproduction."
+    ]
+  },
+  "headline_findings_this_run": {
+    "reproduced_at_least_partially": "11 of 13",
+    "reproduced_full_text": "8 of 13",
+    "stated_public_domain_status": "1 of 13",
+    "stated_any_copyright_status": "1 of 13",
+    "visible_permission_or_licence_statement": "0 of 13"
+  },
+  "sensitivity_analysis": {
+    "note": "The full-text threshold was not tuned to reproduce the published figures. 'Reproduced' is 11 of 13 at every threshold, and 'full text' is 8 of 13 across the whole range 0.60-0.90. It only moves to 9 at a lenient 0.50, and to 6 at an unattainable 1.00 (which would require every line to match a fixed fragment despite documented textual variants).",
+    "table": [
+      {
+        "full_text_coverage_threshold": 0.5,
+        "reproduced": "11 of 13",
+        "full_text": "9 of 13"
+      },
+      {
+        "full_text_coverage_threshold": 0.6,
+        "reproduced": "11 of 13",
+        "full_text": "8 of 13"
+      },
+      {
+        "full_text_coverage_threshold": 0.65,
+        "reproduced": "11 of 13",
+        "full_text": "8 of 13"
+      },
+      {
+        "full_text_coverage_threshold": 0.7,
+        "reproduced": "11 of 13",
+        "full_text": "8 of 13"
+      },
+      {
+        "full_text_coverage_threshold": 0.75,
+        "reproduced": "11 of 13",
+        "full_text": "8 of 13"
+      },
+      {
+        "full_text_coverage_threshold": 0.8,
+        "reproduced": "11 of 13",
+        "full_text": "8 of 13"
+      },
+      {
+        "full_text_coverage_threshold": 0.9,
+        "reproduced": "11 of 13",
+        "full_text": "8 of 13"
+      },
+      {
+        "full_text_coverage_threshold": 1.0,
+        "reproduced": "11 of 13",
+        "full_text": "6 of 13"
+      }
+    ]
+  },
+  "published_figures_for_comparison": {
+    "hosts_found": 14,
+    "blocked": 2,
+    "analyzed": 12,
+    "reproduced_opening_line": "11 of 12",
+    "full_text": "8 of 12",
+    "stated_public_domain": "1 of 12",
+    "permission_statement": "0 of 12",
+    "per_work_pages": {
+      "she_is_gone": 9,
+      "do_not_stand": 9,
+      "funeral_blues": 6,
+      "when_great_trees_fall": 4,
+      "afterglow": 4,
+      "miss_me": 4,
+      "the_dash": 3,
+      "to_those_whom_i_love": 3,
+      "turn_again_to_life": 2,
+      "broken_chain": 1,
+      "god_saw_you_getting_tired": 1
+    }
+  },
+  "domains": {
+    "total_found": 15,
+    "analysed": [
+      "dignityfunerals.co.uk",
+      "familytreeceremonies.co.uk",
+      "panmacmillan.com",
+      "tharpfuneralhome.com",
+      "poets.org",
+      "humanist.org.uk",
+      "gupton-jones.edu",
+      "stoneletters.com",
+      "humanists.uk",
+      "amandalouisefuneralservices.co.uk",
+      "wvfuneralboard.com",
+      "theinspiredfuneral.com",
+      "eulogyexpert.com"
+    ],
+    "excluded": [
+      {
+        "domain": "reddit.com",
+        "url": "https://www.reddit.com/r/Poetry/comments/1diyhmv/help_similar_poems_for_a_funeral/",
+        "http_status": 200,
+        "reason": "HTTP 200 but only 198 chars of server-rendered text (JavaScript-gated). Page content could not be verified, so the page is excluded from all denominators."
+      },
+      {
+        "domain": "dignitymemorial.com",
+        "url": "https://www.dignitymemorial.com/memorial-services/planning-a-funeral/funeral-poems-and-readings",
+        "http_status": 403,
+        "reason": "HTTP 403 Forbidden - blocked automated access; publishing practice unknown."
+      }
+    ]
+  },
+  "per_work_page_counts_this_run": {
+    "she_is_gone": {
+      "title": "She Is Gone (also published as He Is Gone)",
+      "author": "David Harkins, 1981",
+      "copyright_status": "in copyright",
+      "status_note": "In copyright. Harkins is a living, identified British artist. Very widely misattributed to 'Anonymous'.",
+      "pages_reproducing_any_part": 7,
+      "pages_reproducing_full_text": 6,
+      "published_page_count": 9
+    },
+    "do_not_stand": {
+      "title": "Do Not Stand at My Grave and Weep",
+      "author": "Attributed to Mary Elizabeth Frye, c. 1932",
+      "copyright_status": "disputed",
+      "status_note": "Disputed. Authorship contested for decades; first publication and copyright position never conclusively settled. Widely treated as public domain.",
+      "pages_reproducing_any_part": 9,
+      "pages_reproducing_full_text": 5,
+      "published_page_count": 9
+    },
+    "funeral_blues": {
+      "title": "Funeral Blues (Stop all the clocks)",
+      "author": "W. H. Auden, 1938",
+      "copyright_status": "in copyright",
+      "status_note": "In copyright in the US and most other jurisdictions (Auden d. 1973).",
+      "pages_reproducing_any_part": 4,
+      "pages_reproducing_full_text": 3,
+      "published_page_count": 6
+    },
+    "when_great_trees_fall": {
+      "title": "When Great Trees Fall",
+      "author": "Maya Angelou, 1990",
+      "copyright_status": "in copyright",
+      "status_note": "In copyright (Angelou d. 2014; published 1990).",
+      "pages_reproducing_any_part": 3,
+      "pages_reproducing_full_text": 1,
+      "published_page_count": 4
+    },
+    "afterglow": {
+      "title": "Afterglow",
+      "author": "Helen Lowrie Marshall, 1958",
+      "copyright_status": "in copyright",
+      "status_note": "In copyright (Marshall d. 1975). Frequently published with no author credit.",
+      "pages_reproducing_any_part": 6,
+      "pages_reproducing_full_text": 6,
+      "published_page_count": 4
+    },
+    "miss_me": {
+      "title": "Miss Me But Let Me Go",
+      "author": "Anonymous / disputed",
+      "copyright_status": "disputed",
+      "status_note": "Disputed. No settled authorship; status unresolved rather than clear.",
+      "pages_reproducing_any_part": 5,
+      "pages_reproducing_full_text": 2,
+      "published_page_count": 4
+    },
+    "the_dash": {
+      "title": "The Dash",
+      "author": "Linda Ellis, 1996",
+      "copyright_status": "in copyright",
+      "status_note": "In copyright and actively licensed. Rights holder has historically pursued unlicensed reproductions.",
+      "pages_reproducing_any_part": 2,
+      "pages_reproducing_full_text": 2,
+      "published_page_count": 3
+    },
+    "to_those_whom_i_love": {
+      "title": "To Those Whom I Love",
+      "author": "Isla Paschal Richardson",
+      "copyright_status": "in copyright",
+      "status_note": "In copyright. First published mid-20th century and still within term in most jurisdictions.",
+      "pages_reproducing_any_part": 3,
+      "pages_reproducing_full_text": 3,
+      "published_page_count": 3
+    },
+    "turn_again_to_life": {
+      "title": "Turn Again to Life",
+      "author": "Mary Lee Hall",
+      "copyright_status": "uncertain",
+      "status_note": "Uncertain. Attribution and first publication are both unclear.",
+      "pages_reproducing_any_part": 2,
+      "pages_reproducing_full_text": 1,
+      "published_page_count": 2
+    },
+    "broken_chain": {
+      "title": "The Broken Chain",
+      "author": "Ron Tranmer",
+      "copyright_status": "in copyright",
+      "status_note": "In copyright. Tranmer is a living, identified author who asserts rights.",
+      "pages_reproducing_any_part": 0,
+      "pages_reproducing_full_text": 0,
+      "published_page_count": 1
+    },
+    "god_saw_you_getting_tired": {
+      "title": "God Saw You Getting Tired",
+      "author": "Anonymous / disputed",
+      "copyright_status": "disputed",
+      "status_note": "Disputed authorship and unresolved status.",
+      "pages_reproducing_any_part": 1,
+      "pages_reproducing_full_text": 1,
+      "published_page_count": 1
+    }
+  },
+  "notable_observations": [
+    "wvfuneralboard.com is the single most careful publisher in the sample and the published method would have SCORED IT AS AN INFRINGER. It labels public-domain works 'This poem is in the public domain', and for in-copyright works it prints 'Copyrighted. Available in Angelou's published collections. Do not reproduce - description only.' For Harkins it prints no text at all, only 'Where to find: Search [opening line withheld] - widely available online.' Under the published rule (match a distinctive opening line) that pointer, and the bare title 'When Great Trees Fall', both register as reproductions.",
+    "theinspiredfuneral.com matches NONE of the 11 works and so scores 'clean', yet it reproduces Derek Mahon's 'Everything is Going to be All Right' and Nick Cave's 'Thoughts on Grief' in full. Both are plainly in copyright. The 11-work list misses this entirely.",
+    "panmacmillan.com reproduces Auden's 'Funeral Blues' in full with no statement beside the poem. It is a major trade publisher with a site-wide 'Permissions' footer link, so it is the page in this sample most likely to actually hold or be able to clear rights. This is the clearest illustration of why absence of a visible statement is not evidence of infringement.",
+    "humanists.uk and amandalouisefuneralservices.co.uk both reproduce Linda Ellis's 'The Dash' in full (30 of 31 lines). That rights holder is the one in this list with a documented history of pursuing unlicensed reproductions.",
+    "amandalouisefuneralservices.co.uk also reproduces in-copyright song lyrics ('The Place Where Lost Things Go') and Tennyson, i.e. the page mixes public-domain and in-copyright material with no distinction drawn anywhere.",
+    "The 'In life we loved you dearly / It broke our hearts to lose you' stanzas appear on 4 pages inside a poem credited to Rhonda Braswell, NOT inside Ron Tranmer's 'The Broken Chain'. The published study's count of 1 page for 'The Broken Chain' is most plausibly this false positive; this run counts 0."
+  ],
+  "pages": [
+    {
+      "domain": "dignityfunerals.co.uk",
+      "url": "https://www.dignityfunerals.co.uk/arranging-a-funeral/planning-a-funeral/funeral-poems-and-verses/",
+      "first_seen_query": "funeral poems",
+      "first_seen_rank": 1,
+      "also_ranked": [
+        {
+          "query": "funeral poems and readings",
+          "rank": 3
+        }
+      ],
+      "http_status": 200,
+      "fetch_ok": true,
+      "bytes": 104033,
+      "final_url": "https://www.dignityfunerals.co.uk/arranging-a-funeral/planning-a-funeral/funeral-poems-and-verses/",
+      "raw_file": "/tmp/poemstudy/pages/dignityfunerals.co.uk.html",
+      "sha256": "f2d7dd48472ba819",
+      "visible_text_chars": 51408,
+      "analysable": true,
+      "detections": [
+        {
+          "work_id": "she_is_gone",
+          "title": "She Is Gone (also published as He Is Gone)",
+          "author": "David Harkins, 1981",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. Harkins is a living, identified British artist. Very widely misattributed to 'Anonymous'.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 11,
+          "identifying_lines_matched": 11,
+          "coverage": 0.917,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ]
+        },
+        {
+          "work_id": "do_not_stand",
+          "title": "Do Not Stand at My Grave and Weep",
+          "author": "Attributed to Mary Elizabeth Frye, c. 1932",
+          "copyright_status": "disputed",
+          "status_note": "Disputed. Authorship contested for decades; first publication and copyright position never conclusively settled. Widely treated as public domain.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 11,
+          "identifying_lines_matched": 10,
+          "coverage": 0.917,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ]
+        },
+        {
+          "work_id": "funeral_blues",
+          "title": "Funeral Blues (Stop all the clocks)",
+          "author": "W. H. Auden, 1938",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright in the US and most other jurisdictions (Auden d. 1973).",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 16,
+          "lines_matched": 16,
+          "identifying_lines_matched": 15,
+          "coverage": 1.0,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ]
+        },
+        {
+          "work_id": "afterglow",
+          "title": "Afterglow",
+          "author": "Helen Lowrie Marshall, 1958",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright (Marshall d. 1975). Frequently published with no author credit.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 6,
+          "lines_matched": 6,
+          "identifying_lines_matched": 6,
+          "coverage": 1.0,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "work_id": "miss_me",
+          "title": "Miss Me But Let Me Go",
+          "author": "Anonymous / disputed",
+          "copyright_status": "disputed",
+          "status_note": "Disputed. No settled authorship; status unresolved rather than clear.",
+          "verdict": "substantial_excerpt",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 15,
+          "lines_matched": 10,
+          "identifying_lines_matched": 9,
+          "coverage": 0.667,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            5,
+            7,
+            8,
+            9,
+            11,
+            13
+          ]
+        },
+        {
+          "work_id": "to_those_whom_i_love",
+          "title": "To Those Whom I Love",
+          "author": "Isla Paschal Richardson",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. First published mid-20th century and still within term in most jurisdictions.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 19,
+          "lines_matched": 19,
+          "identifying_lines_matched": 19,
+          "coverage": 1.0,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18
+          ]
+        },
+        {
+          "work_id": "broken_chain",
+          "title": "The Broken Chain",
+          "author": "Ron Tranmer",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. Tranmer is a living, identified author who asserts rights.",
+          "verdict": "ambiguous_no_identifying_line",
+          "counts_as_reproduction": false,
+          "counts_as_full_text": false,
+          "title_mentioned": false,
+          "lines_probed": 9,
+          "lines_matched": 4,
+          "identifying_lines_matched": 0,
+          "coverage": 0.444,
+          "matched_line_indices": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "work_id": "god_saw_you_getting_tired",
+          "title": "God Saw You Getting Tired",
+          "author": "Anonymous / disputed",
+          "copyright_status": "disputed",
+          "status_note": "Disputed authorship and unresolved status.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 6,
+          "lines_matched": 5,
+          "identifying_lines_matched": 3,
+          "coverage": 0.833,
+          "matched_line_indices": [
+            0,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      ],
+      "public_domain_statement": {
+        "present": false,
+        "hits": []
+      },
+      "permission_or_licence_statement": {
+        "present": false,
+        "hits": []
+      },
+      "poem_level_copyright_statement": {
+        "present": false,
+        "hits": []
+      },
+      "declines_to_reproduce_signals": {
+        "present": false,
+        "hits": []
+      },
+      "any_copyright_status_statement": false,
+      "summary": {
+        "reproduced_in_scope": [
+          "she_is_gone",
+          "do_not_stand",
+          "funeral_blues",
+          "afterglow",
+          "miss_me",
+          "to_those_whom_i_love",
+          "god_saw_you_getting_tired"
+        ],
+        "full_text_in_scope": [
+          "she_is_gone",
+          "do_not_stand",
+          "funeral_blues",
+          "afterglow",
+          "to_those_whom_i_love",
+          "god_saw_you_getting_tired"
+        ],
+        "ambiguous_only": [
+          "broken_chain"
+        ]
+      }
+    },
+    {
+      "domain": "familytreeceremonies.co.uk",
+      "url": "https://familytreeceremonies.co.uk/my-go-to-funeral-poems/",
+      "first_seen_query": "funeral poems",
+      "first_seen_rank": 2,
+      "also_ranked": [],
+      "http_status": 200,
+      "fetch_ok": true,
+      "bytes": 97555,
+      "final_url": "https://familytreeceremonies.co.uk/my-go-to-funeral-poems/",
+      "raw_file": "/tmp/poemstudy/pages/familytreeceremonies.co.uk.html",
+      "sha256": "02569ffe2a7e070e",
+      "visible_text_chars": 14987,
+      "analysable": true,
+      "detections": [
+        {
+          "work_id": "she_is_gone",
+          "title": "She Is Gone (also published as He Is Gone)",
+          "author": "David Harkins, 1981",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. Harkins is a living, identified British artist. Very widely misattributed to 'Anonymous'.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 11,
+          "identifying_lines_matched": 11,
+          "coverage": 0.917,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11
+          ]
+        },
+        {
+          "work_id": "afterglow",
+          "title": "Afterglow",
+          "author": "Helen Lowrie Marshall, 1958",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright (Marshall d. 1975). Frequently published with no author credit.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": false,
+          "lines_probed": 6,
+          "lines_matched": 5,
+          "identifying_lines_matched": 5,
+          "coverage": 0.833,
+          "matched_line_indices": [
+            0,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "work_id": "miss_me",
+          "title": "Miss Me But Let Me Go",
+          "author": "Anonymous / disputed",
+          "copyright_status": "disputed",
+          "status_note": "Disputed. No settled authorship; status unresolved rather than clear.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 15,
+          "lines_matched": 12,
+          "identifying_lines_matched": 11,
+          "coverage": 0.8,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            13,
+            14
+          ]
+        },
+        {
+          "work_id": "broken_chain",
+          "title": "The Broken Chain",
+          "author": "Ron Tranmer",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. Tranmer is a living, identified author who asserts rights.",
+          "verdict": "ambiguous_no_identifying_line",
+          "counts_as_reproduction": false,
+          "counts_as_full_text": false,
+          "title_mentioned": false,
+          "lines_probed": 9,
+          "lines_matched": 2,
+          "identifying_lines_matched": 0,
+          "coverage": 0.222,
+          "matched_line_indices": [
+            3,
+            4
+          ]
+        }
+      ],
+      "public_domain_statement": {
+        "present": false,
+        "hits": []
+      },
+      "permission_or_licence_statement": {
+        "present": false,
+        "hits": []
+      },
+      "poem_level_copyright_statement": {
+        "present": false,
+        "hits": []
+      },
+      "declines_to_reproduce_signals": {
+        "present": false,
+        "hits": []
+      },
+      "any_copyright_status_statement": false,
+      "summary": {
+        "reproduced_in_scope": [
+          "she_is_gone",
+          "afterglow",
+          "miss_me"
+        ],
+        "full_text_in_scope": [
+          "she_is_gone",
+          "afterglow",
+          "miss_me"
+        ],
+        "ambiguous_only": [
+          "broken_chain"
+        ]
+      }
+    },
+    {
+      "domain": "panmacmillan.com",
+      "url": "https://www.panmacmillan.com/blogs/literary/funeral-poems-non-religious-short-uplifting",
+      "first_seen_query": "funeral poems",
+      "first_seen_rank": 3,
+      "also_ranked": [
+        {
+          "query": "funeral poems and readings",
+          "rank": 2
+        }
+      ],
+      "http_status": 200,
+      "fetch_ok": true,
+      "bytes": 154973,
+      "final_url": "https://www.panmacmillan.com/blogs/literary/funeral-poems-non-religious-short-uplifting",
+      "raw_file": "/tmp/poemstudy/pages/panmacmillan.com.html",
+      "sha256": "4dcdd94abc337711",
+      "visible_text_chars": 10305,
+      "analysable": true,
+      "detections": [
+        {
+          "work_id": "do_not_stand",
+          "title": "Do Not Stand at My Grave and Weep",
+          "author": "Attributed to Mary Elizabeth Frye, c. 1932",
+          "copyright_status": "disputed",
+          "status_note": "Disputed. Authorship contested for decades; first publication and copyright position never conclusively settled. Widely treated as public domain.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 12,
+          "identifying_lines_matched": 11,
+          "coverage": 1.0,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ]
+        },
+        {
+          "work_id": "funeral_blues",
+          "title": "Funeral Blues (Stop all the clocks)",
+          "author": "W. H. Auden, 1938",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright in the US and most other jurisdictions (Auden d. 1973).",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 16,
+          "lines_matched": 16,
+          "identifying_lines_matched": 15,
+          "coverage": 1.0,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ]
+        }
+      ],
+      "public_domain_statement": {
+        "present": false,
+        "hits": []
+      },
+      "permission_or_licence_statement": {
+        "present": false,
+        "hits": []
+      },
+      "poem_level_copyright_statement": {
+        "present": false,
+        "hits": []
+      },
+      "declines_to_reproduce_signals": {
+        "present": false,
+        "hits": []
+      },
+      "any_copyright_status_statement": false,
+      "summary": {
+        "reproduced_in_scope": [
+          "do_not_stand",
+          "funeral_blues"
+        ],
+        "full_text_in_scope": [
+          "do_not_stand",
+          "funeral_blues"
+        ],
+        "ambiguous_only": []
+      }
+    },
+    {
+      "domain": "tharpfuneralhome.com",
+      "url": "https://www.tharpfuneralhome.com/7-uplifting-funeral-poems-to-read-at-a-service",
+      "first_seen_query": "funeral poems",
+      "first_seen_rank": 4,
+      "also_ranked": [
+        {
+          "query": "funeral poems and readings",
+          "rank": 4
+        }
+      ],
+      "http_status": 200,
+      "fetch_ok": true,
+      "bytes": 210957,
+      "final_url": "https://www.tharpfuneralhome.com/7-uplifting-funeral-poems-to-read-at-a-service",
+      "raw_file": "/tmp/poemstudy/pages/tharpfuneralhome.com.html",
+      "sha256": "d04a2d773df65c78",
+      "visible_text_chars": 28158,
+      "analysable": true,
+      "detections": [
+        {
+          "work_id": "she_is_gone",
+          "title": "She Is Gone (also published as He Is Gone)",
+          "author": "David Harkins, 1981",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. Harkins is a living, identified British artist. Very widely misattributed to 'Anonymous'.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 11,
+          "identifying_lines_matched": 11,
+          "coverage": 0.917,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ]
+        },
+        {
+          "work_id": "do_not_stand",
+          "title": "Do Not Stand at My Grave and Weep",
+          "author": "Attributed to Mary Elizabeth Frye, c. 1932",
+          "copyright_status": "disputed",
+          "status_note": "Disputed. Authorship contested for decades; first publication and copyright position never conclusively settled. Widely treated as public domain.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 10,
+          "identifying_lines_matched": 9,
+          "coverage": 0.833,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            6,
+            7,
+            8,
+            10,
+            11
+          ]
+        },
+        {
+          "work_id": "to_those_whom_i_love",
+          "title": "To Those Whom I Love",
+          "author": "Isla Paschal Richardson",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. First published mid-20th century and still within term in most jurisdictions.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 19,
+          "lines_matched": 17,
+          "identifying_lines_matched": 17,
+          "coverage": 0.895,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            5,
+            6,
+            7,
+            8,
+            9,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18
+          ]
+        }
+      ],
+      "public_domain_statement": {
+        "present": false,
+        "hits": []
+      },
+      "permission_or_licence_statement": {
+        "present": false,
+        "hits": []
+      },
+      "poem_level_copyright_statement": {
+        "present": false,
+        "hits": []
+      },
+      "declines_to_reproduce_signals": {
+        "present": false,
+        "hits": []
+      },
+      "any_copyright_status_statement": false,
+      "summary": {
+        "reproduced_in_scope": [
+          "she_is_gone",
+          "do_not_stand",
+          "to_those_whom_i_love"
+        ],
+        "full_text_in_scope": [
+          "she_is_gone",
+          "do_not_stand",
+          "to_those_whom_i_love"
+        ],
+        "ambiguous_only": []
+      }
+    },
+    {
+      "domain": "poets.org",
+      "url": "https://poets.org/poems-funerals",
+      "first_seen_query": "funeral poems",
+      "first_seen_rank": 5,
+      "also_ranked": [
+        {
+          "query": "funeral poems and readings",
+          "rank": 7
+        }
+      ],
+      "http_status": 200,
+      "fetch_ok": true,
+      "bytes": 61565,
+      "final_url": "https://poets.org/poems-funerals",
+      "raw_file": "/tmp/poemstudy/pages/poets.org.html",
+      "sha256": "c33c4d3f12988c2a",
+      "visible_text_chars": 16236,
+      "analysable": true,
+      "detections": [],
+      "public_domain_statement": {
+        "present": false,
+        "hits": []
+      },
+      "permission_or_licence_statement": {
+        "present": false,
+        "hits": []
+      },
+      "poem_level_copyright_statement": {
+        "present": false,
+        "hits": []
+      },
+      "declines_to_reproduce_signals": {
+        "present": false,
+        "hits": []
+      },
+      "any_copyright_status_statement": false,
+      "summary": {
+        "reproduced_in_scope": [],
+        "full_text_in_scope": [],
+        "ambiguous_only": []
+      }
+    },
+    {
+      "domain": "humanist.org.uk",
+      "url": "https://humanist.org.uk/kateclarkson/poems-and-readings/",
+      "first_seen_query": "funeral poems",
+      "first_seen_rank": 6,
+      "also_ranked": [],
+      "http_status": 200,
+      "fetch_ok": true,
+      "bytes": 27378,
+      "final_url": "https://humanist.org.uk/kateclarkson/poems-and-readings/",
+      "raw_file": "/tmp/poemstudy/pages/humanist.org.uk.html",
+      "sha256": "9925b694b9c1da68",
+      "visible_text_chars": 12113,
+      "analysable": true,
+      "detections": [
+        {
+          "work_id": "she_is_gone",
+          "title": "She Is Gone (also published as He Is Gone)",
+          "author": "David Harkins, 1981",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. Harkins is a living, identified British artist. Very widely misattributed to 'Anonymous'.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 10,
+          "identifying_lines_matched": 10,
+          "coverage": 0.833,
+          "matched_line_indices": [
+            0,
+            2,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ]
+        },
+        {
+          "work_id": "do_not_stand",
+          "title": "Do Not Stand at My Grave and Weep",
+          "author": "Attributed to Mary Elizabeth Frye, c. 1932",
+          "copyright_status": "disputed",
+          "status_note": "Disputed. Authorship contested for decades; first publication and copyright position never conclusively settled. Widely treated as public domain.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 12,
+          "identifying_lines_matched": 11,
+          "coverage": 1.0,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ]
+        },
+        {
+          "work_id": "afterglow",
+          "title": "Afterglow",
+          "author": "Helen Lowrie Marshall, 1958",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright (Marshall d. 1975). Frequently published with no author credit.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": false,
+          "lines_probed": 6,
+          "lines_matched": 5,
+          "identifying_lines_matched": 5,
+          "coverage": 0.833,
+          "matched_line_indices": [
+            0,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      ],
+      "public_domain_statement": {
+        "present": false,
+        "hits": []
+      },
+      "permission_or_licence_statement": {
+        "present": false,
+        "hits": []
+      },
+      "poem_level_copyright_statement": {
+        "present": false,
+        "hits": []
+      },
+      "declines_to_reproduce_signals": {
+        "present": false,
+        "hits": []
+      },
+      "any_copyright_status_statement": false,
+      "summary": {
+        "reproduced_in_scope": [
+          "she_is_gone",
+          "do_not_stand",
+          "afterglow"
+        ],
+        "full_text_in_scope": [
+          "she_is_gone",
+          "do_not_stand",
+          "afterglow"
+        ],
+        "ambiguous_only": []
+      }
+    },
+    {
+      "domain": "gupton-jones.edu",
+      "url": "https://gupton-jones.edu/7-poignant-poems-to-consider-for-a-funeral-or-memorial-service/",
+      "first_seen_query": "funeral poems",
+      "first_seen_rank": 7,
+      "also_ranked": [],
+      "http_status": 200,
+      "fetch_ok": true,
+      "bytes": 206089,
+      "final_url": "https://gupton-jones.edu/7-poignant-poems-to-consider-for-a-funeral-or-memorial-service/",
+      "raw_file": "/tmp/poemstudy/pages/gupton_jones.edu.html",
+      "sha256": "9770371ecdd689bb",
+      "visible_text_chars": 18190,
+      "analysable": true,
+      "detections": [
+        {
+          "work_id": "do_not_stand",
+          "title": "Do Not Stand at My Grave and Weep",
+          "author": "Attributed to Mary Elizabeth Frye, c. 1932",
+          "copyright_status": "disputed",
+          "status_note": "Disputed. Authorship contested for decades; first publication and copyright position never conclusively settled. Widely treated as public domain.",
+          "verdict": "substantial_excerpt",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 5,
+          "identifying_lines_matched": 4,
+          "coverage": 0.417,
+          "matched_line_indices": [
+            0,
+            1,
+            9,
+            10,
+            11
+          ]
+        },
+        {
+          "work_id": "when_great_trees_fall",
+          "title": "When Great Trees Fall",
+          "author": "Maya Angelou, 1990",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright (Angelou d. 2014; published 1990).",
+          "verdict": "short_excerpt",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 22,
+          "lines_matched": 7,
+          "identifying_lines_matched": 6,
+          "coverage": 0.318,
+          "matched_line_indices": [
+            0,
+            6,
+            17,
+            18,
+            19,
+            20,
+            21
+          ]
+        },
+        {
+          "work_id": "miss_me",
+          "title": "Miss Me But Let Me Go",
+          "author": "Anonymous / disputed",
+          "copyright_status": "disputed",
+          "status_note": "Disputed. No settled authorship; status unresolved rather than clear.",
+          "verdict": "short_excerpt",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": false,
+          "title_mentioned": false,
+          "lines_probed": 15,
+          "lines_matched": 4,
+          "identifying_lines_matched": 4,
+          "coverage": 0.267,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "work_id": "turn_again_to_life",
+          "title": "Turn Again to Life",
+          "author": "Mary Lee Hall",
+          "copyright_status": "uncertain",
+          "status_note": "Uncertain. Attribution and first publication are both unclear.",
+          "verdict": "substantial_excerpt",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 8,
+          "lines_matched": 4,
+          "identifying_lines_matched": 3,
+          "coverage": 0.5,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3
+          ]
+        }
+      ],
+      "public_domain_statement": {
+        "present": false,
+        "hits": []
+      },
+      "permission_or_licence_statement": {
+        "present": false,
+        "hits": []
+      },
+      "poem_level_copyright_statement": {
+        "present": false,
+        "hits": []
+      },
+      "declines_to_reproduce_signals": {
+        "present": false,
+        "hits": []
+      },
+      "any_copyright_status_statement": false,
+      "summary": {
+        "reproduced_in_scope": [
+          "do_not_stand",
+          "when_great_trees_fall",
+          "miss_me",
+          "turn_again_to_life"
+        ],
+        "full_text_in_scope": [],
+        "ambiguous_only": []
+      }
+    },
+    {
+      "domain": "stoneletters.com",
+      "url": "https://stoneletters.com/blog/funeral-poems",
+      "first_seen_query": "funeral poems",
+      "first_seen_rank": 8,
+      "also_ranked": [
+        {
+          "query": "funeral poems and readings",
+          "rank": 6
+        }
+      ],
+      "http_status": 200,
+      "fetch_ok": true,
+      "bytes": 196726,
+      "final_url": "https://stoneletters.com/blog/funeral-poems",
+      "raw_file": "/tmp/poemstudy/pages/stoneletters.com.html",
+      "sha256": "b939f910836526aa",
+      "visible_text_chars": 47256,
+      "analysable": true,
+      "detections": [
+        {
+          "work_id": "she_is_gone",
+          "title": "She Is Gone (also published as He Is Gone)",
+          "author": "David Harkins, 1981",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. Harkins is a living, identified British artist. Very widely misattributed to 'Anonymous'.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 11,
+          "identifying_lines_matched": 11,
+          "coverage": 0.917,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ]
+        },
+        {
+          "work_id": "do_not_stand",
+          "title": "Do Not Stand at My Grave and Weep",
+          "author": "Attributed to Mary Elizabeth Frye, c. 1932",
+          "copyright_status": "disputed",
+          "status_note": "Disputed. Authorship contested for decades; first publication and copyright position never conclusively settled. Widely treated as public domain.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 12,
+          "identifying_lines_matched": 11,
+          "coverage": 1.0,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ]
+        },
+        {
+          "work_id": "afterglow",
+          "title": "Afterglow",
+          "author": "Helen Lowrie Marshall, 1958",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright (Marshall d. 1975). Frequently published with no author credit.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 6,
+          "lines_matched": 6,
+          "identifying_lines_matched": 6,
+          "coverage": 1.0,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "work_id": "miss_me",
+          "title": "Miss Me But Let Me Go",
+          "author": "Anonymous / disputed",
+          "copyright_status": "disputed",
+          "status_note": "Disputed. No settled authorship; status unresolved rather than clear.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 15,
+          "lines_matched": 12,
+          "identifying_lines_matched": 11,
+          "coverage": 0.8,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            13
+          ]
+        },
+        {
+          "work_id": "the_dash",
+          "title": "The Dash",
+          "author": "Linda Ellis, 1996",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright and actively licensed. Rights holder has historically pursued unlicensed reproductions.",
+          "verdict": "title_mention_only",
+          "counts_as_reproduction": false,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 31,
+          "lines_matched": 0,
+          "identifying_lines_matched": 0,
+          "coverage": 0.0,
+          "matched_line_indices": []
+        },
+        {
+          "work_id": "turn_again_to_life",
+          "title": "Turn Again to Life",
+          "author": "Mary Lee Hall",
+          "copyright_status": "uncertain",
+          "status_note": "Uncertain. Attribution and first publication are both unclear.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 8,
+          "lines_matched": 6,
+          "identifying_lines_matched": 5,
+          "coverage": 0.75,
+          "matched_line_indices": [
+            0,
+            1,
+            3,
+            4,
+            6,
+            7
+          ]
+        },
+        {
+          "work_id": "broken_chain",
+          "title": "The Broken Chain",
+          "author": "Ron Tranmer",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. Tranmer is a living, identified author who asserts rights.",
+          "verdict": "ambiguous_no_identifying_line",
+          "counts_as_reproduction": false,
+          "counts_as_full_text": false,
+          "title_mentioned": false,
+          "lines_probed": 9,
+          "lines_matched": 2,
+          "identifying_lines_matched": 0,
+          "coverage": 0.222,
+          "matched_line_indices": [
+            3,
+            4
+          ]
+        }
+      ],
+      "public_domain_statement": {
+        "present": false,
+        "hits": []
+      },
+      "permission_or_licence_statement": {
+        "present": false,
+        "hits": []
+      },
+      "poem_level_copyright_statement": {
+        "present": false,
+        "hits": []
+      },
+      "declines_to_reproduce_signals": {
+        "present": false,
+        "hits": []
+      },
+      "any_copyright_status_statement": false,
+      "summary": {
+        "reproduced_in_scope": [
+          "she_is_gone",
+          "do_not_stand",
+          "afterglow",
+          "miss_me",
+          "turn_again_to_life"
+        ],
+        "full_text_in_scope": [
+          "she_is_gone",
+          "do_not_stand",
+          "afterglow",
+          "miss_me",
+          "turn_again_to_life"
+        ],
+        "ambiguous_only": [
+          "the_dash",
+          "broken_chain"
+        ]
+      }
+    },
+    {
+      "domain": "reddit.com",
+      "url": "https://www.reddit.com/r/Poetry/comments/1diyhmv/help_similar_poems_for_a_funeral/",
+      "first_seen_query": "funeral poems",
+      "first_seen_rank": 9,
+      "also_ranked": [],
+      "http_status": 200,
+      "fetch_ok": true,
+      "bytes": 8452,
+      "final_url": "https://www.reddit.com/r/Poetry/comments/1diyhmv/help_similar_poems_for_a_funeral/",
+      "raw_file": "/tmp/poemstudy/pages/reddit.com.html",
+      "sha256": "a0ef08dd667043f7",
+      "visible_text_chars": 198,
+      "analysable": false,
+      "exclusion_reason": "HTTP 200 but only 198 chars of server-rendered text (JavaScript-gated). Page content could not be verified, so the page is excluded from all denominators.",
+      "detections": []
+    },
+    {
+      "domain": "humanists.uk",
+      "url": "https://humanists.uk/ceremonies/funerals/blog/uplifting-and-humorous-poems-for-a-humanist-funeral/",
+      "first_seen_query": "funeral poems",
+      "first_seen_rank": 10,
+      "also_ranked": [],
+      "http_status": 200,
+      "fetch_ok": true,
+      "bytes": 136568,
+      "final_url": "https://humanists.uk/ceremonies/funerals/blog/uplifting-and-humorous-poems-for-a-humanist-funeral/",
+      "raw_file": "/tmp/poemstudy/pages/humanists.uk.html",
+      "sha256": "e63667e1e0b4f0df",
+      "visible_text_chars": 14835,
+      "analysable": true,
+      "detections": [
+        {
+          "work_id": "afterglow",
+          "title": "Afterglow",
+          "author": "Helen Lowrie Marshall, 1958",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright (Marshall d. 1975). Frequently published with no author credit.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 6,
+          "lines_matched": 6,
+          "identifying_lines_matched": 6,
+          "coverage": 1.0,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "work_id": "the_dash",
+          "title": "The Dash",
+          "author": "Linda Ellis, 1996",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright and actively licensed. Rights holder has historically pursued unlicensed reproductions.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 31,
+          "lines_matched": 30,
+          "identifying_lines_matched": 30,
+          "coverage": 0.968,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30
+          ]
+        }
+      ],
+      "public_domain_statement": {
+        "present": false,
+        "hits": []
+      },
+      "permission_or_licence_statement": {
+        "present": false,
+        "hits": []
+      },
+      "poem_level_copyright_statement": {
+        "present": false,
+        "hits": []
+      },
+      "declines_to_reproduce_signals": {
+        "present": false,
+        "hits": []
+      },
+      "any_copyright_status_statement": false,
+      "summary": {
+        "reproduced_in_scope": [
+          "afterglow",
+          "the_dash"
+        ],
+        "full_text_in_scope": [
+          "afterglow",
+          "the_dash"
+        ],
+        "ambiguous_only": []
+      }
+    },
+    {
+      "domain": "amandalouisefuneralservices.co.uk",
+      "url": "https://www.amandalouisefuneralservices.co.uk/resources/100-funeral-readings-poems-and-verses",
+      "first_seen_query": "funeral poems and readings",
+      "first_seen_rank": 1,
+      "also_ranked": [],
+      "http_status": 200,
+      "fetch_ok": true,
+      "bytes": 203989,
+      "final_url": "https://www.amandalouisefuneralservices.co.uk/resources/100-funeral-readings-poems-and-verses",
+      "raw_file": "/tmp/poemstudy/pages/amandalouisefuneralservices.co.uk.html",
+      "sha256": "c576943b2a14926b",
+      "visible_text_chars": 97770,
+      "analysable": true,
+      "detections": [
+        {
+          "work_id": "she_is_gone",
+          "title": "She Is Gone (also published as He Is Gone)",
+          "author": "David Harkins, 1981",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. Harkins is a living, identified British artist. Very widely misattributed to 'Anonymous'.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 10,
+          "identifying_lines_matched": 10,
+          "coverage": 0.833,
+          "matched_line_indices": [
+            0,
+            1,
+            3,
+            4,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11
+          ]
+        },
+        {
+          "work_id": "do_not_stand",
+          "title": "Do Not Stand at My Grave and Weep",
+          "author": "Attributed to Mary Elizabeth Frye, c. 1932",
+          "copyright_status": "disputed",
+          "status_note": "Disputed. Authorship contested for decades; first publication and copyright position never conclusively settled. Widely treated as public domain.",
+          "verdict": "substantial_excerpt",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 8,
+          "identifying_lines_matched": 8,
+          "coverage": 0.667,
+          "matched_line_indices": [
+            1,
+            2,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ]
+        },
+        {
+          "work_id": "funeral_blues",
+          "title": "Funeral Blues (Stop all the clocks)",
+          "author": "W. H. Auden, 1938",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright in the US and most other jurisdictions (Auden d. 1973).",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 16,
+          "lines_matched": 16,
+          "identifying_lines_matched": 15,
+          "coverage": 1.0,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ]
+        },
+        {
+          "work_id": "when_great_trees_fall",
+          "title": "When Great Trees Fall",
+          "author": "Maya Angelou, 1990",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright (Angelou d. 2014; published 1990).",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 22,
+          "lines_matched": 19,
+          "identifying_lines_matched": 18,
+          "coverage": 0.864,
+          "matched_line_indices": [
+            0,
+            1,
+            4,
+            5,
+            6,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21
+          ]
+        },
+        {
+          "work_id": "afterglow",
+          "title": "Afterglow",
+          "author": "Helen Lowrie Marshall, 1958",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright (Marshall d. 1975). Frequently published with no author credit.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 6,
+          "lines_matched": 6,
+          "identifying_lines_matched": 6,
+          "coverage": 1.0,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "work_id": "miss_me",
+          "title": "Miss Me But Let Me Go",
+          "author": "Anonymous / disputed",
+          "copyright_status": "disputed",
+          "status_note": "Disputed. No settled authorship; status unresolved rather than clear.",
+          "verdict": "substantial_excerpt",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 15,
+          "lines_matched": 9,
+          "identifying_lines_matched": 8,
+          "coverage": 0.6,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            5,
+            7,
+            8,
+            9,
+            11
+          ]
+        },
+        {
+          "work_id": "the_dash",
+          "title": "The Dash",
+          "author": "Linda Ellis, 1996",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright and actively licensed. Rights holder has historically pursued unlicensed reproductions.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 31,
+          "lines_matched": 30,
+          "identifying_lines_matched": 30,
+          "coverage": 0.968,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30
+          ]
+        },
+        {
+          "work_id": "to_those_whom_i_love",
+          "title": "To Those Whom I Love",
+          "author": "Isla Paschal Richardson",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. First published mid-20th century and still within term in most jurisdictions.",
+          "verdict": "full_text",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": true,
+          "title_mentioned": true,
+          "lines_probed": 19,
+          "lines_matched": 19,
+          "identifying_lines_matched": 19,
+          "coverage": 1.0,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18
+          ]
+        },
+        {
+          "work_id": "broken_chain",
+          "title": "The Broken Chain",
+          "author": "Ron Tranmer",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. Tranmer is a living, identified author who asserts rights.",
+          "verdict": "ambiguous_no_identifying_line",
+          "counts_as_reproduction": false,
+          "counts_as_full_text": false,
+          "title_mentioned": false,
+          "lines_probed": 9,
+          "lines_matched": 2,
+          "identifying_lines_matched": 0,
+          "coverage": 0.222,
+          "matched_line_indices": [
+            3,
+            4
+          ]
+        }
+      ],
+      "public_domain_statement": {
+        "present": false,
+        "hits": []
+      },
+      "permission_or_licence_statement": {
+        "present": false,
+        "hits": []
+      },
+      "poem_level_copyright_statement": {
+        "present": false,
+        "hits": []
+      },
+      "declines_to_reproduce_signals": {
+        "present": false,
+        "hits": []
+      },
+      "any_copyright_status_statement": false,
+      "summary": {
+        "reproduced_in_scope": [
+          "she_is_gone",
+          "do_not_stand",
+          "funeral_blues",
+          "when_great_trees_fall",
+          "afterglow",
+          "miss_me",
+          "the_dash",
+          "to_those_whom_i_love"
+        ],
+        "full_text_in_scope": [
+          "she_is_gone",
+          "funeral_blues",
+          "when_great_trees_fall",
+          "afterglow",
+          "the_dash",
+          "to_those_whom_i_love"
+        ],
+        "ambiguous_only": [
+          "broken_chain"
+        ]
+      }
+    },
+    {
+      "domain": "wvfuneralboard.com",
+      "url": "https://wvfuneralboard.com/guides/funeral-poems",
+      "first_seen_query": "funeral poems and readings",
+      "first_seen_rank": 5,
+      "also_ranked": [],
+      "http_status": 200,
+      "fetch_ok": true,
+      "bytes": 67294,
+      "final_url": "https://wvfuneralboard.com/guides/funeral-poems",
+      "raw_file": "/tmp/poemstudy/pages/wvfuneralboard.com.html",
+      "sha256": "9924ce870cefe5dc",
+      "visible_text_chars": 16683,
+      "analysable": true,
+      "detections": [
+        {
+          "work_id": "she_is_gone",
+          "title": "She Is Gone (also published as He Is Gone)",
+          "author": "David Harkins, 1981",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. Harkins is a living, identified British artist. Very widely misattributed to 'Anonymous'.",
+          "verdict": "citation_pointer_not_reproduction",
+          "counts_as_reproduction": false,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 1,
+          "identifying_lines_matched": 1,
+          "coverage": 0.083,
+          "matched_line_indices": [
+            0
+          ]
+        },
+        {
+          "work_id": "do_not_stand",
+          "title": "Do Not Stand at My Grave and Weep",
+          "author": "Attributed to Mary Elizabeth Frye, c. 1932",
+          "copyright_status": "disputed",
+          "status_note": "Disputed. Authorship contested for decades; first publication and copyright position never conclusively settled. Widely treated as public domain.",
+          "verdict": "short_excerpt",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 4,
+          "identifying_lines_matched": 3,
+          "coverage": 0.333,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "work_id": "funeral_blues",
+          "title": "Funeral Blues (Stop all the clocks)",
+          "author": "W. H. Auden, 1938",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright in the US and most other jurisdictions (Auden d. 1973).",
+          "verdict": "title_mention_only",
+          "counts_as_reproduction": false,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 16,
+          "lines_matched": 0,
+          "identifying_lines_matched": 0,
+          "coverage": 0.0,
+          "matched_line_indices": []
+        },
+        {
+          "work_id": "when_great_trees_fall",
+          "title": "When Great Trees Fall",
+          "author": "Maya Angelou, 1990",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright (Angelou d. 2014; published 1990).",
+          "verdict": "ambiguous_no_identifying_line",
+          "counts_as_reproduction": false,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 22,
+          "lines_matched": 1,
+          "identifying_lines_matched": 0,
+          "coverage": 0.045,
+          "matched_line_indices": [
+            0
+          ]
+        },
+        {
+          "work_id": "the_dash",
+          "title": "The Dash",
+          "author": "Linda Ellis, 1996",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright and actively licensed. Rights holder has historically pursued unlicensed reproductions.",
+          "verdict": "title_mention_only",
+          "counts_as_reproduction": false,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 31,
+          "lines_matched": 0,
+          "identifying_lines_matched": 0,
+          "coverage": 0.0,
+          "matched_line_indices": []
+        }
+      ],
+      "public_domain_statement": {
+        "present": true,
+        "hits": [
+          {
+            "pattern": "(?:is|are|in the) public domain",
+            "snippet": "[page text withheld]",
+            "is_footer_boilerplate": false
+          },
+          {
+            "pattern": "public domain\\b",
+            "snippet": "[page text withheld]",
+            "is_footer_boilerplate": false
+          }
+        ]
+      },
+      "permission_or_licence_statement": {
+        "present": false,
+        "hits": []
+      },
+      "poem_level_copyright_statement": {
+        "present": true,
+        "hits": [
+          {
+            "pattern": "\\bcopyrighted\\b",
+            "snippet": "[page text withheld]",
+            "is_footer_boilerplate": false
+          },
+          {
+            "pattern": "do not reproduce",
+            "snippet": "[page text withheld]",
+            "is_footer_boilerplate": false
+          }
+        ]
+      },
+      "declines_to_reproduce_signals": {
+        "present": true,
+        "hits": [
+          {
+            "pattern": "where to find the full text",
+            "snippet": "[page text withheld]",
+            "is_footer_boilerplate": false
+          },
+          {
+            "pattern": "full text (?:is )?(?:widely )?available (?:online|elsewhere)",
+            "snippet": "[page text withheld]",
+            "is_footer_boilerplate": false
+          },
+          {
+            "pattern": "widely available online",
+            "snippet": "[page text withheld]",
+            "is_footer_boilerplate": false
+          },
+          {
+            "pattern": "do not reproduce",
+            "snippet": "[page text withheld]",
+            "is_footer_boilerplate": false
+          },
+          {
+            "pattern": "\\bcopyrighted\\b",
+            "snippet": "[page text withheld]",
+            "is_footer_boilerplate": false
+          },
+          {
+            "pattern": "available in [^.\\n]{0,60}(?:published )?collections?",
+            "snippet": "[page text withheld]",
+            "is_footer_boilerplate": false
+          }
+        ]
+      },
+      "any_copyright_status_statement": true,
+      "summary": {
+        "reproduced_in_scope": [
+          "do_not_stand"
+        ],
+        "full_text_in_scope": [],
+        "ambiguous_only": [
+          "she_is_gone",
+          "funeral_blues",
+          "when_great_trees_fall",
+          "the_dash"
+        ]
+      }
+    },
+    {
+      "domain": "theinspiredfuneral.com",
+      "url": "https://theinspiredfuneral.com/readings",
+      "first_seen_query": "funeral poems and readings",
+      "first_seen_rank": 8,
+      "also_ranked": [],
+      "http_status": 200,
+      "fetch_ok": true,
+      "bytes": 143267,
+      "final_url": "https://theinspiredfuneral.com/readings",
+      "raw_file": "/tmp/poemstudy/pages/theinspiredfuneral.com.html",
+      "sha256": "0f6c05e132d66465",
+      "visible_text_chars": 24721,
+      "analysable": true,
+      "detections": [],
+      "public_domain_statement": {
+        "present": false,
+        "hits": []
+      },
+      "permission_or_licence_statement": {
+        "present": false,
+        "hits": []
+      },
+      "poem_level_copyright_statement": {
+        "present": false,
+        "hits": []
+      },
+      "declines_to_reproduce_signals": {
+        "present": false,
+        "hits": []
+      },
+      "any_copyright_status_statement": false,
+      "summary": {
+        "reproduced_in_scope": [],
+        "full_text_in_scope": [],
+        "ambiguous_only": []
+      }
+    },
+    {
+      "domain": "dignitymemorial.com",
+      "url": "https://www.dignitymemorial.com/memorial-services/planning-a-funeral/funeral-poems-and-readings",
+      "first_seen_query": "funeral poems and readings",
+      "first_seen_rank": 9,
+      "also_ranked": [],
+      "http_status": 403,
+      "fetch_ok": false,
+      "bytes": 4579,
+      "final_url": "https://www.dignitymemorial.com/memorial-services/planning-a-funeral/funeral-poems-and-readings",
+      "fetch_error": "HTTP 403 Forbidden",
+      "raw_file": "/tmp/poemstudy/pages/dignitymemorial.com.html",
+      "sha256": "51299b7f34d51676",
+      "analysable": false,
+      "exclusion_reason": "HTTP 403 Forbidden - blocked automated access; publishing practice unknown.",
+      "detections": []
+    },
+    {
+      "domain": "eulogyexpert.com",
+      "url": "https://eulogyexpert.com/posts/funeral-poems-and-readings",
+      "first_seen_query": "funeral poems and readings",
+      "first_seen_rank": 10,
+      "also_ranked": [],
+      "http_status": 200,
+      "fetch_ok": true,
+      "bytes": 34276,
+      "final_url": "https://eulogyexpert.com/posts/funeral-poems-and-readings",
+      "raw_file": "/tmp/poemstudy/pages/eulogyexpert.com.html",
+      "sha256": "7698b74c0ffbb930",
+      "visible_text_chars": 15722,
+      "analysable": true,
+      "detections": [
+        {
+          "work_id": "she_is_gone",
+          "title": "She Is Gone (also published as He Is Gone)",
+          "author": "David Harkins, 1981",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright. Harkins is a living, identified British artist. Very widely misattributed to 'Anonymous'.",
+          "verdict": "short_excerpt",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 2,
+          "identifying_lines_matched": 2,
+          "coverage": 0.167,
+          "matched_line_indices": [
+            0,
+            1
+          ]
+        },
+        {
+          "work_id": "do_not_stand",
+          "title": "Do Not Stand at My Grave and Weep",
+          "author": "Attributed to Mary Elizabeth Frye, c. 1932",
+          "copyright_status": "disputed",
+          "status_note": "Disputed. Authorship contested for decades; first publication and copyright position never conclusively settled. Widely treated as public domain.",
+          "verdict": "short_excerpt",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 12,
+          "lines_matched": 4,
+          "identifying_lines_matched": 3,
+          "coverage": 0.333,
+          "matched_line_indices": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "work_id": "funeral_blues",
+          "title": "Funeral Blues (Stop all the clocks)",
+          "author": "W. H. Auden, 1938",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright in the US and most other jurisdictions (Auden d. 1973).",
+          "verdict": "short_excerpt",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 16,
+          "lines_matched": 2,
+          "identifying_lines_matched": 2,
+          "coverage": 0.125,
+          "matched_line_indices": [
+            8,
+            9
+          ]
+        },
+        {
+          "work_id": "when_great_trees_fall",
+          "title": "When Great Trees Fall",
+          "author": "Maya Angelou, 1990",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright (Angelou d. 2014; published 1990).",
+          "verdict": "single_identifying_line",
+          "counts_as_reproduction": true,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 22,
+          "lines_matched": 2,
+          "identifying_lines_matched": 1,
+          "coverage": 0.091,
+          "matched_line_indices": [
+            0,
+            1
+          ]
+        },
+        {
+          "work_id": "the_dash",
+          "title": "The Dash",
+          "author": "Linda Ellis, 1996",
+          "copyright_status": "in copyright",
+          "status_note": "In copyright and actively licensed. Rights holder has historically pursued unlicensed reproductions.",
+          "verdict": "title_mention_only",
+          "counts_as_reproduction": false,
+          "counts_as_full_text": false,
+          "title_mentioned": true,
+          "lines_probed": 31,
+          "lines_matched": 0,
+          "identifying_lines_matched": 0,
+          "coverage": 0.0,
+          "matched_line_indices": []
+        }
+      ],
+      "public_domain_statement": {
+        "present": false,
+        "hits": []
+      },
+      "permission_or_licence_statement": {
+        "present": false,
+        "hits": []
+      },
+      "poem_level_copyright_statement": {
+        "present": false,
+        "hits": []
+      },
+      "declines_to_reproduce_signals": {
+        "present": false,
+        "hits": []
+      },
+      "any_copyright_status_statement": false,
+      "summary": {
+        "reproduced_in_scope": [
+          "she_is_gone",
+          "do_not_stand",
+          "funeral_blues",
+          "when_great_trees_fall"
+        ],
+        "full_text_in_scope": [],
+        "ambiguous_only": [
+          "the_dash"
+        ]
+      }
+    }
+  ],
+  "limitations": [
+    "Not a strict replication: a different search engine was used because Google and DuckDuckGo served CAPTCHAs, which were not defeated.",
+    "n=13 analysable pages. At this size a single page moves any proportion by ~8 percentage points. These are counts, not estimates of the wider web.",
+    "The sample is a search-result convenience sample from one engine, one locale, one moment. Search results are personalised and volatile; re-running tomorrow will return a different set.",
+    "The fixed 11-work list measures the prevalence of THOSE poems, not the prevalence of copyright-risky publishing. Verified counter-example: theinspiredfuneral.com matches none of the 11 works and therefore scores 'clean', yet reproduces Derek Mahon's 'Everything is Going to be All Right' and Nick Cave's 'Thoughts on Grief' in full, both plainly in copyright. amandalouisefuneralservices.co.uk likewise reproduces in-copyright song lyrics not on the list.",
+    "Absence of a visible permission statement is NOT evidence that no licence exists. A publisher may hold a licence it does not display. This measures disclosure only.",
+    "'In copyright', 'disputed' and 'public domain' are three different things. 'Do Not Stand at My Grave and Weep', 'Miss Me But Let Me Go' and 'God Saw You Getting Tired' have genuinely unsettled authorship and are recorded as disputed, not as infringing. 'Turn Again to Life' is recorded as uncertain.",
+    "humanist.org.uk and humanists.uk are separate registrable domains but the same organisation (Humanists UK). Deduplicating by organisation rather than by registrable domain would reduce the analysed set to 12.",
+    "Copyright status was assigned from author death dates and publication history, not from a title-by-title rights search. No page was checked against the actual licence records of any rights holder.",
+    "This describes publishing practice. It is not legal advice and not an accusation of infringement against any publisher."
+  ],
+  "redaction_note": "Verbatim line fragments of the analysed poems, and raw excerpts of the analysed pages, have been withheld from this published dataset: reproducing them here would repeat the practice the study measures. Poem titles are retained because they identify the works and are not themselves protected. 134 matched fragments and 10 page excerpts were withheld. All counts, line-coverage figures, verdicts, URLs and per-work totals are unchanged, and the detection line lists can be rebuilt from any published copy of each work."
+}

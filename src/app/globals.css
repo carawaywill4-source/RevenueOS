@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8f6f1;
+  --foreground: #22312d;
+  --forest: #173e35;
+  --sage: #8da399;
+  --cream: #f8f6f1;
+  --paper: #fffdf8;
+  --gold: #b9985f;
+  --mist: #e7ece8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-forest: var(--forest);
+  --color-sage: var(--sage);
+  --color-cream: var(--cream);
+  --color-paper: var(--paper);
+  --color-gold: var(--gold);
+  --color-mist: var(--mist);
+  --font-sans: var(--font-manrope);
+  --font-serif: var(--font-cormorant);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-manrope), Arial, sans-serif;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: #cfdcd5;
+  color: #173e35;
+}
+
+.font-display {
+  font-family: var(--font-cormorant), Georgia, serif;
+}
+
+.paper-shadow {
+  box-shadow:
+    0 30px 70px rgba(27, 56, 47, 0.12),
+    0 2px 8px rgba(27, 56, 47, 0.08);
+}
+
+.soft-grid {
+  background-image:
+    linear-gradient(rgba(23, 62, 53, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(23, 62, 53, 0.035) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.botanical-glow {
+  background:
+    radial-gradient(circle at 20% 20%, rgba(183, 206, 194, 0.55), transparent 35%),
+    radial-gradient(circle at 82% 16%, rgba(224, 211, 181, 0.45), transparent 30%),
+    radial-gradient(circle at 70% 78%, rgba(194, 212, 202, 0.38), transparent 35%);
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(1deg);
+  }
+}
+
+.drift {
+  animation: drift 8s ease-in-out infinite;
+}
+
+.field-label {
+  margin-bottom: 0.5rem;
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(23, 62, 53, 0.7);
+}
+
+.field-input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(23, 62, 53, 0.14);
+  background: #fff;
+  padding: 0.8rem 0.9rem;
+  /* iOS Safari zooms the page when a focused field is under 16px. */
+  font-size: 1rem;
+  color: #173e35;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+@media (min-width: 640px) {
+  .field-input {
+    font-size: 0.875rem;
+  }
+}
+
+.field-input::placeholder {
+  color: rgba(23, 62, 53, 0.3);
+}
+
+.field-input:focus {
+  border-color: #8da399;
+  box-shadow: 0 0 0 3px rgba(141, 163, 153, 0.14);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .drift {
+    animation: none;
+  }
+}

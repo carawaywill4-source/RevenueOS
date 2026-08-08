@@ -1,0 +1,450 @@
+{
+  "generatedAt": "2026-08-07",
+  "domain": "tributeready.org",
+  "method": "Intent clustering from product surface + known search demand. Phrases sharing intent share one page. Scores are relative until Search Console data exists.",
+  "scoring": {
+    "SEOOpportunityScore": "SearchDemand \u00d7 CommercialIntent \u00d7 Relevance \u00d7 RankingFeasibility \u00d7 ConversionPotential",
+    "commercialIntent": {
+      "high": 1.0,
+      "medium": 0.6,
+      "low": 0.3
+    },
+    "note": "Replace guessed demand with GSC impressions when available."
+  },
+  "clusters": [
+    {
+      "id": "funeral-programs",
+      "hub": "/funeral-program-maker",
+      "intents": [
+        {
+          "id": "funeral-program-maker",
+          "phrases": [
+            "funeral program maker",
+            "funeral program creator",
+            "funeral program generator",
+            "create funeral program online",
+            "make a funeral program"
+          ],
+          "commercialIntent": "high",
+          "coveredBy": [
+            "/funeral-program-maker"
+          ],
+          "status": "covered",
+          "priority": 1
+        },
+        {
+          "id": "funeral-program-template",
+          "phrases": [
+            "funeral program template",
+            "free funeral program template",
+            "printable funeral program template",
+            "funeral program template word",
+            "funeral program template pdf",
+            "editable funeral program template"
+          ],
+          "commercialIntent": "high",
+          "coveredBy": [
+            "/funeral-program-template-word",
+            "/funeral-pamphlet-template",
+            "/funeral-program-google-docs",
+            "/api/word/bifold-funeral-program"
+          ],
+          "status": "covered",
+          "priority": 1
+        },
+        {
+          "id": "funeral-pamphlet-bulletin-booklet",
+          "phrases": [
+            "funeral pamphlet template",
+            "funeral bulletin template",
+            "funeral booklet template",
+            "funeral service program"
+          ],
+          "commercialIntent": "high",
+          "coveredBy": [
+            "/funeral-pamphlet-template"
+          ],
+          "status": "covered",
+          "priority": 2,
+          "notes": "Synonym cluster; pamphlet page already bridges terminology."
+        },
+        {
+          "id": "how-to-make-funeral-program",
+          "phrases": [
+            "how to make a funeral program",
+            "what goes in a funeral program",
+            "funeral program layout",
+            "funeral program wording"
+          ],
+          "commercialIntent": "medium",
+          "coveredBy": [
+            "/resources/what-to-include-in-a-funeral-program",
+            "/resources/how-to-print-a-funeral-program"
+          ],
+          "status": "covered",
+          "priority": 2
+        },
+        {
+          "id": "funeral-program-printing",
+          "phrases": [
+            "where to print funeral programs",
+            "same day funeral program printing",
+            "print funeral programs near me",
+            "funeral program printing"
+          ],
+          "commercialIntent": "high",
+          "coveredBy": [
+            "/where-to-print-funeral-programs"
+          ],
+          "status": "covered",
+          "priority": 1
+        },
+        {
+          "id": "funeral-program-cost",
+          "phrases": [
+            "funeral program cost",
+            "funeral program printing cost",
+            "how much do funeral programs cost"
+          ],
+          "commercialIntent": "high",
+          "coveredBy": [
+            "/funeral-program-cost"
+          ],
+          "status": "covered",
+          "priority": 2,
+          "notes": "No invented retail prices. States TributeReady $34.99 as design cost only."
+        },
+        {
+          "id": "funeral-program-examples",
+          "phrases": [
+            "funeral program examples",
+            "funeral program sample",
+            "sample funeral program"
+          ],
+          "commercialIntent": "medium",
+          "coveredBy": [
+            "/funeral-program-examples",
+            "/api/sample"
+          ],
+          "status": "covered",
+          "priority": 3,
+          "notes": "Annotated examples page plus fictional sample PDF."
+        }
+      ]
+    },
+    {
+      "id": "celebration-of-life",
+      "hub": "/celebration-of-life-program",
+      "intents": [
+        {
+          "id": "celebration-of-life-program",
+          "phrases": [
+            "celebration of life program",
+            "celebration of life program maker",
+            "celebration of life program template",
+            "how to make a celebration of life program"
+          ],
+          "commercialIntent": "high",
+          "coveredBy": [
+            "/celebration-of-life-program",
+            "/resources/celebration-of-life-program-examples"
+          ],
+          "status": "covered",
+          "priority": 1
+        },
+        {
+          "id": "celebration-of-life-order",
+          "phrases": [
+            "celebration of life order of service",
+            "celebration of life service outline",
+            "what to include in celebration of life program"
+          ],
+          "commercialIntent": "medium",
+          "coveredBy": [
+            "/order-of-service-templates/celebration-of-life",
+            "/resources/celebration-of-life-program-examples"
+          ],
+          "status": "covered",
+          "priority": 2
+        }
+      ]
+    },
+    {
+      "id": "obituaries",
+      "hub": "/obituary-writer",
+      "intents": [
+        {
+          "id": "obituary-writer",
+          "phrases": [
+            "obituary writer",
+            "obituary maker",
+            "obituary generator",
+            "online obituary maker",
+            "free obituary writer",
+            "write an obituary",
+            "AI obituary writer"
+          ],
+          "commercialIntent": "high",
+          "coveredBy": [
+            "/obituary-writer"
+          ],
+          "status": "covered",
+          "priority": 1,
+          "notes": "Do not lead with AI in titles; product already avoids invented facts."
+        },
+        {
+          "id": "how-to-write-obituary",
+          "phrases": [
+            "how to write an obituary",
+            "how do I write an obituary",
+            "obituary format",
+            "obituary outline",
+            "what should an obituary include",
+            "how long should an obituary be"
+          ],
+          "commercialIntent": "medium",
+          "coveredBy": [
+            "/resources/how-to-write-an-obituary"
+          ],
+          "status": "covered",
+          "priority": 1
+        },
+        {
+          "id": "obituary-templates",
+          "phrases": [
+            "obituary template",
+            "free obituary template",
+            "obituary examples",
+            "sample obituary",
+            "short obituary",
+            "simple obituary"
+          ],
+          "commercialIntent": "high",
+          "coveredBy": [
+            "/obituary-templates",
+            "/resources/obituary-examples"
+          ],
+          "status": "covered",
+          "priority": 1
+        },
+        {
+          "id": "obituary-by-relationship",
+          "phrases": [
+            "obituary for mother",
+            "obituary for mom",
+            "obituary for father",
+            "obituary for dad",
+            "obituary for husband",
+            "obituary for wife",
+            "obituary for grandmother",
+            "obituary for grandfather",
+            "obituary for son",
+            "obituary for daughter",
+            "obituary for brother",
+            "obituary for sister"
+          ],
+          "commercialIntent": "high",
+          "coveredBy": [
+            "/obituary-templates/mother",
+            "/obituary-templates/father",
+            "/obituary-templates/husband",
+            "/obituary-templates/wife",
+            "/obituary-templates/grandmother",
+            "/obituary-templates/grandfather",
+            "/obituary-templates/son",
+            "/obituary-templates/daughter",
+            "/obituary-templates/brother",
+            "/obituary-templates/sister"
+          ],
+          "status": "covered",
+          "priority": 2,
+          "notes": "Mom/dad consolidate onto mother/father pages via copy and titles, not duplicate URLs."
+        },
+        {
+          "id": "obituary-situational",
+          "phrases": [
+            "short obituary examples",
+            "celebration of life obituary",
+            "no funeral obituary wording",
+            "how to list surviving family in obituary",
+            "donations in lieu of flowers wording",
+            "obituary closing examples"
+          ],
+          "commercialIntent": "medium",
+          "coveredBy": [
+            "/resources/obituary-examples",
+            "/resources/how-to-write-an-obituary"
+          ],
+          "status": "partial",
+          "priority": 3,
+          "notes": "Fold into existing guides unless a situational page can add distinct worked examples."
+        },
+        {
+          "id": "obituary-family-order",
+          "phrases": [
+            "what order do family members go in an obituary",
+            "how to list family in an obituary",
+            "surviving relatives order obituary"
+          ],
+          "commercialIntent": "medium",
+          "coveredBy": [
+            "/resources/obituary-family-order"
+          ],
+          "status": "covered",
+          "priority": 2,
+          "notes": "Shipped as resource guide with surviving/predeceased/blended examples."
+        }
+      ]
+    },
+    {
+      "id": "order-of-service",
+      "hub": "/order-of-service-templates",
+      "intents": [
+        {
+          "id": "funeral-order-of-service",
+          "phrases": [
+            "funeral order of service",
+            "funeral order of service template",
+            "memorial service order of service",
+            "funeral service outline",
+            "what happens at a funeral service"
+          ],
+          "commercialIntent": "high",
+          "coveredBy": [
+            "/order-of-service-templates",
+            "/resources/funeral-program-order-of-service",
+            "/api/word/single-sheet-order-of-service"
+          ],
+          "status": "covered",
+          "priority": 1
+        },
+        {
+          "id": "tradition-specific-order",
+          "phrases": [
+            "catholic funeral order of service",
+            "baptist funeral order of service",
+            "military funeral order of service",
+            "graveside service order"
+          ],
+          "commercialIntent": "medium",
+          "coveredBy": [
+            "/order-of-service-templates/catholic-funeral-mass",
+            "/order-of-service-templates/baptist-funeral",
+            "/order-of-service-templates/military-honors",
+            "/order-of-service-templates/graveside-service",
+            "/order-of-service-templates/non-denominational",
+            "/order-of-service-templates/memorial-service"
+          ],
+          "status": "covered",
+          "priority": 2,
+          "notes": "Do not claim religious authority; present as common outlines families and directors use."
+        }
+      ]
+    },
+    {
+      "id": "wording-and-readings",
+      "hub": "/resources",
+      "intents": [
+        {
+          "id": "funeral-readings-poems",
+          "phrases": [
+            "funeral readings",
+            "funeral poems",
+            "funeral program poems",
+            "memorial quotes",
+            "funeral scriptures"
+          ],
+          "commercialIntent": "medium",
+          "coveredBy": [
+            "/funeral-readings"
+          ],
+          "status": "covered",
+          "priority": 2
+        },
+        {
+          "id": "funeral-poem-copyright",
+          "phrases": [
+            "funeral poem copyright",
+            "can I use do not stand at my grave and weep",
+            "funeral poem permission"
+          ],
+          "commercialIntent": "low",
+          "coveredBy": [
+            "/funeral-poem-copyright"
+          ],
+          "status": "covered",
+          "priority": 3,
+          "notes": "Linkable research asset more than commercial page."
+        },
+        {
+          "id": "thank-you-and-card-wording",
+          "phrases": [
+            "funeral thank you wording",
+            "funeral acknowledgment wording",
+            "memorial card wording",
+            "funeral program closing words"
+          ],
+          "commercialIntent": "medium",
+          "coveredBy": [
+            "/resources/funeral-thank-you-wording",
+            "/resources/memorial-card-wording"
+          ],
+          "status": "covered",
+          "priority": 2
+        },
+        {
+          "id": "eulogy-examples",
+          "phrases": [
+            "eulogy examples",
+            "eulogy for mother",
+            "eulogy for father",
+            "how to write a eulogy"
+          ],
+          "commercialIntent": "medium",
+          "coveredBy": [
+            "/eulogy-examples"
+          ],
+          "status": "covered",
+          "priority": 3
+        }
+      ]
+    },
+    {
+      "id": "memorial-program",
+      "hub": "/funeral-program-maker",
+      "intents": [
+        {
+          "id": "memorial-program",
+          "phrases": [
+            "memorial program",
+            "memorial program template",
+            "memorial service program",
+            "memorial program examples"
+          ],
+          "commercialIntent": "high",
+          "coveredBy": [
+            "/funeral-program-maker",
+            "/order-of-service-templates/memorial-service"
+          ],
+          "status": "partial",
+          "priority": 2,
+          "notes": "Consider a dedicated /memorial-program hub only if GSC shows distinct intent from funeral program."
+        }
+      ]
+    }
+  ],
+  "doNotCreate": [
+    "City/location spam pages",
+    "Adjective-swapped near-duplicates",
+    "Separate pages for mom vs mother",
+    "AI-stuffed keyword dump footers",
+    "Hundreds of relationship \u00d7 adjective permutations"
+  ],
+  "qualityGate": [
+    "Distinct search intent OR distinct useful functionality",
+    "Original useful content a person would want without Google",
+    "Accurate claims with sources when factual",
+    "Working internal links and clear CTA",
+    "Correct metadata and mobile usability"
+  ]
+}
