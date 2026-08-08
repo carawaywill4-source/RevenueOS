@@ -20,7 +20,7 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@tributeready/revenueos": ["./packages/revenueos/src/index.ts"]
+      "@revenueos/core": ["./packages/revenueos/src/index.ts"]
     }
   },
   "include": [

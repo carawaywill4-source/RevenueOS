@@ -14,7 +14,7 @@ import {
   type SafeAction,
   type SeedLesson,
   type SiteAdapter,
-} from "@tributeready/revenueos";
+} from "@revenueos/core";
 import { PERSONAS } from "@/catalog/personas";
 import { PRODUCT_OPPORTUNITIES } from "@/catalog/opportunities";
 import { PRODUCTS } from "@/catalog/products";

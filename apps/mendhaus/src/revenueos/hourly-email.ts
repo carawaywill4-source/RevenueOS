@@ -1,4 +1,4 @@
-import type { HourPulse } from "@tributeready/revenueos";
+import type { HourPulse } from "@revenueos/core";
 import { BRAND } from "@/lib/brand";
 
 type HourlySnapshot = {

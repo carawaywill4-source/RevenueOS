@@ -1,4 +1,4 @@
-import type { SeedLesson } from "@tributeready/revenueos";
+import type { SeedLesson } from "@revenueos/core";
 
 /**
  * TributeReady-specific and death-care industry lessons. These live app-side —

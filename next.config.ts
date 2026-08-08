@@ -6,7 +6,7 @@ const scriptSource =
     : "script-src 'self' 'unsafe-inline'";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@tributeready/revenueos"],
+  transpilePackages: ["@revenueos/core"],
   async headers() {
     return [
       {

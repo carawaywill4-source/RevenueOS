@@ -6,7 +6,7 @@ import path from "node:path";
 
 test("policy keeps the brain inside hard boundaries", async () => {
   const { policyAllows, classifyActionType } = await import(
-    "@tributeready/revenueos"
+    "@revenueos/core"
   );
   assert.equal(classifyActionType("indexnow_submit"), "safe");
   assert.equal(classifyActionType("spend_ads"), "owner_gate");
@@ -23,7 +23,7 @@ test("policy keeps the brain inside hard boundaries", async () => {
 
 test("a single cycle runs the full Observe→Model→ROI→Prioritize→Learn loop", async () => {
   const { createExampleStaticAdapter, runCycle } = await import(
-    "@tributeready/revenueos"
+    "@revenueos/core"
   );
   const dir = await mkdtemp(path.join(tmpdir(), "revenueos-loop-"));
   const adapter = createExampleStaticAdapter(dir);
@@ -62,7 +62,7 @@ test("a single cycle runs the full Observe→Model→ROI→Prioritize→Learn lo
 
 test("the brain changes future behavior after a loss (attribution → learning)", async () => {
   const { createExampleStaticAdapter, runCycle, newId } = await import(
-    "@tributeready/revenueos"
+    "@revenueos/core"
   );
   const dir = await mkdtemp(path.join(tmpdir(), "revenueos-learn-"));
   const adapter = createExampleStaticAdapter(dir);
@@ -143,7 +143,7 @@ test("the brain changes future behavior after a loss (attribution → learning)"
 });
 
 test("a proposed or failed action is never attributed as an experiment", async () => {
-  const { dueForAttribution } = await import("@tributeready/revenueos");
+  const { dueForAttribution } = await import("@revenueos/core");
   const past = new Date(Date.now() - 86_400_000).toISOString();
   const base = {
     id: "exp_unexecuted",
@@ -186,7 +186,7 @@ test("a proposed or failed action is never attributed as an experiment", async (
 
 test("Bayesian confidence shrinks on thin data and updates with evidence", async () => {
   const { evidenceConfidence, shrinkForSample, wilsonInterval } = await import(
-    "@tributeready/revenueos"
+    "@revenueos/core"
   );
   // A confident prior barely moves with almost no data.
   const thin = evidenceConfidence(0.8, 0, 1);
@@ -203,7 +203,7 @@ test("Bayesian confidence shrinks on thin data and updates with evidence", async
 
 test("calibration scales EV down for an over-promising category", async () => {
   const { buildCalibration, calibrationFactor } = await import(
-    "@tributeready/revenueos"
+    "@revenueos/core"
   );
   const now = new Date().toISOString();
   // Acquisition predicted ~0.7 win prob but actually lost every time.
@@ -249,7 +249,7 @@ test("calibration scales EV down for an over-promising category", async () => {
 
 test("bandit rewards proven winners and explores novel patterns", async () => {
   const { banditStatsFromExperiments, banditMultiplier } = await import(
-    "@tributeready/revenueos"
+    "@revenueos/core"
   );
   const now = new Date().toISOString();
   const mk = (id: string, patternKey: string, status: "won" | "lost") => ({
@@ -291,7 +291,7 @@ test("bandit rewards proven winners and explores novel patterns", async () => {
 });
 
 test("forecast estimates cycles to first sale from a rising traffic trend", async () => {
-  const { buildForecast } = await import("@tributeready/revenueos");
+  const { buildForecast } = await import("@revenueos/core");
   const base = {
     generatedAt: "",
     siteId: "s",
@@ -328,7 +328,7 @@ test("forecast estimates cycles to first sale from a rising traffic trend", asyn
 });
 
 test("counterfactual attribution: no credit for organic trend", async () => {
-  const { attributeExperiment } = await import("@tributeready/revenueos");
+  const { attributeExperiment } = await import("@revenueos/core");
   const experiment = {
     id: "exp1",
     siteId: "s",
@@ -369,7 +369,7 @@ test("counterfactual attribution: no credit for organic trend", async () => {
 });
 
 test("value of information rewards under-explored high-upside levers", async () => {
-  const { valueOfInformation } = await import("@tributeready/revenueos");
+  const { valueOfInformation } = await import("@revenueos/core");
   const opp = (patternKey: string) => ({
     id: patternKey,
     title: "t",
@@ -405,7 +405,7 @@ test("value of information rewards under-explored high-upside levers", async () 
 });
 
 test("anomaly detection flags fulfillment failure and precursor crashes", async () => {
-  const { detectAnomalies } = await import("@tributeready/revenueos");
+  const { detectAnomalies } = await import("@revenueos/core");
   const scBase = {
     generatedAt: "",
     siteId: "s",
@@ -465,7 +465,7 @@ test("anomaly detection flags fulfillment failure and precursor crashes", async 
 
 test("a full cycle produces a sequenced, dependency-aware strategy", async () => {
   const { createExampleStaticAdapter, runCycle } = await import(
-    "@tributeready/revenueos"
+    "@revenueos/core"
   );
   const dir = await mkdtemp(path.join(tmpdir(), "revenueos-strategy-"));
   const adapter = createExampleStaticAdapter(dir);
@@ -496,7 +496,7 @@ test("a full cycle produces a sequenced, dependency-aware strategy", async () =>
 
 test("ambition sets a $10k-day north star and treats sub-$10k as a lost day", async () => {
   const { buildAmbition, NORTH_STAR_DAILY_PROFIT_USD } = await import(
-    "@tributeready/revenueos"
+    "@revenueos/core"
   );
   const scBase = {
     generatedAt: "",
@@ -581,7 +581,7 @@ test("ambition sets a $10k-day north star and treats sub-$10k as a lost day", as
 
 test("north-star shortfall lesson + meta/curriculum fire every lost day", async () => {
   const { createExampleStaticAdapter, runCycle, NORTH_STAR_DAILY_PROFIT_USD } =
-    await import("@tributeready/revenueos");
+    await import("@revenueos/core");
   const dir = await mkdtemp(path.join(tmpdir(), "revenueos-10k-"));
   const adapter = createExampleStaticAdapter(dir);
   const result = await runCycle(adapter);
@@ -609,7 +609,7 @@ test("north-star shortfall lesson + meta/curriculum fire every lost day", async 
 });
 
 test("audience model builds personas + a non-empty channel plan; hard traffic raises difficulty", async () => {
-  const { buildAudienceModel } = await import("@tributeready/revenueos");
+  const { buildAudienceModel } = await import("@revenueos/core");
   const baseWorld = {
     market: {
       demandProxy: "emerging" as const,
@@ -690,7 +690,7 @@ test("audience model builds personas + a non-empty channel plan; hard traffic ra
 
 test("acquisition engine always produces many money-connected plays", async () => {
   const { createExampleStaticAdapter, runCycle } = await import(
-    "@tributeready/revenueos"
+    "@revenueos/core"
   );
   const dir = await mkdtemp(path.join(tmpdir(), "revenueos-acq-"));
   const adapter = createExampleStaticAdapter(dir);
@@ -708,7 +708,7 @@ test("acquisition engine always produces many money-connected plays", async () =
 });
 
 test("a hard sell escalates ambition instead of lowering it", async () => {
-  const { buildAmbition } = await import("@tributeready/revenueos");
+  const { buildAmbition } = await import("@revenueos/core");
   const obs = {
     observedAt: new Date().toISOString(),
     money: {
@@ -769,7 +769,7 @@ test("a hard sell escalates ambition instead of lowering it", async () => {
 
 test("money plan allocates effort by profit-per-effort and projects a monthly number", async () => {
   const { createExampleStaticAdapter, runCycle } = await import(
-    "@tributeready/revenueos"
+    "@revenueos/core"
   );
   const dir = await mkdtemp(path.join(tmpdir(), "revenueos-money-"));
   const adapter = createExampleStaticAdapter(dir);
@@ -799,7 +799,7 @@ test("money plan allocates effort by profit-per-effort and projects a monthly nu
 });
 
 test("channel plan is learning-aware: a proven arm rises and the winning angle is chosen", async () => {
-  const { buildAudienceModel } = await import("@tributeready/revenueos");
+  const { buildAudienceModel } = await import("@revenueos/core");
   const context = {
     siteId: "s",
     displayName: "S",
@@ -900,7 +900,7 @@ test("channel plan is learning-aware: a proven arm rises and the winning angle i
 });
 
 test("hunting bets never wait only on owner-gated channels", async () => {
-  const { selectHuntingBets } = await import("@tributeready/revenueos");
+  const { selectHuntingBets } = await import("@revenueos/core");
   const base = {
     predictedDelta: "",
     confidence: 0.5,
@@ -957,7 +957,7 @@ test("hunting bets never wait only on owner-gated channels", async () => {
 
 test("money press always emits an executable discovery move under shortfall", async () => {
   const { buildMoneyPress, NORTH_STAR_DAILY_PROFIT_USD } = await import(
-    "@tributeready/revenueos"
+    "@revenueos/core"
   );
   const moves = buildMoneyPress({
     observation: {
@@ -1030,7 +1030,7 @@ test("money press always emits an executable discovery move under shortfall", as
 });
 
 test("a $0 hour triggers overdrive and a next-hour profit plan", async () => {
-  const { buildAmbition, buildHourPlan } = await import("@tributeready/revenueos");
+  const { buildAmbition, buildHourPlan } = await import("@revenueos/core");
   const observation = {
     observedAt: new Date().toISOString(),
     money: {
@@ -1138,7 +1138,7 @@ test("TributeReady growthos façade still exposes its snapshot shape", async () 
 });
 
 test("planner validation rejects unknown and non-executable opportunities", async () => {
-  const { validatePlannerSelection } = await import("@tributeready/revenueos");
+  const { validatePlannerSelection } = await import("@revenueos/core");
   const opportunities = [
     {
       id: "known-exec",
@@ -1184,9 +1184,9 @@ test("planner validation rejects unknown and non-executable opportunities", asyn
 
 test("planner quota blocks excessive daily calls", async () => {
   const { PLANNER_DAILY_CALL_LIMIT, checkPlannerQuota } = await import(
-    "@tributeready/revenueos"
+    "@revenueos/core"
   );
-  type PlannerRunRecord = import("@tributeready/revenueos").PlannerRunRecord;
+  type PlannerRunRecord = import("@revenueos/core").PlannerRunRecord;
   const runs: PlannerRunRecord[] = Array.from({ length: PLANNER_DAILY_CALL_LIMIT }, (_, i) => ({
     id: `planner_${i}`,
     siteId: "example-static",
@@ -1210,7 +1210,7 @@ test("planner quota blocks excessive daily calls", async () => {
 
 test("cycle persists planner runs and exposures when store supports them", async () => {
   const { createExampleStaticAdapter, runCycle } = await import(
-    "@tributeready/revenueos"
+    "@revenueos/core"
   );
   const dir = await mkdtemp(path.join(tmpdir(), "revenueos-planner-"));
   const adapter = createExampleStaticAdapter(dir);
@@ -1259,7 +1259,7 @@ test("discovery governor classifies stages and kill vs expand verdicts", async (
     scoreDiscoveryDoor,
     applyDoorScore,
     governorPublishGate,
-  } = await import("@tributeready/revenueos");
+  } = await import("@revenueos/core");
 
   assert.equal(
     classifyDiscoveryStage({
@@ -1390,7 +1390,7 @@ test("profit maximizer focuses conversion when traffic exists without sales", as
     shouldHeartbeatAction,
     createExampleStaticAdapter,
     runCycle,
-  } = await import("@tributeready/revenueos");
+  } = await import("@revenueos/core");
 
   const mandate = buildProfitMandate({
     observation: {
@@ -1529,7 +1529,7 @@ test("profit maximizer focuses conversion when traffic exists without sales", as
 
 test("organic mastery locks ads and drills organic leads→sales", async () => {
   const { scoreOrganicMastery, applyOrganicMasteryPressure, createExampleStaticAdapter, runCycle } =
-    await import("@tributeready/revenueos");
+    await import("@revenueos/core");
 
   const mastery = scoreOrganicMastery({
     observation: {
@@ -1630,7 +1630,7 @@ test("portable memory transfers learning to a newly attached siteId", async () =
     ensurePortableMemory,
     exportPortableKnowledge,
     importPortableKnowledge,
-  } = await import("@tributeready/revenueos");
+  } = await import("@revenueos/core");
 
   const dir = await mkdtemp(path.join(tmpdir(), "revenueos-portable-"));
   const store = createFileExperimentStore(dir);
@@ -1685,7 +1685,7 @@ test("capability gaps upsert across siteIds and count blocked EV", async () => {
     recordGapsFromOpportunities,
     summarizeCapabilityGaps,
     createFileExperimentStore,
-  } = await import("@tributeready/revenueos");
+  } = await import("@revenueos/core");
 
   const now = new Date("2026-08-08T12:00:00.000Z");
   let gap = upsertCapabilityGap({

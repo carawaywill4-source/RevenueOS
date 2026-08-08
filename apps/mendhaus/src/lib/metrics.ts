@@ -1,4 +1,4 @@
-import type { DiscoveryDoorMetrics, HourPulse } from "@tributeready/revenueos";
+import type { DiscoveryDoorMetrics, HourPulse } from "@revenueos/core";
 import { PRODUCTS } from "@/catalog/products";
 import { MH_EVENTS } from "./events";
 import { supabaseConfigured, getSupabaseAdmin } from "./supabase";

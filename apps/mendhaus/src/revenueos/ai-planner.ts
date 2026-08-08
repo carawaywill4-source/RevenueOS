@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { HourPulse, Observation, Opportunity, PlannerDecision, SafeAction } from "@tributeready/revenueos";
+import type { HourPulse, Observation, Opportunity, PlannerDecision, SafeAction } from "@revenueos/core";
 
 export type MendhausAiBrief = {
   source: "ai" | "deterministic";

@@ -10,7 +10,7 @@ import {
   buildWorldModel,
   scoreOrganicMastery,
   summarizeCapabilityGaps,
-} from "@tributeready/revenueos";
+} from "@revenueos/core";
 import { probeDurableLedger } from "@/revenueos/durable-store";
 import { createMendhausAdapter } from "@/revenueos/adapter";
 

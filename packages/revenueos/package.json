@@ -1,5 +1,5 @@
 {
-  "name": "@tributeready/revenueos",
+  "name": "@revenueos/core",
   "version": "0.1.0",
   "private": true,
   "type": "module",

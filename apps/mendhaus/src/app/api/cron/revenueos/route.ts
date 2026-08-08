@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runCycle } from "@tributeready/revenueos";
+import { runCycle } from "@revenueos/core";
 import { appendJournal } from "@/lib/events";
 import { sendMendhausEmail, resendConfigured } from "@/lib/mail";
 import { getLastHourPulse, getWindowSnapshot } from "@/lib/metrics";

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { timingSafeEqual } from "node:crypto";
-import { summarizeCapabilityGaps } from "@tributeready/revenueos";
+import { summarizeCapabilityGaps } from "@revenueos/core";
 import {
   buildGrowthSnapshot,
   formatExecutiveReport,

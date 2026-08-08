@@ -1,13 +1,13 @@
 /**
  * Compatibility façade. GrowthOS now runs on RevenueOS + the TributeReady adapter.
- * Prefer importing from @/revenueos or @tributeready/revenueos for new code.
+ * Prefer importing from @/revenueos or @revenueos/core for new code.
  */
 import {
   runCycle,
   type CycleResult,
   type FunnelStepStat,
   type Opportunity,
-} from "@tributeready/revenueos";
+} from "@revenueos/core";
 import { createTributeReadyAdapter } from "@/revenueos/adapter";
 
 export const PRICE_USD = 34.99;

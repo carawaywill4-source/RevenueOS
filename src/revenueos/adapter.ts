@@ -13,7 +13,7 @@ import {
   type SafeAction,
   type SeedLesson,
   type SiteAdapter,
-} from "@tributeready/revenueos";
+} from "@revenueos/core";
 import { getAggregateGrowthReport, getLastHourPulse } from "@/lib/growth";
 import { TRIBUTEREADY_SEED_LESSONS } from "@/revenueos/seeds";
 import { createDurableExperimentStore } from "@/revenueos/durable-store";

@@ -17,7 +17,7 @@ const imgSrc = [
 ].join(" ");
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@tributeready/revenueos"],
+  transpilePackages: ["@revenueos/core"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },

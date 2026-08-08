@@ -3,8 +3,8 @@ import type {
   DiscoveryDoor,
   DiscoveryDoorScore,
   DiscoveryDoorStatus,
-} from "@tributeready/revenueos";
-import { clusterKeyFromQuery } from "@tributeready/revenueos";
+} from "@revenueos/core";
+import { clusterKeyFromQuery } from "@revenueos/core";
 import { PRODUCTS } from "@/catalog/products";
 import { BRAND } from "@/lib/brand";
 import { appendJournal } from "@/lib/events";

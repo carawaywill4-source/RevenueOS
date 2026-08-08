@@ -1,4 +1,4 @@
-import type { SeedLesson } from "@tributeready/revenueos";
+import type { SeedLesson } from "@revenueos/core";
 
 /**
  * Mendhaus local + transferable priors. Injected via SiteAdapter so the

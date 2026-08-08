@@ -140,7 +140,7 @@ would upgrade it.
 ## Next action
 
 1. Owner: Ever Loved signup (highest expected impact toward first sale).
-2. RevenueOS is live as `@tributeready/revenueos` — TributeReady is customer zero.
+2. RevenueOS is live as `@revenueos/core` — TributeReady is customer zero.
 3. Keep GrowthOS/RevenueOS daily review green; act on Level-4 acquisition only.
 4. Do not invent more pages until Search Console shows demand.
 

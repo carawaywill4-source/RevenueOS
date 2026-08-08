@@ -1,4 +1,4 @@
-# @tributeready/revenueos
+# @revenueos/core
 
 A portable, autonomous **Revenue Brain**. Not an SEO bot, not a dashboard.
 
@@ -92,7 +92,7 @@ spend are **owner-gated** or **forbidden**.
 ## Usage
 
 ```ts
-import { runCycle } from "@tributeready/revenueos";
+import { runCycle } from "@revenueos/core";
 import { createTributeReadyAdapter } from "@/revenueos/adapter";
 
 const result = await runCycle(createTributeReadyAdapter());

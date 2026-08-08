@@ -10,7 +10,7 @@ import {
   type Lesson,
   type PlannerRunRecord,
   type Scorecard,
-} from "@tributeready/revenueos";
+} from "@revenueos/core";
 import { getSupabaseAdmin, supabaseConfigured } from "@/lib/supabase";
 
 let availabilityCache: Promise<boolean> | null = null;

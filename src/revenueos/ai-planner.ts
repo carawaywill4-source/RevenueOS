@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import type { GrowthSnapshot } from "@/lib/growthos";
-import type { Observation, Opportunity, PlannerDecision, SafeAction } from "@tributeready/revenueos";
+import type { Observation, Opportunity, PlannerDecision, SafeAction } from "@revenueos/core";
 
 export type AiRevenueBrief = {
   source: "ai" | "deterministic";

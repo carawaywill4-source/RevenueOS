@@ -26,7 +26,7 @@
       "@/*": [
         "./src/*"
       ],
-      "@tributeready/revenueos": [
+      "@revenueos/core": [
         "./vendor/revenueos/src/index.ts"
       ]
     }

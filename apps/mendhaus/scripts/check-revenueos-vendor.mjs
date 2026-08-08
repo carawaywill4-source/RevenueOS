@@ -15,7 +15,7 @@ const missing = required.filter((rel) => !existsSync(path.join(root, rel)));
 if (missing.length) {
   console.error(
     [
-      "Mendhaus build aborted: vendored @tributeready/revenueos is incomplete.",
+      "Mendhaus build aborted: vendored @revenueos/core is incomplete.",
       "Vercel roots this app at apps/mendhaus, so it cannot import ../../packages/revenueos.",
       "From the repo root run: npm run sync:revenueos --workspace=@mendhaus/store",
       "Missing:",
