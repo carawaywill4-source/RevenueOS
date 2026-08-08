@@ -97,12 +97,31 @@ export function createFileExperimentStore(
     },
     async listLessons({ siteId, industry }) {
       const data = await load();
+      const midScopes = new Set([
+        "business_model",
+        "audience",
+        "price_band",
+        "consideration",
+        "channel",
+        "product",
+      ]);
       return data.lessons.filter((lesson) => {
         if (lesson.scope === "global") return true;
-        if (lesson.scope === "industry" && industry && lesson.industry === industry) {
+        if (
+          (lesson.scope === "industry" || midScopes.has(lesson.scope)) &&
+          industry &&
+          lesson.industry === industry
+        ) {
           return true;
         }
-        if (lesson.scope === "site" && lesson.siteId === siteId) return true;
+        if (
+          (lesson.scope === "site" || lesson.scope === "business") &&
+          lesson.siteId === siteId
+        ) {
+          return true;
+        }
+        // Mid-scope lessons without industry still travel as global-ish priors.
+        if (midScopes.has(lesson.scope) && !lesson.industry) return true;
         return false;
       });
     },

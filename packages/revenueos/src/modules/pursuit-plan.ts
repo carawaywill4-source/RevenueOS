@@ -38,8 +38,19 @@ import {
   enqueuePursuitsFromOpportunities,
   type DrainResult,
 } from "./pursuit-engine";
+import {
+  applyFirstCustomerPressure,
+  evaluateFirstCustomerMode,
+} from "./first-customer-mode";
+import { filterTransferableLessons } from "../memory/similarity";
 import { newId } from "../ledger/store";
-import type { Lesson, Observation, Opportunity, PursuitJob } from "../types";
+import type {
+  FirstCustomerMode,
+  Lesson,
+  Observation,
+  Opportunity,
+  PursuitJob,
+} from "../types";
 
 async function bootstrapSiteMemory(adapter: SiteAdapter) {
   const context = await adapter.getContext();
@@ -79,6 +90,8 @@ export type PlanAndEnqueueResult = {
   enqueued: PursuitJob[];
   enqueuedCount: number;
   concurrentSlots: number;
+  firstCustomerMode: FirstCustomerMode;
+  replenishedEmptyQueue: boolean;
 };
 
 /**
@@ -99,10 +112,19 @@ export async function planAndEnqueuePursuits(
     ? await adapter.getMarketSignals()
     : undefined;
   const experiments = await store.listExperiments(context.siteId);
-  const priorLessons = await store.listLessons({
+  const rawLessons = await store.listLessons({
     siteId: context.siteId,
     industry: context.industry,
   });
+  const priorLessons = filterTransferableLessons({
+    lessons: rawLessons,
+    target: {
+      industry: context.industry,
+      siteId: context.siteId,
+      ...(context.commercial ?? {}),
+    },
+  });
+  const firstCustomerMode = evaluateFirstCustomerMode(observation);
   const priorScorecards = await store.listScorecards(context.siteId, 28);
   const attributions = await store.listAttributions(context.siteId);
   const calibration = buildCalibration(experiments, attributions);
@@ -233,17 +255,35 @@ export async function planAndEnqueuePursuits(
   const availableActions = filterAutonomousActions(await adapter.listSafeActions());
   const availableTypes = new Set(availableActions.map((a) => a.type));
   opportunities = demoteUnavailableSafeActions(opportunities, availableTypes);
+  opportunities = applyFirstCustomerPressure({
+    opportunities,
+    mode: firstCustomerMode,
+  });
 
   const hypotheses = opportunitiesToHypotheses(opportunities);
   const existing = store.listPursuits
     ? await store.listPursuits(context.siteId)
     : [];
+  const openExisting = existing.filter(
+    (job) => !["DONE", "FAILED"].includes(job.state),
+  );
+  // Empty queue is NOT job complete — replenish when below objective.
+  const belowObjective =
+    observation.money.estimatedProfitUsd < 10_000 ||
+    observation.money.purchases === 0;
+  const replenishedEmptyQueue = openExisting.length === 0 && belowObjective;
+
   const enqueued = enqueuePursuitsFromOpportunities({
     siteId: context.siteId,
     opportunities,
     hypotheses,
     existing,
-    maxEnqueue: opts.maxEnqueue ?? Math.max(8, ambition.concurrentBets * 2),
+    maxEnqueue:
+      opts.maxEnqueue ??
+      Math.max(
+        replenishedEmptyQueue ? 10 : 8,
+        ambition.concurrentBets * 2,
+      ),
     now,
   });
 
@@ -255,7 +295,12 @@ export async function planAndEnqueuePursuits(
         pursuitId: job.id,
         siteId: job.siteId,
         eventType: "enqueued",
-        detail: { title: job.title, actionType: job.actionType },
+        detail: {
+          title: job.title,
+          actionType: job.actionType,
+          firstCustomerMode: firstCustomerMode.active,
+          replenish: replenishedEmptyQueue,
+        },
         createdAt: now.toISOString(),
       });
     }
@@ -267,6 +312,8 @@ export async function planAndEnqueuePursuits(
     enqueued,
     enqueuedCount: enqueued.length,
     concurrentSlots: ambition.concurrentBets,
+    firstCustomerMode,
+    replenishedEmptyQueue,
   };
 }
 
@@ -287,18 +334,24 @@ export async function runPursuitTick(
   plan: PlanAndEnqueueResult;
   drain: DrainResult;
 }> {
-  const plan = opts.skipEnqueue
-    ? {
-        observation: await adapter.observe(),
-        opportunities: [] as Opportunity[],
-        enqueued: [] as PursuitJob[],
-        enqueuedCount: 0,
-        concurrentSlots: 4,
-      }
-    : await planAndEnqueuePursuits(adapter, {
-        maxEnqueue: opts.maxEnqueue,
-        now: opts.now,
-      });
+  let plan: PlanAndEnqueueResult;
+  if (opts.skipEnqueue) {
+    const observation = await adapter.observe();
+    plan = {
+      observation,
+      opportunities: [],
+      enqueued: [],
+      enqueuedCount: 0,
+      concurrentSlots: 4,
+      firstCustomerMode: evaluateFirstCustomerMode(observation),
+      replenishedEmptyQueue: false,
+    };
+  } else {
+    plan = await planAndEnqueuePursuits(adapter, {
+      maxEnqueue: opts.maxEnqueue,
+      now: opts.now,
+    });
+  }
 
   const drain = await drainPursuits({
     adapter,

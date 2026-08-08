@@ -17,6 +17,7 @@
     "@react-pdf/renderer": "^4.5.1",
     "@supabase/supabase-js": "^2.109.0",
     "@revenueos/core": "file:packages/revenueos",
+    "@revenueos/storefront-kit": "file:packages/storefront-kit",
     "docx": "^9.7.1",
     "lucide-react": "^1.29.0",
     "next": "16.3.0",

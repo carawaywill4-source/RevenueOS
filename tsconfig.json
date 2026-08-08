@@ -20,7 +20,8 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@revenueos/core": ["./packages/revenueos/src/index.ts"]
+      "@revenueos/core": ["./packages/revenueos/src/index.ts"],
+      "@revenueos/storefront-kit": ["./packages/storefront-kit/src/index.ts"]
     }
   },
   "include": [

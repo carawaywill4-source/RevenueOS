@@ -2116,3 +2116,144 @@ test("owner report summary shape answers what/learn/next", async () => {
   // Progress happened → not operational failure even with $0 sales.
   assert.equal(summary.operationalFailure, false);
 });
+
+test("FIRST_CUSTOMER_MODE boosts buyer-exposure actions when purchases are zero", async () => {
+  const {
+    evaluateFirstCustomerMode,
+    applyFirstCustomerPressure,
+  } = await import("@revenueos/core");
+
+  const mode = evaluateFirstCustomerMode({
+    observedAt: new Date().toISOString(),
+    money: {
+      revenueUsd: 0,
+      purchases: 0,
+      awaitingPayment: 0,
+      refunded: 0,
+      estimatedVariableCostUsd: 0,
+      estimatedProfitUsd: 0,
+      mrr: 0,
+      arr: 0,
+    },
+    funnel: {
+      steps: [],
+      largestDrop: null,
+      landingViews: 10,
+      checkouts: 0,
+      fulfillmentFailed: 0,
+    },
+    bottleneck: { level: 2, label: "traffic", detail: "need buyers" },
+    openExperimentIds: [],
+    errors: [],
+  });
+  assert.equal(mode.active, true);
+
+  const ranked = applyFirstCustomerPressure({
+    mode,
+    opportunities: [
+      {
+        id: "polish",
+        title: "Polish footer",
+        metric: "views",
+        category: "operations",
+        action: "polish",
+        expectedImpact: 1,
+        confidence: 0.5,
+        effort: 1,
+        score: 50,
+        safeActionType: "scorecard_snapshot",
+      },
+      {
+        id: "door",
+        title: "Publish intent door",
+        metric: "views",
+        category: "acquisition",
+        action: "publish",
+        expectedImpact: 8,
+        confidence: 0.5,
+        effort: 1,
+        score: 50,
+        safeActionType: "publish_intent_page",
+      },
+    ],
+  });
+  assert.equal(ranked[0]!.safeActionType, "publish_intent_page");
+  assert.ok(ranked[0]!.score > ranked[1]!.score);
+});
+
+test("negative transfer blocks death-care lessons on freelancer tools", async () => {
+  const { isNegativeTransfer, filterTransferableLessons } = await import(
+    "@revenueos/core"
+  );
+  assert.equal(isNegativeTransfer("death-care", "freelancer-finance"), true);
+  assert.equal(isNegativeTransfer("freelancer-finance", "freelancer-finance"), false);
+
+  const filtered = filterTransferableLessons({
+    target: { industry: "freelancer-finance", businessModel: "digital_download" },
+    lessons: [
+      {
+        id: "l1",
+        scope: "industry",
+        industry: "death-care",
+        patternKey: "ever-loved",
+        summary: "Funeral partner door",
+        evidenceCount: 3,
+        transferable: true,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "l2",
+        scope: "industry",
+        industry: "freelancer-finance",
+        patternKey: "invoice-template-seo",
+        summary: "Invoice SEO works",
+        evidenceCount: 2,
+        transferable: true,
+        commercial: {
+          businessModel: "digital_download",
+          industry: "freelancer-finance",
+        },
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ],
+  });
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0]!.id, "l2");
+});
+
+test("portfolio allocator ranks FIRST_CUSTOMER businesses for effort", async () => {
+  const { rankPortfolioEffort, snapshotFromMetrics } = await import(
+    "@revenueos/core"
+  );
+  const allocation = rankPortfolioEffort([
+    snapshotFromMetrics({
+      siteId: "raiseready",
+      displayName: "RaiseReady",
+      sequenceIndex: 1,
+      revenueUsd: 0,
+      contributionProfitUsd: 0,
+      purchases: 0,
+      landingViews: 5,
+      activePursuits: 0,
+      waitingForEvidence: 0,
+      claimableBacklog: 0,
+    }),
+    snapshotFromMetrics({
+      siteId: "ledgerleaf",
+      displayName: "Ledgerleaf",
+      sequenceIndex: 2,
+      revenueUsd: 290,
+      contributionProfitUsd: 260,
+      purchases: 10,
+      landingViews: 400,
+      activePursuits: 2,
+      waitingForEvidence: 1,
+      claimableBacklog: 3,
+    }),
+  ]);
+  assert.ok(allocation.effortOrder.includes("raiseready"));
+  assert.ok(allocation.notes.some((n) => n.includes("FIRST_CUSTOMER")));
+});
+

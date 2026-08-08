@@ -2,7 +2,34 @@
 export type ActionRisk = "safe" | "owner_gate" | "forbidden";
 
 /** Where a lesson may be reused. Never includes end-user PII. */
-export type LessonScope = "global" | "industry" | "site";
+/**
+ * Hierarchical lesson scopes for similarity-aware transfer.
+ * Narrower scopes override broader ones when conditions match.
+ */
+export type LessonScope =
+  | "global"
+  | "business_model"
+  | "industry"
+  | "audience"
+  | "price_band"
+  | "consideration"
+  | "channel"
+  | "business"
+  | "product"
+  | "site";
+
+/** Commercial conditions under which a lesson or experiment ran. */
+export type CommercialContext = {
+  businessModel?: string;
+  industry?: string;
+  audience?: string;
+  priceBand?: string;
+  considerationLevel?: string;
+  channel?: string;
+  productId?: string;
+  priceUsd?: number;
+  marginEstimate?: number;
+};
 
 /** Whether a lesson encourages or discourages a pattern. */
 export type LessonSentiment = "positive" | "negative" | "neutral";
@@ -271,6 +298,10 @@ export type BusinessContext = {
    * portable archetypes. Only `label` is required.
    */
   audienceSegments?: Array<Partial<AudiencePersona> & { label: string }>;
+  /** Portfolio commercial context for portable learning / negative transfer. */
+  commercial?: CommercialContext;
+  /** Launch sequence index for learning-transfer experiments (1..N). */
+  portfolioSequenceIndex?: number;
 };
 
 export type MoneyObservation = {
@@ -556,8 +587,44 @@ export type Lesson = {
   cooldownUntil?: string;
   /** Sites that contributed evidence (portable industry/global lessons). */
   originSiteIds?: string[];
+  /** Conditions under which this lesson applies — used to prevent negative transfer. */
+  commercial?: CommercialContext;
   createdAt: string;
   updatedAt: string;
+};
+
+/** Operating regime when a business has zero paying customers. */
+export type FirstCustomerMode = {
+  active: boolean;
+  reason: string;
+  priority: "buyer_exposure";
+  /** Boost pattern keys that can put a real buyer in front of the offer. */
+  preferredActionTypes: string[];
+};
+
+export type PortfolioBusinessSnapshot = {
+  siteId: string;
+  displayName: string;
+  sequenceIndex: number;
+  revenueUsd: number;
+  contributionProfitUsd: number;
+  purchases: number;
+  landingViews: number;
+  activePursuits: number;
+  waitingForEvidence: number;
+  claimableBacklog: number;
+  firstCustomerMode: boolean;
+  profitPerVisitor: number;
+  marginalEvProxy: number;
+  learningValue: number;
+};
+
+export type PortfolioAllocation = {
+  generatedAt: string;
+  businesses: PortfolioBusinessSnapshot[];
+  /** siteIds ordered by where the next unit of effort is most valuable. */
+  effortOrder: string[];
+  notes: string[];
 };
 
 export type AttributionVerdict = "won" | "lost" | "inconclusive";

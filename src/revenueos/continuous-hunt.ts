@@ -1,5 +1,6 @@
 import {
   buildOwnerReportSummary,
+  evaluateFirstCustomerMode,
   runPursuitTick,
   type DrainResult,
   type OwnerReportSummary,
@@ -107,6 +108,8 @@ export async function runContinuousHunt(opts?: {
           enqueued: [],
           enqueuedCount: 0,
           concurrentSlots: 0,
+          firstCustomerMode: evaluateFirstCustomerMode(observation),
+          replenishedEmptyQueue: false,
         },
         drain: emptyDrain,
         ownerReport: buildOwnerReportSummary({
