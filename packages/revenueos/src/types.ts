@@ -809,6 +809,111 @@ export type Scorecard = {
   hourPlan?: HourPlan;
 };
 
+/** Persistent Revenue Pursuit Engine job states. */
+export type PursuitState =
+  | "DISCOVER"
+  | "QUALIFY"
+  | "EXECUTE"
+  | "WAITING_FOR_EVIDENCE"
+  | "ATTRIBUTE"
+  | "LEARN"
+  | "REPLENISH"
+  | "DONE"
+  | "FAILED";
+
+export type PursuitKind =
+  | "organic_revenue"
+  | "discovery_door"
+  | "conversion"
+  | "ops";
+
+export type PursuitEventType =
+  | "enqueued"
+  | "claimed"
+  | "executed"
+  | "wait"
+  | "attributed"
+  | "learned"
+  | "replenished"
+  | "failed"
+  | "done";
+
+/** Durable organic revenue work item — waiting jobs do not idle the operator. */
+export type PursuitJob = {
+  id: string;
+  siteId: string;
+  state: PursuitState;
+  kind: PursuitKind;
+  patternKey?: string;
+  actionType?: string;
+  priority: number;
+  effort: number;
+  experimentId?: string;
+  opportunityId?: string;
+  idempotencyKey: string;
+  leaseOwner?: string | null;
+  leaseUntil?: string | null;
+  notBefore?: string | null;
+  attempts: number;
+  maxAttempts: number;
+  lastError?: string;
+  title: string;
+  action: string;
+  channel?: string;
+  persona?: string;
+  workSummary?: string;
+  hypothesis?: Hypothesis;
+  predicted?: PredictedImpact;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PursuitEvent = {
+  id: string;
+  pursuitId: string;
+  siteId: string;
+  eventType: PursuitEventType;
+  detail: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type PursuitLease = {
+  id: string;
+  siteId: string;
+  kind: string;
+  leaseUntil: string;
+  document?: Record<string, unknown>;
+  createdAt: string;
+};
+
+/** Hourly Owner Report — work done, not wake-up checklist. */
+export type OwnerReportSummary = {
+  siteId: string;
+  windowStart: string;
+  windowEnd: string;
+  actionsAttempted: number;
+  actionsCompleted: number;
+  experimentsLaunched: number;
+  experimentsStillMeasuring: number;
+  attributionsClosed: number;
+  lessonsLearned: number;
+  doorsKilled: number;
+  doorsExpanded: number;
+  activePursuits: number;
+  waitingForEvidence: number;
+  blockedOrFailed: number;
+  claimableBacklog: number;
+  workLines: string[];
+  ownerAsks: string[];
+  nextQueue: string[];
+  /** True when profit is zero, capacity existed, and almost no work progressed. */
+  operationalFailure: boolean;
+  operationalFailureReason?: string;
+  hourRevenueUsd: number;
+  hourPurchases: number;
+  hourLandingViews: number;
+};
+
 export type CycleResult = {
   observedAt: string;
   observation: Observation;
@@ -832,6 +937,8 @@ export type CycleResult = {
   metaPolicy: MetaPolicy;
   curriculum: Curriculum;
   hourPlan: HourPlan;
+  pursuitsEnqueued?: number;
+  pursuitsAdvanced?: number;
   /** Cycle order: money made for the customer is the only success. */
   profitMandate?: {
     northStarDailyProfitUsd: number;

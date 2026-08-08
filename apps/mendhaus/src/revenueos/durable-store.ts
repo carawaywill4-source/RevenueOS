@@ -9,6 +9,8 @@ import {
   type ExposureRecord,
   type Lesson,
   type PlannerRunRecord,
+  type PursuitEvent,
+  type PursuitJob,
   type Scorecard,
 } from "@revenueos/core";
 import { getSupabaseAdmin, supabaseConfigured } from "@/lib/supabase";
@@ -368,6 +370,210 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         if (process.env.VERCEL) throw new Error(`Ledger capability gap save failed: ${error.message}`);
         return fallback.saveCapabilityGap!(gap);
       }
+    },
+
+    async listPursuits(siteId, opts) {
+      if (!(await supabaseAvailable())) return fallback.listPursuits!(siteId, opts);
+      let query = sb()
+        .from("revenueos_pursuits")
+        .select("document")
+        .eq("site_id", siteId)
+        .order("priority", { ascending: false });
+      if (opts?.states?.length) query = query.in("state", opts.states);
+      if (opts?.limit) query = query.limit(opts.limit);
+      const { data, error } = await query;
+      if (error) {
+        if (process.env.VERCEL) throw new Error(`Ledger pursuits read failed: ${error.message}`);
+        return fallback.listPursuits!(siteId, opts);
+      }
+      return (data ?? []).map((row) => row.document as PursuitJob);
+    },
+
+    async savePursuit(job: PursuitJob) {
+      if (!(await supabaseAvailable())) return fallback.savePursuit!(job);
+      const { error } = await sb().from("revenueos_pursuits").upsert(
+        {
+          id: job.id,
+          site_id: job.siteId,
+          state: job.state,
+          kind: job.kind,
+          pattern_key: job.patternKey ?? null,
+          action_type: job.actionType ?? null,
+          priority: job.priority,
+          effort: job.effort,
+          experiment_id: job.experimentId ?? null,
+          opportunity_id: job.opportunityId ?? null,
+          idempotency_key: job.idempotencyKey,
+          lease_owner: job.leaseOwner ?? null,
+          lease_until: job.leaseUntil ?? null,
+          not_before: job.notBefore ?? null,
+          attempts: job.attempts,
+          max_attempts: job.maxAttempts,
+          last_error: job.lastError ?? null,
+          document: job,
+          created_at: job.createdAt,
+          updated_at: job.updatedAt,
+        },
+        { onConflict: "id" },
+      );
+      if (error) {
+        if (process.env.VERCEL) throw new Error(`Ledger pursuit save failed: ${error.message}`);
+        return fallback.savePursuit!(job);
+      }
+    },
+
+    async claimPursuits(input) {
+      if (!(await supabaseAvailable())) return fallback.claimPursuits!(input);
+      const now = input.now ?? new Date();
+      const nowIso = now.toISOString();
+      const leaseUntil = new Date(now.getTime() + input.leaseMs).toISOString();
+      const claimableStates = [
+        "DISCOVER",
+        "QUALIFY",
+        "EXECUTE",
+        "WAITING_FOR_EVIDENCE",
+        "ATTRIBUTE",
+        "LEARN",
+        "REPLENISH",
+      ];
+      const { data, error } = await sb()
+        .from("revenueos_pursuits")
+        .select("document")
+        .eq("site_id", input.siteId)
+        .in("state", claimableStates)
+        .order("priority", { ascending: false })
+        .limit(Math.max(input.limit * 3, 24));
+      if (error) {
+        if (process.env.VERCEL) throw new Error(`Ledger claim pursuits failed: ${error.message}`);
+        return fallback.claimPursuits!(input);
+      }
+
+      const claimed: PursuitJob[] = [];
+      for (const row of data ?? []) {
+        if (claimed.length >= input.limit) break;
+        const job = row.document as PursuitJob;
+        if (job.notBefore && Date.parse(job.notBefore) > now.getTime()) continue;
+        if (
+          job.leaseUntil &&
+          Date.parse(job.leaseUntil) > now.getTime() &&
+          job.leaseOwner !== input.owner
+        ) {
+          continue;
+        }
+        if (
+          input.excludeActionTypes?.length &&
+          job.actionType &&
+          input.excludeActionTypes.includes(job.actionType)
+        ) {
+          continue;
+        }
+        const next: PursuitJob = {
+          ...job,
+          leaseOwner: input.owner,
+          leaseUntil,
+          updatedAt: nowIso,
+        };
+        const { error: saveError } = await sb().from("revenueos_pursuits").upsert({
+          id: next.id,
+          site_id: next.siteId,
+          state: next.state,
+          kind: next.kind,
+          pattern_key: next.patternKey ?? null,
+          action_type: next.actionType ?? null,
+          priority: next.priority,
+          effort: next.effort,
+          experiment_id: next.experimentId ?? null,
+          opportunity_id: next.opportunityId ?? null,
+          idempotency_key: next.idempotencyKey,
+          lease_owner: next.leaseOwner,
+          lease_until: next.leaseUntil,
+          not_before: next.notBefore ?? null,
+          attempts: next.attempts,
+          max_attempts: next.maxAttempts,
+          last_error: next.lastError ?? null,
+          document: next,
+          created_at: next.createdAt,
+          updated_at: next.updatedAt,
+        });
+        if (saveError) continue;
+        claimed.push(next);
+      }
+      return claimed;
+    },
+
+    async appendPursuitEvent(event: PursuitEvent) {
+      if (!(await supabaseAvailable())) return fallback.appendPursuitEvent!(event);
+      const { error } = await sb().from("revenueos_pursuit_events").upsert({
+        id: event.id,
+        pursuit_id: event.pursuitId,
+        site_id: event.siteId,
+        event_type: event.eventType,
+        detail: event.detail,
+        created_at: event.createdAt,
+      });
+      if (error) {
+        if (process.env.VERCEL) throw new Error(`Ledger pursuit event failed: ${error.message}`);
+        return fallback.appendPursuitEvent!(event);
+      }
+    },
+
+    async listPursuitEvents(siteId, opts) {
+      if (!(await supabaseAvailable())) {
+        return fallback.listPursuitEvents!(siteId, opts);
+      }
+      let query = sb()
+        .from("revenueos_pursuit_events")
+        .select("id,pursuit_id,site_id,event_type,detail,created_at")
+        .eq("site_id", siteId)
+        .order("created_at", { ascending: false });
+      if (opts?.since) query = query.gte("created_at", opts.since);
+      if (opts?.limit) query = query.limit(opts.limit);
+      else query = query.limit(200);
+      const { data, error } = await query;
+      if (error) {
+        if (process.env.VERCEL) throw new Error(`Ledger pursuit events read failed: ${error.message}`);
+        return fallback.listPursuitEvents!(siteId, opts);
+      }
+      return (data ?? []).map(
+        (row) =>
+          ({
+            id: row.id,
+            pursuitId: row.pursuit_id,
+            siteId: row.site_id,
+            eventType: row.event_type,
+            detail: (row.detail ?? {}) as Record<string, unknown>,
+            createdAt: row.created_at,
+          }) satisfies PursuitEvent,
+      );
+    },
+
+    async claimLease(input) {
+      if (!(await supabaseAvailable())) return fallback.claimLease!(input);
+      const nowIso = new Date().toISOString();
+      const { data: existing } = await sb()
+        .from("revenueos_leases")
+        .select("lease_until")
+        .eq("id", input.id)
+        .maybeSingle();
+      if (
+        existing?.lease_until &&
+        Date.parse(existing.lease_until) > Date.now()
+      ) {
+        return false;
+      }
+      const { error } = await sb().from("revenueos_leases").upsert({
+        id: input.id,
+        site_id: input.siteId,
+        kind: input.kind,
+        lease_until: input.leaseUntil,
+        document: input.document ?? {},
+        created_at: nowIso,
+      });
+      if (error) {
+        if (process.env.VERCEL) throw new Error(`Ledger lease claim failed: ${error.message}`);
+        return fallback.claimLease!(input);
+      }
+      return true;
     },
   };
 }

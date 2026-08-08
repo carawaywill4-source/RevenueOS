@@ -9,9 +9,22 @@ import type {
   ExposureRecord,
   Lesson,
   PlannerRunRecord,
+  PursuitEvent,
+  PursuitJob,
+  PursuitLease,
   Scorecard,
 } from "../types";
 import type { ExperimentStore } from "./store";
+
+const CLAIMABLE_STATES = new Set([
+  "DISCOVER",
+  "QUALIFY",
+  "EXECUTE",
+  "WAITING_FOR_EVIDENCE",
+  "ATTRIBUTE",
+  "LEARN",
+  "REPLENISH",
+]);
 
 type FileLedger = {
   experiments: Experiment[];
@@ -23,6 +36,9 @@ type FileLedger = {
   exposures: ExposureRecord[];
   discoveryDoors: DiscoveryDoor[];
   capabilityGaps: CapabilityGap[];
+  pursuits: PursuitJob[];
+  pursuitEvents: PursuitEvent[];
+  leases: PursuitLease[];
 };
 
 const EMPTY: FileLedger = {
@@ -35,6 +51,9 @@ const EMPTY: FileLedger = {
   exposures: [],
   discoveryDoors: [],
   capabilityGaps: [],
+  pursuits: [],
+  pursuitEvents: [],
+  leases: [],
 };
 
 /**
@@ -186,6 +205,114 @@ export function createFileExperimentStore(
       if (index >= 0) data.capabilityGaps[index] = gap;
       else data.capabilityGaps.push(gap);
       await save(data);
+    },
+    async listPursuits(siteId, opts) {
+      const data = await load();
+      const states = opts?.states ? new Set(opts.states) : null;
+      const limit = opts?.limit ?? 200;
+      return data.pursuits
+        .filter((job) => job.siteId === siteId)
+        .filter((job) => (states ? states.has(job.state) : true))
+        .sort((a, b) => b.priority - a.priority)
+        .slice(0, limit);
+    },
+    async savePursuit(job) {
+      const data = await load();
+      const index = data.pursuits.findIndex((item) => item.id === job.id);
+      if (index >= 0) data.pursuits[index] = job;
+      else {
+        const byKey = data.pursuits.findIndex(
+          (item) =>
+            item.siteId === job.siteId &&
+            item.idempotencyKey === job.idempotencyKey,
+        );
+        if (byKey >= 0) data.pursuits[byKey] = { ...job, id: data.pursuits[byKey]!.id };
+        else data.pursuits.push(job);
+      }
+      await save(data);
+    },
+    async claimPursuits(input) {
+      const data = await load();
+      const now = input.now ?? new Date();
+      const nowMs = now.getTime();
+      const leaseUntil = new Date(nowMs + input.leaseMs).toISOString();
+      const exclude = new Set(input.excludeActionTypes ?? []);
+      const candidates = data.pursuits
+        .filter((job) => job.siteId === input.siteId)
+        .filter((job) => CLAIMABLE_STATES.has(job.state))
+        .filter((job) => {
+          if (job.notBefore && Date.parse(job.notBefore) > nowMs) return false;
+          // WAITING_FOR_EVIDENCE only claimable when measurement window elapsed
+          if (
+            job.state === "WAITING_FOR_EVIDENCE" &&
+            job.notBefore &&
+            Date.parse(job.notBefore) > nowMs
+          ) {
+            return false;
+          }
+          const leased =
+            job.leaseUntil && Date.parse(job.leaseUntil) > nowMs;
+          if (leased && job.leaseOwner !== input.owner) return false;
+          if (job.actionType && exclude.has(job.actionType)) return false;
+          return true;
+        })
+        .sort((a, b) => b.priority - a.priority)
+        .slice(0, input.limit);
+
+      const claimed: PursuitJob[] = [];
+      for (const job of candidates) {
+        const next: PursuitJob = {
+          ...job,
+          leaseOwner: input.owner,
+          leaseUntil,
+          updatedAt: now.toISOString(),
+        };
+        const index = data.pursuits.findIndex((item) => item.id === job.id);
+        if (index >= 0) data.pursuits[index] = next;
+        claimed.push(next);
+      }
+      if (claimed.length) await save(data);
+      return claimed;
+    },
+    async appendPursuitEvent(event) {
+      const data = await load();
+      data.pursuitEvents.unshift(event);
+      data.pursuitEvents = data.pursuitEvents.slice(0, 2000);
+      await save(data);
+    },
+    async listPursuitEvents(siteId, opts) {
+      const data = await load();
+      const sinceMs = opts?.since ? Date.parse(opts.since) : 0;
+      const limit = opts?.limit ?? 200;
+      return data.pursuitEvents
+        .filter((event) => event.siteId === siteId)
+        .filter((event) => Date.parse(event.createdAt) >= sinceMs)
+        .slice(0, limit);
+    },
+    async claimLease(input) {
+      const data = await load();
+      const nowMs = Date.now();
+      const existing = data.leases.find((lease) => lease.id === input.id);
+      if (
+        existing &&
+        Date.parse(existing.leaseUntil) > nowMs
+      ) {
+        return false;
+      }
+      const lease: PursuitLease = {
+        id: input.id,
+        siteId: input.siteId,
+        kind: input.kind,
+        leaseUntil: input.leaseUntil,
+        document: input.document,
+        createdAt: existing?.createdAt ?? new Date().toISOString(),
+      };
+      if (existing) {
+        const index = data.leases.findIndex((item) => item.id === input.id);
+        data.leases[index!] = lease;
+      } else data.leases.push(lease);
+      await save(data);
+      return true;
     },
   };
 }

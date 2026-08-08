@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { runCycle } from "@revenueos/core";
+import {
+  buildOwnerReportSummary,
+  runPursuitTick,
+} from "@revenueos/core";
 import { appendJournal } from "@/lib/events";
 import { sendMendhausEmail, resendConfigured } from "@/lib/mail";
 import { getLastHourPulse, getWindowSnapshot } from "@/lib/metrics";
@@ -10,7 +13,6 @@ import {
   mendhausHourlySubject,
 } from "@/revenueos/hourly-email";
 import { loadDiscoveryState } from "@/lib/discovery";
-import { planMendhausBrief } from "@/revenueos/ai-planner";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -50,7 +52,6 @@ async function claimHourlyEmailSlot(): Promise<boolean> {
   ) {
     return false;
   }
-  // Race: another tick inserted between select and insert
   const again = await getSupabaseAdmin()
     .from("mh_journal")
     .select("id")
@@ -63,7 +64,7 @@ async function claimHourlyEmailSlot(): Promise<boolean> {
   return false;
 }
 
-/** One autonomous decision cycle per scheduled 15-minute window. */
+/** One pursuit drain per scheduled 15-minute window. */
 async function claimCycleSlot(): Promise<boolean> {
   const now = new Date();
   now.setUTCMinutes(Math.floor(now.getUTCMinutes() / 15) * 15, 0, 0);
@@ -71,7 +72,7 @@ async function claimCycleSlot(): Promise<boolean> {
   const { error } = await getSupabaseAdmin().from("mh_journal").insert({
     kind: "revenueos_cycle",
     summary,
-    detail: { siteId: "mendhaus" },
+    detail: { siteId: "mendhaus", mode: "pursuit" },
   });
   if (!error) return true;
   if (error.code === "23505" || /duplicate|unique/i.test(error.message)) return false;
@@ -106,28 +107,56 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, skipped: "cycle_already_running_or_completed" });
   }
 
-  let result: Awaited<ReturnType<typeof runCycle>>;
+  const adapter = createMendhausAdapter();
+  let plan: Awaited<ReturnType<typeof runPursuitTick>>["plan"];
+  let drain: Awaited<ReturnType<typeof runPursuitTick>>["drain"];
   try {
-    result = await runCycle(createMendhausAdapter());
+    ({ plan, drain } = await runPursuitTick(adapter, {
+      budgetMs: 50_000,
+      maxJobs: 8,
+    }));
   } catch (error) {
-    console.error("mendhaus RevenueOS cycle failed", error);
+    console.error("mendhaus RevenueOS pursuit tick failed", error);
     return NextResponse.json(
-      { ok: false, error: `RevenueOS cycle failed: ${(error as Error).message}` },
+      { ok: false, error: `RevenueOS pursuit failed: ${(error as Error).message}` },
       { status: 500 },
     );
   }
 
+  const store = adapter.getExperimentStore();
+  const windowEnd = new Date().toISOString();
+  const windowStart = new Date(Date.now() - 3_600_000).toISOString();
+  const events = store.listPursuitEvents
+    ? await store.listPursuitEvents("mendhaus", { since: windowStart, limit: 100 })
+    : [];
+  const pursuits = store.listPursuits
+    ? await store.listPursuits("mendhaus")
+    : [];
+  const hourPulse = plan.observation.hourPulse;
+  const ownerReport = buildOwnerReportSummary({
+    siteId: "mendhaus",
+    windowStart,
+    windowEnd,
+    events,
+    pursuits,
+    hourRevenueUsd: hourPulse?.revenueUsd ?? 0,
+    hourPurchases: hourPulse?.purchases ?? 0,
+    hourLandingViews: hourPulse?.landingViews ?? 0,
+    hadExecutableCapacity: plan.concurrentSlots > 0,
+  });
+
   await appendJournal(
-    result.hourPlan?.overdrive
-      ? `Zero-hour overdrive: ${result.hourPlan.learnedFromLastHour}`
-      : `Cycle complete. Bottleneck ${result.observation.bottleneck.label}.`,
+    drain.executed > 0
+      ? `Pursuit drain: ${drain.executed} executed, ${drain.stillWaiting} waiting.`
+      : `Pursuit tick: enqueued ${plan.enqueuedCount}, advanced ${drain.advanced}.`,
     {
-      bottleneck: result.observation.bottleneck,
-      money: result.observation.money,
-      hourPlan: result.hourPlan,
-      experimentIds: result.observation.openExperimentIds,
+      bottleneck: plan.observation.bottleneck,
+      money: plan.observation.money,
+      drain,
+      enqueued: plan.enqueuedCount,
       attack: true,
       dailyTargetUsd: 10_000,
+      mode: "pursuit",
     },
   );
 
@@ -135,12 +164,10 @@ export async function GET(request: Request) {
   let emailSkip: string | undefined;
   if (resendConfigured()) {
     const launchClaimed = await claimLaunchEmail();
-    // The launch notice is that hour's digest; reserve its regular slot so
-    // startup never produces a duplicate owner email.
-    const claimed = launchClaimed
+    const emailClaimed = launchClaimed
       ? ((await claimHourlyEmailSlot()), true)
       : await claimHourlyEmailSlot();
-    if (!claimed) {
+    if (!emailClaimed) {
       emailSkip = "already_sent_this_hour";
     } else {
       const [hour, week, discovery] = await Promise.all([
@@ -148,35 +175,26 @@ export async function GET(request: Request) {
         getWindowSnapshot(7),
         loadDiscoveryState(),
       ]);
-      const actionsCompleted = result.executed
-        .filter(({ result: actionResult }) => actionResult.ok)
-        .map(({ action, result: actionResult }) => `${action.type}: ${actionResult.detail}`)
+      const actionsCompleted = drain.jobs
+        .filter((job) => job.workSummary?.includes("Executed") || job.state === "WAITING_FOR_EVIDENCE")
+        .map((job) => job.workSummary ?? `${job.state}: ${job.title}`)
         .slice(0, 8);
       const snapshot = {
         hour,
         weekRevenueUsd: week.orders.grossRevenueUsd,
         nextAction:
-          result.hourPlan?.nextHourMoves?.[0]?.title ??
-          result.observation.bottleneck.label,
-        bottleneckLabel: result.observation.bottleneck.label,
+          ownerReport.nextQueue[0] ??
+          plan.observation.bottleneck.label,
+        bottleneckLabel: plan.observation.bottleneck.label,
         actionsCompleted,
         discoverySummary: discovery.researchSummary,
         discoveryAttacks: discovery.attacks.map((a) => a.query).slice(0, 4),
         publishedTopics: discovery.publishedTopics
           .slice(0, 4)
           .map((t) => `https://mendhaus.shop/topics/${t.slug}`),
-        learningDelta:
-          discovery.lessons[0] ?? result.scorecard.learningDelta ?? result.hourPlan?.learnedFromLastHour,
-        plannerSource: result.plannerDecision?.source,
+        learningDelta: discovery.lessons[0],
+        ownerReport,
       };
-      const aiBrief = await planMendhausBrief({
-        hour,
-        bottleneck: result.observation.bottleneck.label,
-        executed: actionsCompleted,
-        nextMove: snapshot.nextAction,
-        discoverySummary: discovery.researchSummary,
-        attackQueries: snapshot.discoveryAttacks,
-      });
       const sent = await sendMendhausEmail({
         to: OWNER_EMAIL,
         subject: launchClaimed
@@ -190,19 +208,7 @@ export async function GET(request: Request) {
               "",
               "It will research the live internet, publish intent topics, IndexNow, and merchandising only when visitors exist. Failed actions do not become learning evidence.",
             ].join("\n")
-          : [
-              formatMendhausHourlyEmail(snapshot),
-              "",
-              `Cycle analysis (${aiBrief.source}): ${aiBrief.report}`,
-              `Evidence: ${aiBrief.evidence}`,
-              `Next decision: ${aiBrief.nextMove}`,
-              result.plannerDecision?.rationale
-                ? `Planner: ${result.plannerDecision.rationale}`
-                : "",
-              aiBrief.fallbackReason ? `Planner fallback: ${aiBrief.fallbackReason}` : "",
-            ]
-              .filter(Boolean)
-              .join("\n"),
+          : formatMendhausHourlyEmail(snapshot),
       });
       if (sent.ok) {
         emailId = sent.id;
@@ -235,27 +241,28 @@ export async function GET(request: Request) {
     ok: true,
     site: "mendhaus",
     attack: true,
+    mode: "persistent_pursuit",
     dailyTargetUsd: 10_000,
-    bottleneck: result.observation.bottleneck,
-    money: result.observation.money,
-    hourPlan: result.hourPlan,
+    bottleneck: plan.observation.bottleneck,
+    money: plan.observation.money,
     emailed: Boolean(emailId),
     emailId,
     emailSkip,
-    errors: result.observation.errors,
-    executed: result.executed.map(({ action, result: actionResult }) => ({
-      type: action.type,
-      experimentId: action.payload?.experimentId,
-      ok: actionResult.ok,
-      detail: actionResult.detail,
-    })),
-    planner: result.plannerDecision
-      ? {
-          source: result.plannerDecision.source,
-          selected: result.plannerDecision.selectedOpportunityIds,
-          rationale: result.plannerDecision.rationale,
-          fallbackReason: result.plannerDecision.fallbackReason,
-        }
-      : undefined,
+    errors: plan.observation.errors,
+    drain: {
+      claimed: drain.claimed,
+      advanced: drain.advanced,
+      executed: drain.executed,
+      stillWaiting: drain.stillWaiting,
+      claimableRemaining: drain.claimableRemaining,
+    },
+    enqueued: plan.enqueuedCount,
+    ownerReport: {
+      actionsCompleted: ownerReport.actionsCompleted,
+      experimentsLaunched: ownerReport.experimentsLaunched,
+      waitingForEvidence: ownerReport.waitingForEvidence,
+      operationalFailure: ownerReport.operationalFailure,
+      claimableBacklog: ownerReport.claimableBacklog,
+    },
   });
 }

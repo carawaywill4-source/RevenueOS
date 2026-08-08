@@ -1819,3 +1819,300 @@ test("demoteUnavailableSafeActions strips limbs the adapter cannot run", async (
   assert.equal(demoted[0]!.safeActionType, undefined);
   assert.equal(demoted[1]!.safeActionType, "indexnow_submit");
 });
+
+test("enqueue skips opportunities demoted to no safeActionType", async () => {
+  const {
+    demoteUnavailableSafeActions,
+    enqueuePursuitsFromOpportunities,
+    opportunitiesToHypotheses,
+  } = await import("@revenueos/core");
+
+  const opportunities = demoteUnavailableSafeActions(
+    [
+      {
+        id: "missing-limb",
+        title: "Needs GSC",
+        metric: "views",
+        category: "acquisition",
+        action: "read gsc",
+        expectedImpact: 9,
+        confidence: 0.5,
+        effort: 1,
+        score: 90,
+        safeActionType: "publish_intent_page",
+        patternKey: "door:a",
+        predicted: {
+          precursorMetric: "landing_views",
+          expectedProfitUsd: 200,
+          confidence: 0.4,
+          effort: 1,
+          costUsd: 0,
+          timeToSignalDays: 7,
+        },
+      },
+      {
+        id: "ok-limb",
+        title: "IndexNow",
+        metric: "views",
+        category: "acquisition",
+        action: "index",
+        expectedImpact: 5,
+        confidence: 0.5,
+        effort: 1,
+        score: 50,
+        safeActionType: "indexnow_submit",
+        patternKey: "index:a",
+        predicted: {
+          precursorMetric: "landing_views",
+          expectedProfitUsd: 40,
+          confidence: 0.4,
+          effort: 1,
+          costUsd: 0,
+          timeToSignalDays: 3,
+        },
+      },
+    ],
+    new Set(["indexnow_submit"]),
+  );
+  const jobs = enqueuePursuitsFromOpportunities({
+    siteId: "example-static",
+    opportunities,
+    hypotheses: opportunitiesToHypotheses(opportunities),
+    existing: [],
+  });
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0]!.actionType, "indexnow_submit");
+});
+
+test("WAITING_FOR_EVIDENCE does not block claiming an independent EXECUTE job", async () => {
+  const {
+    createFileExperimentStore,
+    createExampleStaticAdapter,
+    advancePursuit,
+    drainPursuits,
+  } = await import("@revenueos/core");
+
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-wait-"));
+  const adapter = createExampleStaticAdapter(dir);
+  const store = createFileExperimentStore(dir);
+  const now = new Date("2026-08-08T12:00:00.000Z");
+  const waiting = {
+    id: "pursuit_wait",
+    siteId: "example-static",
+    state: "WAITING_FOR_EVIDENCE" as const,
+    kind: "organic_revenue" as const,
+    actionType: "publish_intent_page",
+    priority: 100,
+    effort: 1,
+    idempotencyKey: "wait:publish",
+    attempts: 1,
+    maxAttempts: 3,
+    title: "Waiting publish",
+    action: "measure",
+    notBefore: new Date(now.getTime() + 7 * 86_400_000).toISOString(),
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  };
+  const ready = {
+    id: "pursuit_ready",
+    siteId: "example-static",
+    state: "EXECUTE" as const,
+    kind: "ops" as const,
+    actionType: "scorecard_snapshot",
+    priority: 50,
+    effort: 1,
+    idempotencyKey: "exec:scorecard",
+    attempts: 0,
+    maxAttempts: 3,
+    title: "Scorecard",
+    action: "snapshot",
+    hypothesis: {
+      id: "h1",
+      title: "Scorecard",
+      metric: "ops",
+      predictedDelta: "+1",
+      expectedImpact: 1,
+      confidence: 0.9,
+      effort: 1,
+      action: "snapshot",
+      constraintsChecked: ["policy"],
+      category: "operations" as const,
+      safeActionType: "scorecard_snapshot",
+    },
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  };
+  await store.savePursuit!(waiting);
+  await store.savePursuit!(ready);
+
+  const observation = await adapter.observe();
+  const drain = await drainPursuits({
+    adapter: { ...adapter, getExperimentStore: () => store },
+    store,
+    observation,
+    budgetMs: 10_000,
+    maxJobs: 4,
+    now,
+  });
+  assert.ok(drain.advanced >= 1);
+  const after = await store.listPursuits!("example-static");
+  const waitJob = after.find((j) => j.id === "pursuit_wait");
+  const readyJob = after.find((j) => j.id === "pursuit_ready");
+  assert.equal(waitJob?.state, "WAITING_FOR_EVIDENCE");
+  assert.ok(
+    readyJob?.state === "WAITING_FOR_EVIDENCE" || readyJob?.state === "DONE",
+  );
+  // Independent execute progressed despite a waiting experiment occupying a slot.
+  assert.notEqual(readyJob?.attempts, 0);
+
+  // Attribute only after notBefore
+  const early = await advancePursuit({
+    job: waitJob!,
+    adapter: { ...adapter, getExperimentStore: () => store },
+    store,
+    observation,
+    now,
+  });
+  assert.equal(early.state, "WAITING_FOR_EVIDENCE");
+  const later = await advancePursuit({
+    job: waitJob!,
+    adapter: { ...adapter, getExperimentStore: () => store },
+    store,
+    observation,
+    now: new Date(now.getTime() + 8 * 86_400_000),
+  });
+  assert.notEqual(later.state, "WAITING_FOR_EVIDENCE");
+});
+
+test("drainPursuits respects maxJobs budget", async () => {
+  const { createFileExperimentStore, createExampleStaticAdapter, drainPursuits } =
+    await import("@revenueos/core");
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-budget-"));
+  const adapter = createExampleStaticAdapter(dir);
+  const store = createFileExperimentStore(dir);
+  const now = new Date("2026-08-08T12:00:00.000Z");
+  for (let i = 0; i < 5; i += 1) {
+    await store.savePursuit!({
+      id: `pursuit_${i}`,
+      siteId: "example-static",
+      state: "EXECUTE",
+      kind: "ops",
+      actionType: "scorecard_snapshot",
+      priority: 10 - i,
+      effort: 1,
+      idempotencyKey: `exec:${i}`,
+      attempts: 0,
+      maxAttempts: 3,
+      title: `Job ${i}`,
+      action: "snapshot",
+      hypothesis: {
+        id: `h${i}`,
+        title: `Job ${i}`,
+        metric: "ops",
+        predictedDelta: "+1",
+        expectedImpact: 1,
+        confidence: 0.9,
+        effort: 1,
+        action: "snapshot",
+        constraintsChecked: ["policy"],
+        category: "operations",
+        safeActionType: "scorecard_snapshot",
+      },
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+  }
+  const drain = await drainPursuits({
+    adapter: { ...adapter, getExperimentStore: () => store },
+    store,
+    observation: await adapter.observe(),
+    budgetMs: 30_000,
+    maxJobs: 2,
+    now,
+  });
+  assert.ok(drain.claimed <= 2);
+  assert.ok(drain.advanced <= 2);
+});
+
+test("owner report summary shape answers what/learn/next", async () => {
+  const { buildOwnerReportSummary, formatOwnerReport } = await import(
+    "@revenueos/core"
+  );
+  const summary = buildOwnerReportSummary({
+    siteId: "tributeready",
+    windowStart: "2026-08-08T11:00:00.000Z",
+    windowEnd: "2026-08-08T12:00:00.000Z",
+    events: [
+      {
+        id: "e1",
+        pursuitId: "p1",
+        siteId: "tributeready",
+        eventType: "claimed",
+        detail: {},
+        createdAt: "2026-08-08T11:10:00.000Z",
+      },
+      {
+        id: "e2",
+        pursuitId: "p1",
+        siteId: "tributeready",
+        eventType: "executed",
+        detail: { ok: true, actionType: "indexnow_submit" },
+        createdAt: "2026-08-08T11:11:00.000Z",
+      },
+      {
+        id: "e3",
+        pursuitId: "p1",
+        siteId: "tributeready",
+        eventType: "wait",
+        detail: { until: "2026-08-15T11:11:00.000Z" },
+        createdAt: "2026-08-08T11:11:01.000Z",
+      },
+    ],
+    pursuits: [
+      {
+        id: "p1",
+        siteId: "tributeready",
+        state: "WAITING_FOR_EVIDENCE",
+        kind: "discovery_door",
+        priority: 10,
+        effort: 1,
+        idempotencyKey: "k1",
+        attempts: 1,
+        maxAttempts: 3,
+        title: "Index door",
+        action: "index",
+        createdAt: "2026-08-08T11:00:00.000Z",
+        updatedAt: "2026-08-08T11:11:00.000Z",
+      },
+      {
+        id: "p2",
+        siteId: "tributeready",
+        state: "EXECUTE",
+        kind: "ops",
+        priority: 8,
+        effort: 1,
+        idempotencyKey: "k2",
+        attempts: 0,
+        maxAttempts: 3,
+        title: "Next merch",
+        action: "merch",
+        createdAt: "2026-08-08T11:00:00.000Z",
+        updatedAt: "2026-08-08T11:00:00.000Z",
+      },
+    ],
+    hourRevenueUsd: 0,
+    hourPurchases: 0,
+    hourLandingViews: 4,
+    hadExecutableCapacity: true,
+  });
+  assert.equal(summary.actionsCompleted, 1);
+  assert.equal(summary.experimentsLaunched, 1);
+  assert.equal(summary.waitingForEvidence, 1);
+  assert.ok(summary.nextQueue.length >= 1);
+  assert.ok(summary.workLines.some((line) => line.includes("executed")));
+  const text = formatOwnerReport(summary);
+  assert.match(text, /WHAT REVENUEOS DID/);
+  assert.match(text, /NEXT PURSUIT QUEUE/);
+  // Progress happened → not operational failure even with $0 sales.
+  assert.equal(summary.operationalFailure, false);
+});

@@ -125,6 +125,60 @@ create index if not exists revenueos_capability_gaps_site_idx
 create index if not exists revenueos_capability_gaps_cap_idx
   on public.revenueos_capability_gaps (missing_capability, times_blocked desc);
 
+-- Persistent Revenue Pursuit Engine: durable work queue + leases.
+create table if not exists public.revenueos_pursuits (
+  id text primary key,
+  site_id text not null,
+  state text not null,
+  kind text not null,
+  pattern_key text,
+  action_type text,
+  priority numeric not null default 0,
+  effort integer not null default 1,
+  experiment_id text,
+  opportunity_id text,
+  idempotency_key text not null,
+  lease_owner text,
+  lease_until timestamptz,
+  not_before timestamptz,
+  attempts integer not null default 0,
+  max_attempts integer not null default 3,
+  last_error text,
+  document jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (site_id, idempotency_key)
+);
+
+create index if not exists revenueos_pursuits_claim_idx
+  on public.revenueos_pursuits (site_id, state, not_before, priority desc);
+
+create table if not exists public.revenueos_pursuit_events (
+  id text primary key,
+  pursuit_id text not null,
+  site_id text not null,
+  event_type text not null,
+  detail jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists revenueos_pursuit_events_site_idx
+  on public.revenueos_pursuit_events (site_id, created_at desc);
+create index if not exists revenueos_pursuit_events_pursuit_idx
+  on public.revenueos_pursuit_events (pursuit_id, created_at desc);
+
+create table if not exists public.revenueos_leases (
+  id text primary key,
+  site_id text not null,
+  kind text not null,
+  lease_until timestamptz not null,
+  document jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists revenueos_leases_site_idx
+  on public.revenueos_leases (site_id, kind, lease_until);
+
 alter table public.revenueos_experiments enable row level security;
 alter table public.revenueos_lessons enable row level security;
 alter table public.revenueos_scorecards enable row level security;
@@ -134,3 +188,6 @@ alter table public.revenueos_cycle_reports enable row level security;
 alter table public.revenueos_exposures enable row level security;
 alter table public.revenueos_discovery_doors enable row level security;
 alter table public.revenueos_capability_gaps enable row level security;
+alter table public.revenueos_pursuits enable row level security;
+alter table public.revenueos_pursuit_events enable row level security;
+alter table public.revenueos_leases enable row level security;

@@ -15,7 +15,6 @@ import {
   hourlyEmailSubject,
 } from "@/revenueos/hourly-email";
 import { claimHourlyEmailSlot } from "@/revenueos/hourly-email-lock";
-import { planRevenueBrief } from "@/revenueos/ai-planner";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -85,14 +84,14 @@ export async function GET(request: Request) {
   try {
     const hunt = await runContinuousHunt({
       budgetMs: depth === 0 ? 50_000 : 35_000,
-      maxRounds: depth === 0 ? 6 : 4,
+      maxJobs: depth === 0 ? 8 : 6,
+      skipEnqueue: depth > 0,
     });
     const snapshot = hunt.last;
     const durableMemory = await probeDurableLedger();
 
     let emailId: string | undefined;
     let emailSkip: string | undefined;
-    // Force only with ?email=1&force=1 — still goes through the hourly claim (max 1/hour).
     const url = new URL(request.url);
     const wantEmail = wantsHourlyEmail(request);
     const forceRequested =
@@ -104,21 +103,11 @@ export async function GET(request: Request) {
         emailSkip = forceRequested ? "already_sent_this_hour" : "already_sent_this_hour";
       } else {
         try {
-          const brief = await planRevenueBrief(snapshot);
-          const text = [
-            formatHourlyProfitEmail(snapshot),
-            "",
-            `Cycle analysis (${brief.source}): ${brief.report}`,
-            `Evidence: ${brief.evidence}`,
-            `Next decision: ${brief.nextMove}`,
-            brief.fallbackReason ? `Planner fallback: ${brief.fallbackReason}` : "",
-          ]
-            .filter(Boolean)
-            .join("\n");
+          const text = formatHourlyProfitEmail(hunt);
           const { data, error } = await new Resend(process.env.RESEND_API_KEY).emails.send({
             from: process.env.RESEND_FROM_EMAIL,
             to: REPORT_RECIPIENT,
-            subject: hourlyEmailSubject(snapshot),
+            subject: hourlyEmailSubject(hunt),
             text,
           });
           if (error) {
@@ -138,97 +127,43 @@ export async function GET(request: Request) {
       emailSkip = "chain_tick";
     }
 
-    if (shouldChainHunt(snapshot)) {
+    const chain = shouldChainHunt(hunt);
+    if (chain) {
       scheduleNextHunt(request, depth);
     }
-
-    const executableBets =
-      snapshot.cycle?.experimentsTouched.filter((e) =>
-        Boolean(e.hypothesis.safeActionType),
-      ).length ?? 0;
-    const ownerWaiting =
-      snapshot.cycle?.experimentsTouched.filter(
-        (e) => !e.hypothesis.safeActionType,
-      ).length ?? 0;
 
     return NextResponse.json({
       ok: true,
       engine: "revenueos",
-      hunt: "always-on",
-      mode: "continuous",
+      hunt: "pursuit",
+      mode: "persistent_pursuit",
       rounds: hunt.rounds,
       elapsedMs: hunt.elapsedMs,
       chainDepth: depth,
-      chained: shouldChainHunt(snapshot) && depth < MAX_CHAIN_DEPTH,
+      chained: chain && depth < MAX_CHAIN_DEPTH,
+      claimableRemaining: hunt.claimableRemaining,
+      drain: {
+        claimed: hunt.drain.claimed,
+        advanced: hunt.drain.advanced,
+        executed: hunt.drain.executed,
+        stillWaiting: hunt.drain.stillWaiting,
+      },
+      enqueued: hunt.plan.enqueuedCount,
       memory: durableMemory ? "durable" : "ephemeral",
       emailed: Boolean(emailId),
       emailId,
       emailSkip,
-      hourPlan: snapshot.cycle?.hourPlan ?? null,
-      overdrive: snapshot.cycle?.ambition?.overdrive ?? false,
+      ownerReport: {
+        actionsCompleted: hunt.ownerReport.actionsCompleted,
+        experimentsLaunched: hunt.ownerReport.experimentsLaunched,
+        waitingForEvidence: hunt.ownerReport.waitingForEvidence,
+        operationalFailure: hunt.ownerReport.operationalFailure,
+        claimableBacklog: hunt.ownerReport.claimableBacklog,
+      },
       bottleneck: snapshot.bottleneck,
       nextAction: snapshot.nextAction,
       money: snapshot.money,
       topOpportunity: snapshot.opportunities[0] ?? null,
-      scorecard: snapshot.cycle?.scorecard ?? null,
-      learningDelta: snapshot.cycle?.scorecard.learningDelta ?? null,
-      diagnosis: snapshot.cycle?.scorecard.diagnosis ?? null,
-      attributions: snapshot.cycle?.attributions ?? [],
-      executed: snapshot.cycle?.executed ?? [],
-      planner: snapshot.cycle?.plannerDecision
-        ? {
-            source: snapshot.cycle.plannerDecision.source,
-            selected: snapshot.cycle.plannerDecision.selectedOpportunityIds,
-            rationale: snapshot.cycle.plannerDecision.rationale,
-            fallbackReason: snapshot.cycle.plannerDecision.fallbackReason,
-          }
-        : null,
-      strategy: snapshot.cycle?.strategy ?? null,
-      anomalies: snapshot.cycle?.anomalies ?? [],
-      ambition: snapshot.cycle?.ambition ?? null,
-      shortfall: snapshot.cycle?.shortfall ?? null,
-      regime: snapshot.cycle?.regime ?? null,
-      metaPolicy: snapshot.cycle?.metaPolicy ?? null,
-      curriculum: snapshot.cycle?.curriculum
-        ? {
-            priority: snapshot.cycle.curriculum.priority,
-            focusCategory: snapshot.cycle.curriculum.focusCategory,
-            informationGap: snapshot.cycle.curriculum.informationGap,
-          }
-        : null,
-      betMix: { executable: executableBets, ownerWaiting },
-      moneyPlan: snapshot.cycle
-        ? {
-            totalProjectedMonthlyProfitUsd:
-              snapshot.cycle.moneyPlan.totalProjectedMonthlyProfitUsd,
-            effortUsed: snapshot.cycle.moneyPlan.effortUsed,
-            effortBudget: snapshot.cycle.moneyPlan.effortBudget,
-            marginalDollar: snapshot.cycle.moneyPlan.marginalDollar,
-            items: snapshot.cycle.moneyPlan.items.slice(0, 5).map((item) => ({
-              title: item.title,
-              category: item.category,
-              projectedMonthlyProfitUsd: item.projectedMonthlyProfitUsd,
-              profitPerEffort: item.profitPerEffort,
-            })),
-          }
-        : null,
-      audience: snapshot.cycle
-        ? {
-            personas: snapshot.cycle.world.audience.personas.map((p) => p.label),
-            salesDifficulty: snapshot.cycle.world.audience.salesDifficulty,
-            resolveMultiplier: snapshot.cycle.world.audience.resolveMultiplier,
-            channelPlan: snapshot.cycle.world.audience.channelPlan
-              .slice(0, 8)
-              .map((play) => ({
-                channel: play.channel,
-                persona: play.persona,
-                intent: play.intent,
-                fit: play.fit,
-                needsOwner: play.needsOwner,
-                angle: play.angle,
-              })),
-          }
-        : null,
     });
   } catch (error) {
     if (isMissingGrowthStorageError(error as { code?: string; message?: string })) {

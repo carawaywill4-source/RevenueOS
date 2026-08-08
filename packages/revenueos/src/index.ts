@@ -45,6 +45,8 @@ export * from "./modules/capability-gaps";
 export * from "./modules/profit-maximizer";
 export * from "./modules/success";
 export * from "./modules/organic-mastery";
+export * from "./modules/pursuit-engine";
+export * from "./modules/pursuit-plan";
 export * from "./intelligence/planner-quota";
 export * from "./knowledge/commerce";
 export * from "./knowledge/shopping-psychology";

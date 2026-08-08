@@ -1,4 +1,8 @@
-import type { HourPulse } from "@revenueos/core";
+import {
+  formatOwnerReport,
+  type HourPulse,
+  type OwnerReportSummary,
+} from "@revenueos/core";
 import { BRAND } from "@/lib/brand";
 
 type HourlySnapshot = {
@@ -12,9 +16,26 @@ type HourlySnapshot = {
   publishedTopics?: string[];
   learningDelta?: string;
   plannerSource?: string;
+  ownerReport?: OwnerReportSummary;
 };
 
 export function formatMendhausHourlyEmail(snapshot: HourlySnapshot): string {
+  if (snapshot.ownerReport) {
+    return [
+      formatOwnerReport(snapshot.ownerReport),
+      "",
+      `Week revenue: $${snapshot.weekRevenueUsd.toFixed(2)}`,
+      snapshot.discoverySummary
+        ? `Discovery: ${snapshot.discoverySummary}`
+        : "",
+      `Next: ${snapshot.nextAction}`,
+      "",
+      "Mendhaus dashboard: https://mendhaus.shop/owner",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
   const hour = snapshot.hour;
   const revenue = hour.revenueUsd ?? 0;
   const sales = hour.purchases ?? 0;
@@ -65,6 +86,12 @@ export function formatMendhausHourlyEmail(snapshot: HourlySnapshot): string {
 }
 
 export function mendhausHourlySubject(snapshot: HourlySnapshot): string {
+  if (snapshot.ownerReport?.operationalFailure) {
+    return "Mendhaus: operational failure this hour";
+  }
+  if (snapshot.ownerReport && snapshot.ownerReport.actionsCompleted > 0) {
+    return `Mendhaus: ${snapshot.ownerReport.actionsCompleted} action(s) · $${snapshot.ownerReport.hourRevenueUsd.toFixed(2)}`;
+  }
   const views = snapshot.hour.landingViews ?? 0;
   if (views < 10) return `Mendhaus attack: ${views} views — discovery learning`;
   const rev = snapshot.hour.revenueUsd ?? 0;
