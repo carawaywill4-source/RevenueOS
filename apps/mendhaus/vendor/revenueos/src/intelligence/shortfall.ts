@@ -1,4 +1,3 @@
-import { newId } from "../ledger/store";
 import type {
   DayVerdict,
   Lesson,
@@ -7,11 +6,14 @@ import type {
   WorldModel,
 } from "../types";
 import { NORTH_STAR_DAILY_PROFIT_USD } from "../modules/northstar";
+import { SUCCESS_DEFINITION } from "../modules/success";
+import { toPortableLesson } from "../memory/portable";
 
 /**
- * Every day under the north star is a lost day. That is not drama — it is the
- * training signal. The shortfall becomes a durable lesson that reweights the
- * next cycle toward whatever bottleneck kept the day under $10k.
+ * Every day under the north star is a lost day = failing software.
+ * Money made for the customer is the only success. Learning exists to destroy
+ * that failure, never to accept it. The shortfall reweights the next cycle
+ * toward whatever bottleneck kept money from printing.
  */
 
 export function dayVerdict(
@@ -47,15 +49,16 @@ export function buildShortfallReport(input: {
     lessonPatternKey,
     learningImperative:
       verdict === "won_day"
-        ? "Day won against the north star — raise the bar and keep learning what scaled."
-        : `Lost day: $${shortfallUsd.toFixed(0)} short of $${northStar.toLocaleString()}. Treat as a failure signal and adjust — ${rootCause.label}.`,
+        ? `SUCCESS: money made hit/exceeded $${northStar.toLocaleString()}. Raise the bar. Keep what printed cash.`
+        : current <= 0
+          ? `FAILING SOFTWARE: $0 for the customer. ${SUCCESS_DEFINITION} Root cause: ${rootCause.label}. Hate this outcome — learn and attack until money prints. Failure is not an option.`
+          : `FAILING vs north star: $${shortfallUsd.toFixed(0)} short of $${northStar.toLocaleString()} (only $${current.toFixed(2)} made). Money made = success; this is still failure. Attack: ${rootCause.label}.`,
   };
 }
 
 /**
- * Persist a site lesson from a lost day so ranking and channel selection bend
- * toward closing the shortfall cause. Won days still record a positive lesson
- * so the brain remembers what scaled.
+ * Persist a portable lesson from a lost/won day. Transferable → industry/global
+ * so the next attached business inherits the failure/success signal.
  */
 export function lessonFromShortfall(input: {
   siteId: string;
@@ -65,24 +68,27 @@ export function lessonFromShortfall(input: {
 }): Lesson {
   const now = input.now ?? new Date();
   const lost = input.shortfall.dayVerdict === "lost_day";
-  return {
-    id: newId("lesson"),
-    scope: "site",
+  return toPortableLesson({
     siteId: input.siteId,
     industry: input.industry,
-    patternKey: input.shortfall.lessonPatternKey,
-    summary: lost
-      ? `Lost day vs $${input.shortfall.northStarDailyProfitUsd.toLocaleString()} north star: $${input.shortfall.shortfallUsd.toFixed(0)} short (${(input.shortfall.pctOfNorthStar * 100).toFixed(2)}% of target). Root cause: ${input.shortfall.rootCause}. Prefer levers that attack this bottleneck; do not celebrate activity.`
-      : `Won day: hit/exceeded $${input.shortfall.northStarDailyProfitUsd.toLocaleString()} north star at $${input.shortfall.currentProfitUsd.toFixed(0)}. Prefer patterns that produced this scale; immediately raise the stretch bar.`,
-    evidenceCount: 1,
-    transferable: true,
-    sentiment: lost ? "negative" : "positive",
-    // Lost days boost bottleneck-resolving categories via pattern key match;
-    // mild downrank on complacent "ops-only" patterns when still far from target.
-    rankingWeight: lost ? 1.25 : 1.5,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-  };
+    now,
+    lesson: {
+      patternKey: input.shortfall.lessonPatternKey,
+      summary: lost
+        ? input.shortfall.currentProfitUsd <= 0
+          ? `FAILING: $0 made for the customer vs $${input.shortfall.northStarDailyProfitUsd.toLocaleString()}/day. ${SUCCESS_DEFINITION} Root: ${input.shortfall.rootCause}. Do not celebrate traffic, topics, or research — only sales end this failure.`
+          : `FAILING: $${input.shortfall.shortfallUsd.toFixed(0)} short of $${input.shortfall.northStarDailyProfitUsd.toLocaleString()} (only $${input.shortfall.currentProfitUsd.toFixed(0)} made). Money made = success. Root: ${input.shortfall.rootCause}. Attack the bottleneck; activity without dollars is still failure.`
+        : `SUCCESS: $${input.shortfall.currentProfitUsd.toFixed(0)} contribution profit ≥ $${input.shortfall.northStarDailyProfitUsd.toLocaleString()} north star. Prefer patterns that printed this money; raise the stretch bar immediately.`,
+      evidenceCount: 1,
+      transferable: true,
+      sentiment: lost ? "negative" : "positive",
+      rankingWeight: lost
+        ? input.shortfall.currentProfitUsd <= 0
+          ? 1.55
+          : 1.35
+        : 1.5,
+    },
+  });
 }
 
 function rootCauseFromWorld(

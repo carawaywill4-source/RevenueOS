@@ -13,6 +13,17 @@ export const AUTONOMOUS_SAFE_TYPES = new Set([
   "indexnow_submit",
   "record_experiment",
   "record_lesson",
+  "journal_decision",
+  "merch_optimize",
+  "activate_kit_deal",
+  "clear_promo",
+  "set_homepage_focus",
+  "set_free_shipping_threshold",
+  "market_research",
+  "publish_intent_page",
+  "sitemap_ping",
+  "discovery_attack",
+  "retire_discovery_door",
 ]);
 
 export const OWNER_GATE_TYPES = new Set([
@@ -21,6 +32,30 @@ export const OWNER_GATE_TYPES = new Set([
   "send_commercial_outreach",
   "create_account",
   "spend_ads",
+]);
+
+/**
+ * Legacy always-run set. The executive now gates heartbeats through
+ * `shouldHeartbeatAction` / profit mandate — discovery spam is not automatic.
+ * Kept for adapters/tests that still reference the constant.
+ */
+export const ALWAYS_RUN_ACTION_TYPES = new Set([
+  "scorecard_snapshot",
+  "journal_decision",
+]);
+
+/** Actions that may run as heartbeats only when the profit maximizer funds them. */
+export const PROFIT_HEARTBEAT_CANDIDATES = new Set([
+  "scorecard_snapshot",
+  "journal_decision",
+  "indexnow_submit",
+  "market_research",
+  "discovery_attack",
+  "sitemap_ping",
+  "merch_optimize",
+  "activate_kit_deal",
+  "set_homepage_focus",
+  "set_free_shipping_threshold",
 ]);
 
 export function classifyActionType(type: string): ActionRisk {

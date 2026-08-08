@@ -12,8 +12,19 @@ export function mergeLessonEvidence(
   if (!existing) return incoming;
   return {
     ...existing,
+    ...incoming,
+    id: existing.id || incoming.id,
+    createdAt: existing.createdAt || incoming.createdAt,
     summary: incoming.summary || existing.summary,
-    evidenceCount: existing.evidenceCount + 1,
+    evidenceCount: (existing.evidenceCount || 0) + 1,
+    originSiteIds: [
+      ...new Set([
+        ...(existing.originSiteIds ?? []),
+        ...(incoming.originSiteIds ?? []),
+        ...(existing.siteId ? [existing.siteId] : []),
+        ...(incoming.siteId ? [incoming.siteId] : []),
+      ]),
+    ],
     updatedAt: new Date().toISOString(),
   };
 }

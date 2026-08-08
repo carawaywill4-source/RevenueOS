@@ -97,7 +97,13 @@ test("the brain changes future behavior after a loss (attribution → learning)"
       patternKey: "indexnow-discovery",
       constraintsChecked: [],
     },
-    actions: [],
+    actions: [
+      {
+        type: "indexnow_submit",
+        result: { ok: true, detail: "submitted" },
+        at: past,
+      },
+    ],
     predictedOutcome: "more traffic",
     category: "acquisition",
     measurement: {
@@ -134,6 +140,48 @@ test("the brain changes future behavior after a loss (attribution → learning)"
 
   const attributions = await store.listAttributions("example-static");
   assert.ok(attributions.length >= 1, "attribution must be persisted");
+});
+
+test("a proposed or failed action is never attributed as an experiment", async () => {
+  const { dueForAttribution } = await import("@tributeready/revenueos");
+  const past = new Date(Date.now() - 86_400_000).toISOString();
+  const base = {
+    id: "exp_unexecuted",
+    siteId: "s",
+    hypothesis: {
+      id: "hyp",
+      title: "t",
+      metric: "m",
+      predictedDelta: "",
+      confidence: 0.5,
+      effort: 1,
+      expectedImpact: 5,
+      action: "a",
+      constraintsChecked: [],
+    },
+    predictedOutcome: "",
+    measurement: {
+      metric: "purchases" as const,
+      baselineValue: 0,
+      targetDelta: 1,
+      timeToSignalDays: 1,
+      scheduledCheckAt: past,
+    },
+    createdAt: past,
+    updatedAt: past,
+  };
+  assert.equal(
+    dueForAttribution({ ...base, status: "proposed" as const, actions: [] }),
+    false,
+  );
+  assert.equal(
+    dueForAttribution({
+      ...base,
+      status: "running" as const,
+      actions: [{ type: "x", result: { ok: false, detail: "failed" }, at: past }],
+    }),
+    false,
+  );
 });
 
 test("Bayesian confidence shrinks on thin data and updates with evidence", async () => {
@@ -1087,4 +1135,636 @@ test("TributeReady growthos façade still exposes its snapshot shape", async () 
   assert.equal(typeof growthos.formatExecutiveReport, "function");
   assert.equal(typeof growthos.runTributeReadyRevenueCycle, "function");
   assert.equal(growthos.PRICE_USD, 34.99);
+});
+
+test("planner validation rejects unknown and non-executable opportunities", async () => {
+  const { validatePlannerSelection } = await import("@tributeready/revenueos");
+  const opportunities = [
+    {
+      id: "known-exec",
+      title: "IndexNow",
+      metric: "views",
+      expectedImpact: 5,
+      confidence: 0.5,
+      effort: 1,
+      action: "Submit",
+      score: 40,
+      safeActionType: "indexnow_submit",
+    },
+    {
+      id: "known-blocked",
+      title: "Owner gate",
+      metric: "views",
+      expectedImpact: 5,
+      confidence: 0.5,
+      effort: 1,
+      action: "Ask owner",
+      score: 30,
+    },
+  ];
+  const safeActions = [
+    { type: "indexnow_submit", risk: "safe" as const, description: "IndexNow" },
+  ];
+  const rejected = validatePlannerSelection(
+    {
+      source: "ai",
+      rationale: "test",
+      evidence: [],
+      selectedOpportunityIds: ["known-exec", "unknown-id", "known-blocked"],
+      rejectedOpportunityIds: [],
+      falsifier: "none",
+    },
+    opportunities,
+    safeActions,
+  );
+  assert.equal(rejected.policyRejected, true);
+  assert.deepEqual(rejected.decision.selectedOpportunityIds, ["known-exec"]);
+  assert.ok(rejected.decision.rejectedOpportunityIds.includes("unknown-id"));
+});
+
+test("planner quota blocks excessive daily calls", async () => {
+  const { PLANNER_DAILY_CALL_LIMIT, checkPlannerQuota } = await import(
+    "@tributeready/revenueos"
+  );
+  type PlannerRunRecord = import("@tributeready/revenueos").PlannerRunRecord;
+  const runs: PlannerRunRecord[] = Array.from({ length: PLANNER_DAILY_CALL_LIMIT }, (_, i) => ({
+    id: `planner_${i}`,
+    siteId: "example-static",
+    createdAt: new Date().toISOString(),
+    source: "ai",
+    decision: {
+      source: "ai",
+      rationale: "test",
+      evidence: [],
+      selectedOpportunityIds: [],
+      rejectedOpportunityIds: [],
+      falsifier: "none",
+    },
+    inputFingerprint: "abc",
+    policyRejected: false,
+  }));
+  const quota = checkPlannerQuota(runs);
+  assert.equal(quota.allowed, false);
+  assert.match(quota.reason ?? "", /Daily planner call limit/i);
+});
+
+test("cycle persists planner runs and exposures when store supports them", async () => {
+  const { createExampleStaticAdapter, runCycle } = await import(
+    "@tributeready/revenueos"
+  );
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-planner-"));
+  const adapter = createExampleStaticAdapter(dir);
+  const store = adapter.getExperimentStore();
+  const baseSafeActions = adapter.listSafeActions();
+  adapter.listSafeActions = async () => [
+    ...(await Promise.resolve(baseSafeActions)),
+    { type: "indexnow_submit", risk: "safe", description: "IndexNow" },
+    { type: "market_research", risk: "safe", description: "Research" },
+    { type: "discovery_attack", risk: "safe", description: "Discovery attack" },
+    { type: "publish_intent_page", risk: "safe", description: "Publish" },
+    { type: "sitemap_ping", risk: "safe", description: "Sitemap" },
+  ];
+  adapter.planDecision = async ({ opportunities, safeActions }) => {
+    const allowed = new Set(safeActions.map((action) => action.type));
+    const executable = opportunities.find(
+      (item) => item.safeActionType && allowed.has(item.safeActionType),
+    );
+    assert.ok(executable, "expected an executable opportunity in the fixture");
+    return {
+      source: "ai",
+      rationale: "Prefer discovery while pre-revenue.",
+      evidence: ["0 purchases"],
+      selectedOpportunityIds: [executable.id],
+      rejectedOpportunityIds: [],
+      falsifier: "No view lift",
+    };
+  };
+
+  const result = await runCycle(adapter);
+  assert.ok(result.plannerDecision);
+  assert.match(result.reportText, /PLANNER DECISION/);
+
+  const plannerRuns = await store.listPlannerRuns!("example-static");
+  assert.equal(plannerRuns.length, 1);
+  assert.equal(plannerRuns[0].source, "ai");
+
+  const reports = await store.listCycleReports!("example-static");
+  assert.equal(reports.length, 1);
+  assert.match(reports[0].reportText, /RevenueOS cycle/);
+});
+
+test("discovery governor classifies stages and kill vs expand verdicts", async () => {
+  const {
+    classifyDiscoveryStage,
+    scoreDiscoveryDoor,
+    applyDoorScore,
+    governorPublishGate,
+  } = await import("@tributeready/revenueos");
+
+  assert.equal(
+    classifyDiscoveryStage({
+      submitted: true,
+      topicViews: 0,
+      productViews: 0,
+      addToCarts: 0,
+      checkouts: 0,
+      purchases: 0,
+      revenueUsd: 0,
+    }),
+    "submitted",
+  );
+  assert.equal(
+    classifyDiscoveryStage({
+      submitted: false,
+      topicViews: 0,
+      productViews: 0,
+      addToCarts: 0,
+      checkouts: 0,
+      purchases: 0,
+      revenueUsd: 0,
+    }),
+    "dead_on_arrival",
+  );
+  assert.equal(
+    classifyDiscoveryStage({
+      submitted: true,
+      topicViews: 12,
+      productViews: 0,
+      addToCarts: 0,
+      checkouts: 0,
+      purchases: 0,
+      revenueUsd: 0,
+    }),
+    "visited",
+  );
+  assert.equal(
+    classifyDiscoveryStage({
+      submitted: true,
+      topicViews: 20,
+      productViews: 4,
+      addToCarts: 1,
+      checkouts: 0,
+      purchases: 0,
+      revenueUsd: 0,
+    }),
+    "cart",
+  );
+
+  const door = {
+    id: "door-1",
+    siteId: "mendhaus",
+    slug: "linen-bedding",
+    url: "/topics/linen-bedding",
+    query: "best linen bedding",
+    clusterKey: "best-linen-bedding",
+    publishedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    status: "active" as const,
+  };
+
+  const killScore = scoreDiscoveryDoor({
+    door,
+    metrics: {
+      submitted: true,
+      topicViews: 0,
+      productViews: 0,
+      addToCarts: 0,
+      checkouts: 0,
+      purchases: 0,
+      revenueUsd: 0,
+    },
+    windowDays: 7,
+  });
+  assert.equal(killScore.stage, "submitted");
+  assert.equal(killScore.verdict, "kill");
+  assert.equal(applyDoorScore(door, killScore).status, "killed");
+
+  const expandScore = scoreDiscoveryDoor({
+    door,
+    metrics: {
+      submitted: true,
+      topicViews: 40,
+      productViews: 8,
+      addToCarts: 2,
+      checkouts: 1,
+      purchases: 1,
+      revenueUsd: 89,
+    },
+    windowDays: 7,
+  });
+  assert.equal(expandScore.verdict, "expand");
+  assert.equal(applyDoorScore(door, expandScore).status, "expanding");
+
+  const holdEarly = scoreDiscoveryDoor({
+    door: {
+      ...door,
+      publishedAt: new Date(Date.now() - 3.5 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    metrics: {
+      submitted: true,
+      topicViews: 0,
+      productViews: 0,
+      addToCarts: 0,
+      checkouts: 0,
+      purchases: 0,
+      revenueUsd: 0,
+    },
+    windowDays: 3,
+  });
+  assert.equal(holdEarly.verdict, "hold");
+
+  const overdueDoors = Array.from({ length: 3 }, (_, i) => ({
+    ...door,
+    id: `door-overdue-${i}`,
+    publishedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+    lastScore: undefined,
+  }));
+  const gate = governorPublishGate({ doors: overdueDoors, publishesToday: 0 });
+  assert.equal(gate.allowPublish, false);
+  assert.match(gate.reason, /overdue for scoring/);
+});
+
+test("profit maximizer focuses conversion when traffic exists without sales", async () => {
+  const {
+    buildProfitMandate,
+    applyProfitPressure,
+    shouldHeartbeatAction,
+    createExampleStaticAdapter,
+    runCycle,
+  } = await import("@tributeready/revenueos");
+
+  const mandate = buildProfitMandate({
+    observation: {
+      observedAt: new Date().toISOString(),
+      windowDays: 7,
+      money: {
+        revenueUsd: 0,
+        purchases: 0,
+        awaitingPayment: 0,
+        refunded: 0,
+        estimatedVariableCostUsd: 0,
+        estimatedProfitUsd: 0,
+        mrr: 0,
+        arr: 0,
+      },
+      funnel: {
+        landingViews: 120,
+        checkouts: 8,
+        fulfillmentFailed: 0,
+        largestDrop: { from: "product", to: "checkout", dropRate: 0.7 },
+        steps: [],
+      },
+      bottleneck: { level: 2, label: "conversion", detail: "views without buys" },
+      hourPulse: {
+        landingViews: 20,
+        checkouts: 2,
+        purchases: 0,
+        revenueUsd: 0,
+        windowMinutes: 60,
+      },
+    } as never,
+    world: {
+      business: {
+        monetizationStage: "pre_revenue",
+        contributionMarginUsd: 40,
+        contributionMarginRatio: 0.5,
+        fulfillmentReliable: true,
+      },
+      market: { demandProxy: "unknown", discoveryCoverage: "thin", competitivePressure: "medium" },
+      shopper: {
+        primaryFriction: "clarity",
+        intentTemperature: "warm",
+        frictionHypotheses: [],
+        notes: [],
+      },
+      audience: {
+        personas: [],
+        salesDifficulty: 0.5,
+        resolveMultiplier: 1.2,
+        difficultyReasons: [],
+        channelPlan: [],
+      },
+    } as never,
+    shortfall: {
+      northStarDailyProfitUsd: 10_000,
+      currentProfitUsd: 0,
+      shortfallUsd: 10_000,
+      pctOfNorthStar: 0,
+      dayVerdict: "lost_day",
+      rootCause: "no purchases",
+      learningImperative: "close traffic",
+      ordersNeeded: 250,
+      visitorsNeeded: 5000,
+    } as never,
+  });
+  assert.equal(mandate.focus, "conversion");
+  assert.ok(mandate.heartbeatActionTypes.includes("merch_optimize"));
+  assert.equal(shouldHeartbeatAction("discovery_attack", mandate), false);
+  assert.equal(shouldHeartbeatAction("merch_optimize", mandate), true);
+
+  const pressed = applyProfitPressure({
+    opportunities: [
+      {
+        id: "acq",
+        title: "Publish more topics",
+        metric: "views",
+        category: "acquisition",
+        precursorMetric: "landing_views",
+        expectedImpact: 9,
+        confidence: 0.5,
+        effort: 2,
+        score: 100,
+        action: "publish",
+        safeActionType: "discovery_attack",
+        predicted: {
+          precursorMetric: "landing_views",
+          expectedProfitUsd: 50,
+          confidence: 0.4,
+          effort: 2,
+          costUsd: 0,
+          timeToSignalDays: 14,
+        },
+      },
+      {
+        id: "conv",
+        title: "Close existing visitors",
+        metric: "purchases",
+        category: "conversion",
+        precursorMetric: "purchases",
+        expectedImpact: 8,
+        confidence: 0.5,
+        effort: 2,
+        score: 90,
+        action: "merch",
+        safeActionType: "merch_optimize",
+        predicted: {
+          precursorMetric: "purchases",
+          expectedProfitUsd: 80,
+          confidence: 0.5,
+          effort: 2,
+          costUsd: 0,
+          timeToSignalDays: 7,
+        },
+      },
+    ],
+    mandate,
+    observation: {
+      funnel: { landingViews: 120, checkouts: 8, fulfillmentFailed: 0, largestDrop: { from: "a", to: "b", dropRate: 0.5 }, steps: [] },
+      money: { purchases: 0, estimatedProfitUsd: 0 },
+    } as never,
+  });
+  assert.equal(pressed[0].id, "conv");
+
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-profit-"));
+  const adapter = createExampleStaticAdapter(dir);
+  const result = await runCycle(adapter);
+  assert.ok(result.profitMandate);
+  assert.match(result.reportText, /SUCCESS CRITERION/);
+  assert.match(result.reportText, /PROFIT MANDATE/);
+  assert.match(
+    result.profitMandate!.successDeclaration,
+    /FAILING|SUCCESS|money made/i,
+  );
+  assert.ok(result.profitMandate!.failurePressure >= 1);
+});
+
+test("organic mastery locks ads and drills organic leads→sales", async () => {
+  const { scoreOrganicMastery, applyOrganicMasteryPressure, createExampleStaticAdapter, runCycle } =
+    await import("@tributeready/revenueos");
+
+  const mastery = scoreOrganicMastery({
+    observation: {
+      observedAt: new Date().toISOString(),
+      windowDays: 7,
+      money: {
+        revenueUsd: 0,
+        purchases: 0,
+        awaitingPayment: 0,
+        refunded: 0,
+        estimatedVariableCostUsd: 0,
+        estimatedProfitUsd: 0,
+        mrr: 0,
+        arr: 0,
+      },
+      funnel: {
+        landingViews: 80,
+        checkouts: 2,
+        fulfillmentFailed: 0,
+        largestDrop: { from: "a", to: "b", dropRate: 0.5 },
+        steps: [],
+      },
+      bottleneck: { level: 3, label: "conversion", detail: "views without buys" },
+    } as never,
+    world: {
+      business: {
+        monetizationStage: "pre_revenue",
+        contributionMarginUsd: 40,
+        contributionMarginRatio: 0.5,
+        fulfillmentReliable: true,
+      },
+      market: { demandProxy: "unknown", discoveryCoverage: "thin", competitivePressure: "medium" },
+      shopper: {
+        primaryFriction: "clarity",
+        intentTemperature: "warm",
+        frictionHypotheses: [],
+        notes: [],
+      },
+      audience: {
+        personas: [],
+        salesDifficulty: 0.5,
+        resolveMultiplier: 1,
+        difficultyReasons: [],
+        channelPlan: [],
+      },
+    } as never,
+    doors: [],
+  });
+  assert.ok(["novice", "apprentice"].includes(mastery.level));
+  assert.equal(mastery.adsReadiness, "locked");
+  assert.match(mastery.mission, /ORGANIC MASTERY/i);
+
+  const ranked = applyOrganicMasteryPressure({
+    mastery,
+    opportunities: [
+      {
+        id: "paid",
+        title: "Run paid ads",
+        metric: "purchases",
+        category: "acquisition",
+        expectedImpact: 9,
+        confidence: 0.5,
+        effort: 2,
+        score: 200,
+        action: "spend",
+        safeActionType: "spend_ads",
+        patternKey: "paid-ads",
+      },
+      {
+        id: "close",
+        title: "Close organic visitors",
+        metric: "purchases",
+        category: "conversion",
+        expectedImpact: 8,
+        confidence: 0.5,
+        effort: 2,
+        score: 100,
+        action: "merch",
+        safeActionType: "merch_optimize",
+        patternKey: "conversion-press",
+      },
+    ],
+  });
+  assert.equal(ranked[0].id, "close");
+  assert.ok(ranked.find((o) => o.id === "paid")!.score < 100);
+
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-organic-"));
+  const result = await runCycle(createExampleStaticAdapter(dir));
+  assert.ok(result.organicMastery);
+  assert.match(result.reportText, /ORGANIC MASTERY ERA/);
+  assert.ok(result.organicMastery!.adsReadiness === "locked" || result.organicMastery!.adsReadiness === "almost" || result.organicMastery!.adsReadiness === "ready");
+});
+
+test("portable memory transfers learning to a newly attached siteId", async () => {
+  const {
+    createFileExperimentStore,
+    persistPortableLesson,
+    ensurePortableMemory,
+    exportPortableKnowledge,
+    importPortableKnowledge,
+  } = await import("@tributeready/revenueos");
+
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-portable-"));
+  const store = createFileExperimentStore(dir);
+
+  const learned = await persistPortableLesson(store, {
+    siteId: "business-a",
+    industry: "home_goods",
+    lesson: {
+      patternKey: "conversion-press",
+      summary: "FAILING: traffic without sales. Close visitors before publishing.",
+      evidenceCount: 1,
+      transferable: true,
+      sentiment: "negative",
+      rankingWeight: 1.4,
+    },
+  });
+  assert.equal(learned.scope, "industry");
+  assert.ok(learned.originSiteIds?.includes("business-a"));
+
+  // Simulate attaching RevenueOS to business-b on the same ledger.
+  await ensurePortableMemory({
+    store,
+    siteId: "business-b",
+    industry: "home_goods",
+  });
+  const forB = await store.listLessons({
+    siteId: "business-b",
+    industry: "home_goods",
+  });
+  assert.ok(
+    forB.some((l) => l.patternKey === "conversion-press" && l.scope === "industry"),
+    "new business must inherit industry lessons without starting over",
+  );
+
+  // Cross-ledger attach: export pack → import into empty store.
+  const pack = await exportPortableKnowledge(store);
+  assert.ok(pack.lessons.length >= 1);
+  const dir2 = await mkdtemp(path.join(tmpdir(), "revenueos-portable2-"));
+  const store2 = createFileExperimentStore(dir2);
+  const imported = await importPortableKnowledge(store2, pack);
+  assert.ok(imported.lessons >= 1);
+  const forC = await store2.listLessons({
+    siteId: "business-c",
+    industry: "home_goods",
+  });
+  assert.ok(forC.some((l) => l.patternKey === "conversion-press"));
+});
+
+test("capability gaps upsert across siteIds and count blocked EV", async () => {
+  const {
+    upsertCapabilityGap,
+    recordGapsFromOpportunities,
+    summarizeCapabilityGaps,
+    createFileExperimentStore,
+  } = await import("@tributeready/revenueos");
+
+  const now = new Date("2026-08-08T12:00:00.000Z");
+  let gap = upsertCapabilityGap({
+    existing: undefined,
+    siteId: "tributeready",
+    missingCapability: "search_console_analytics",
+    desiredAction: "Read GSC clicks",
+    reason: "No OAuth limb",
+    expectedValueUsd: 400,
+    now,
+  });
+  assert.equal(gap.timesBlocked, 1);
+  assert.deepEqual(gap.businessesAffected, ["tributeready"]);
+
+  gap = upsertCapabilityGap({
+    existing: gap,
+    siteId: "mendhaus",
+    missingCapability: "search_console_analytics",
+    desiredAction: "Read GSC clicks",
+    reason: "Still no OAuth limb",
+    expectedValueUsd: 500,
+    now,
+  });
+  assert.equal(gap.timesBlocked, 2);
+  assert.ok(gap.businessesAffected.includes("tributeready"));
+  assert.ok(gap.businessesAffected.includes("mendhaus"));
+  assert.equal(gap.expectedValueUsd, 500);
+
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-gaps-"));
+  const store = createFileExperimentStore(dir);
+  await store.saveCapabilityGap!(gap);
+
+  const fromMh = recordGapsFromOpportunities({
+    siteId: "mendhaus",
+    safeActions: [{ type: "indexnow_submit", risk: "safe", description: "IndexNow" }],
+    existingGaps: [],
+    declaredUnavailable: [
+      {
+        capability: "search_console_analytics",
+        reason: "No GSC",
+      },
+    ],
+    opportunities: [
+      {
+        id: "acq-outreach",
+        title: "Directory outreach",
+        metric: "landing_views",
+        category: "acquisition",
+        action: "Place in directories",
+        expectedImpact: 20,
+        confidence: 0.5,
+        effort: 3,
+        score: 80,
+        patternKey: "outreach-directories",
+        predicted: {
+          precursorMetric: "landing_views",
+          expectedProfitUsd: 600,
+          confidence: 0.4,
+          effort: 3,
+          costUsd: 0,
+          timeToSignalDays: 14,
+        },
+      },
+    ],
+    now,
+  });
+  for (const g of fromMh) {
+    await store.saveCapabilityGap!(g);
+  }
+
+  const all = await store.listCapabilityGaps!();
+  assert.ok(all.length >= 2);
+  const sites = new Set(all.flatMap((g) => g.businessesAffected));
+  assert.ok(sites.has("tributeready") || all.some((g) => g.siteId === "tributeready"));
+  assert.ok(all.some((g) => g.siteId === "mendhaus"));
+
+  const summary = summarizeCapabilityGaps(all);
+  const gsc = summary.find((s) => s.missingCapability === "search_console_analytics");
+  assert.ok(gsc);
+  assert.ok(gsc!.timesBlocked >= 1);
+  assert.ok(gsc!.expectedValueUsd > 0);
 });

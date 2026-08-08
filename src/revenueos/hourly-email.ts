@@ -14,30 +14,14 @@ export function formatHourlyProfitEmail(snapshot: GrowthSnapshot): string {
   const week = snapshot.money.revenueUsd;
 
   const headline = zero
-    ? `$0 last hour. Overdrive on. Next hour must beat $${bar.toFixed(2)}.`
-    : `Last hour: $${revenue.toFixed(2)}. Next hour must beat $${bar.toFixed(2)}.`;
-
-  const learned = shortLesson(hour?.learnedFromLastHour, views, checkouts, sales);
-  const moves = (hour?.nextHourMoves ?? [])
-    .slice(0, 3)
-    .map((move, i) => {
-      const tag = move.ownerGated ? " (needs you)" : "";
-      return `${i + 1}. ${shortTitle(move.title)}${tag}`;
-    });
-  if (!moves.length) {
-    moves.push(`1. ${shortTitle(snapshot.nextAction)}`);
-  }
+    ? `TributeReady cycle: $0 last hour; next target $${bar.toFixed(2)}.`
+    : `TributeReady cycle: $${revenue.toFixed(2)} last hour; next target $${bar.toFixed(2)}.`;
 
   return [
     headline,
     "",
     `Sales ${sales} · views ${views} · checkouts ${checkouts}`,
     `Week so far: $${week.toFixed(2)}`,
-    "",
-    `Learned: ${learned}`,
-    "",
-    "Next hour:",
-    ...moves,
     "",
     "Dashboard: https://tributeready.org/owner",
   ].join("\n");
@@ -52,24 +36,3 @@ export function hourlyEmailSubject(snapshot: GrowthSnapshot): string {
   return `TributeReady: $${rev.toFixed(2)} last hour`;
 }
 
-function shortTitle(title: string): string {
-  return title
-    .replace(/^Press:\s*/i, "")
-    .replace(/^Overdrive discovery:\s*/i, "")
-    .replace(/^Overdrive conversion:\s*/i, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 90);
-}
-
-function shortLesson(
-  learned: string | undefined,
-  views: number,
-  checkouts: number,
-  sales: number,
-): string {
-  if (sales > 0) return "Something sold. Do more of that, and one new test.";
-  if (views < 10) return "Almost no visitors. Get more people to the site.";
-  if (checkouts === 0) return "People came, nobody started checkout. Fix the offer/page.";
-  return "Checkout started, no sale. Fix payment/checkout.";
-}

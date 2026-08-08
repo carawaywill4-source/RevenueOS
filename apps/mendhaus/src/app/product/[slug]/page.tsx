@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getProduct, PRODUCTS } from "@/catalog/products";
+import { getProductMedia } from "@/catalog/media";
 import { AddToCart } from "@/components/AddToCart";
 import { ProductCard } from "@/components/ProductCard";
-import { ProductMedia } from "@/components/ProductMedia";
+import { ProductGallery } from "@/components/ProductGallery";
+import { ProductReviews } from "@/components/ProductReviews";
+import { ProductTrust } from "@/components/ProductTrust";
 import { ProductViewBeacon } from "@/components/ProductViewBeacon";
 import { ScrollDepthBeacon } from "@/components/ScrollDepthBeacon";
-import { getListingForProduct } from "@/lib/supplier-listings";
+import { effectiveCompareAt, effectiveUnitPrice, loadMerchState } from "@/lib/merch";
+import { getListingForProduct, getVerifiedListingForCheckout } from "@/lib/supplier-listings";
+
+export const revalidate = 30;
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -29,11 +35,18 @@ export default async function ProductPage({ params }: Props) {
   const product = getProduct(slug);
   if (!product) notFound();
 
-  const listing = await getListingForProduct(product.id);
+  const [listing, verification, merch] = await Promise.all([
+    getListingForProduct(product.id),
+    getVerifiedListingForCheckout(product.id),
+    loadMerchState(),
+  ]);
+  const unitPrice = effectiveUnitPrice(product, merch.promo);
+  const compareAt = effectiveCompareAt(product, merch.promo);
   const sellable =
     product.inStock &&
     product.estimatedGrossProfitUsd >= product.minMarginUsd &&
-    (listing?.stock == null || listing.stock > 0);
+    Boolean(verification.listing);
+  const media = getProductMedia(product.id, product.category, product.name, listing);
 
   const related = PRODUCTS.filter(
     (p) =>
@@ -51,7 +64,7 @@ export default async function ProductPage({ params }: Props) {
     offers: {
       "@type": "Offer",
       priceCurrency: "USD",
-      price: product.priceUsd,
+      price: unitPrice,
       availability: sellable
         ? "https://schema.org/InStock"
         : "https://schema.org/OutOfStock",
@@ -82,12 +95,7 @@ export default async function ProductPage({ params }: Props) {
       <ProductViewBeacon productId={product.id} />
       <ScrollDepthBeacon productId={product.id} />
       <div className="grid gap-10 lg:grid-cols-2">
-        <ProductMedia
-          product={product}
-          priority
-          showSourceBadge
-          className="min-h-[420px] rounded-3xl lg:min-h-[520px]"
-        />
+        <ProductGallery media={media} priority />
         <div className="lg:py-4">
           <p className="text-xs uppercase tracking-[0.16em] text-moss">{product.category}</p>
           <h1 className="mt-2 font-display text-4xl leading-tight text-ink sm:text-5xl">
@@ -95,10 +103,10 @@ export default async function ProductPage({ params }: Props) {
           </h1>
           <p className="mt-3 text-lg text-ink/75">{product.tagline}</p>
           <p className="mt-6 text-2xl font-medium text-ink">
-            ${product.priceUsd.toFixed(2)}
-            {product.compareAtUsd ? (
+            ${unitPrice.toFixed(2)}
+            {compareAt && compareAt > unitPrice ? (
               <span className="ml-2 text-base text-ink/40 line-through">
-                ${product.compareAtUsd.toFixed(2)}
+                ${compareAt.toFixed(2)}
               </span>
             ) : null}
           </p>
@@ -110,7 +118,8 @@ export default async function ProductPage({ params }: Props) {
             <AddToCart productId={product.id} disabled={!sellable} />
             {!sellable ? (
               <p className="mt-3 text-sm text-ink/55">
-                This item is temporarily unavailable. Browse related fixes below.
+                This item is temporarily unavailable while its supplier variant is being verified.
+                Browse related fixes below.
               </p>
             ) : null}
           </div>
@@ -129,6 +138,7 @@ export default async function ProductPage({ params }: Props) {
               {product.solution}
             </p>
           </div>
+          <ProductTrust product={product} listing={listing} />
         </div>
       </div>
 
@@ -143,13 +153,19 @@ export default async function ProductPage({ params }: Props) {
           ))}
         </dl>
       </section>
+      <ProductReviews product={product} />
 
       {related.length > 0 ? (
         <section className="mt-16">
           <h2 className="font-display text-2xl text-ink">Often paired with</h2>
           <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {related.map((item) => (
-              <ProductCard key={item.id} product={item} />
+              <ProductCard
+                key={item.id}
+                product={item}
+                priceUsd={effectiveUnitPrice(item, merch.promo)}
+                compareAtUsd={effectiveCompareAt(item, merch.promo)}
+              />
             ))}
           </div>
         </section>

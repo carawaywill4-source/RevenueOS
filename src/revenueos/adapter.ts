@@ -17,6 +17,7 @@ import {
 import { getAggregateGrowthReport, getLastHourPulse } from "@/lib/growth";
 import { TRIBUTEREADY_SEED_LESSONS } from "@/revenueos/seeds";
 import { createDurableExperimentStore } from "@/revenueos/durable-store";
+import { planOpportunityDecision } from "@/revenueos/ai-planner";
 
 const FUNNEL_STEPS = [
   "landing_view",
@@ -75,6 +76,7 @@ export function createTributeReadyAdapter(): SiteAdapter {
 
   return {
     id: "tributeready",
+    planDecision: planOpportunityDecision,
 
     async getContext(): Promise<BusinessContext> {
       return {
@@ -433,6 +435,25 @@ export function createTributeReadyAdapter(): SiteAdapter {
       }
 
       return { ok: false, detail: `Unsupported action ${action.type}` };
+    },
+
+    async listUnavailableCapabilities() {
+      return [
+        {
+          capability: "search_console_analytics",
+          reason:
+            "No GSC/Bing Search Analytics API wired. Indexed/Impressions/Clicks cannot be measured yet.",
+        },
+        {
+          capability: "discovery_publish",
+          reason:
+            "TributeReady has no publish_intent_page limb; organic page publishing remains owner/content work.",
+        },
+        {
+          capability: "outreach_executor",
+          reason: "Directories/outreach plays are advisory until an executor limb exists.",
+        },
+      ];
     },
 
     getExperimentStore() {

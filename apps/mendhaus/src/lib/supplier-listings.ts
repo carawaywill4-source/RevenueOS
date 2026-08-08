@@ -49,3 +49,58 @@ export async function getListingForProduct(productId: string) {
   const map = await loadSupplierListings();
   return map[productId] ?? null;
 }
+
+/**
+ * Checkout must not rely on catalog placeholders or an old process cache.
+ * A listing is sellable only when the supplier record itself proves a recent
+ * US-stocked variant and a landed unit cost.
+ */
+export async function getVerifiedListingForCheckout(productId: string): Promise<{
+  listing: SupplierListing | null;
+  reason?: string;
+}> {
+  if (!supabaseConfigured()) {
+    return { listing: null, reason: "Supplier inventory database is unavailable" };
+  }
+
+  const { data, error } = await getSupabaseAdmin()
+    .from("mh_supplier_listings")
+    .select(
+      "product_id, network, supplier_product_id, supplier_sku, unit_cost_usd, stock, hero_url, gallery, warehouse_country, search_query, synced_at",
+    )
+    .eq("product_id", productId)
+    .maybeSingle();
+  if (error) throw new Error(`Could not verify supplier listing: ${error.message}`);
+  if (!data) return { listing: null, reason: "No reviewed supplier variant is mapped" };
+
+  const listing: SupplierListing = {
+    productId: data.product_id,
+    network: data.network,
+    supplierProductId: data.supplier_product_id,
+    supplierSku: data.supplier_sku ?? undefined,
+    unitCostUsd: data.unit_cost_usd == null ? undefined : Number(data.unit_cost_usd),
+    stock: data.stock == null ? undefined : Number(data.stock),
+    hero: data.hero_url ?? undefined,
+    gallery: data.gallery ?? [],
+    warehouseCountry: data.warehouse_country ?? undefined,
+    lastSyncedAt: data.synced_at ?? undefined,
+    searchQuery: data.search_query ?? "",
+  };
+  const ageMs = listing.lastSyncedAt ? Date.now() - Date.parse(listing.lastSyncedAt) : Infinity;
+  if (!listing.supplierProductId || !listing.supplierSku) {
+    return { listing: null, reason: "Supplier variant is incomplete" };
+  }
+  if (listing.warehouseCountry !== "US") {
+    return { listing: null, reason: "Supplier variant is not confirmed in a US warehouse" };
+  }
+  if (!Number.isFinite(listing.unitCostUsd) || (listing.unitCostUsd ?? 0) <= 0) {
+    return { listing: null, reason: "Supplier landed cost is missing" };
+  }
+  if (!Number.isFinite(listing.stock) || (listing.stock ?? 0) <= 0) {
+    return { listing: null, reason: "Supplier stock is unavailable" };
+  }
+  if (!Number.isFinite(ageMs) || ageMs > 24 * 60 * 60 * 1000) {
+    return { listing: null, reason: "Supplier inventory is stale; refresh required" };
+  }
+  return { listing };
+}

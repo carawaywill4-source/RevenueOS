@@ -17,6 +17,7 @@ export const MH_EVENTS = [
 export type MhEventName = (typeof MH_EVENTS)[number];
 
 export type EventInput = {
+  eventId?: string;
   name: MhEventName;
   sessionId: string;
   productId?: string;
@@ -27,36 +28,36 @@ export type EventInput = {
 
 export async function recordEvent(input: EventInput) {
   if (!supabaseConfigured()) return;
-  try {
-    await getSupabaseAdmin().from("mh_events").insert({
+  const { error } = await getSupabaseAdmin().from("mh_events").insert({
+    event_id: input.eventId ?? null,
+    event_name: input.name,
+    session_id: input.sessionId,
+    product_id: input.productId ?? null,
+    order_id: input.orderId ?? null,
+    attribution: input.attribution ?? {},
+    metadata: input.metadata ?? {},
+  });
+  // Idempotent replay of a client event is success.
+  if (error && error.code !== "23505") throw new Error(`Event insert failed: ${error.message}`);
+}
+
+/** Batch insert for high-traffic clients — single round-trip. */
+export async function recordEvents(inputs: EventInput[]) {
+  if (!supabaseConfigured() || !inputs.length) return;
+  const { error } = await getSupabaseAdmin().from("mh_events").upsert(
+    inputs.map((input) => ({
+      event_id: input.eventId ?? null,
       event_name: input.name,
       session_id: input.sessionId,
       product_id: input.productId ?? null,
       order_id: input.orderId ?? null,
       attribution: input.attribution ?? {},
       metadata: input.metadata ?? {},
-    });
-  } catch (error) {
-    console.error("mh_events insert failed", error);
-  }
-}
-
-/** Batch insert for high-traffic clients — single round-trip. */
-export async function recordEvents(inputs: EventInput[]) {
-  if (!supabaseConfigured() || !inputs.length) return;
-  try {
-    await getSupabaseAdmin().from("mh_events").insert(
-      inputs.map((input) => ({
-        event_name: input.name,
-        session_id: input.sessionId,
-        product_id: input.productId ?? null,
-        order_id: input.orderId ?? null,
-        attribution: input.attribution ?? {},
-        metadata: input.metadata ?? {},
-      })),
-    );
-  } catch (error) {
-    console.error("mh_events batch insert failed", error);
+    })),
+    { onConflict: "event_id", ignoreDuplicates: true },
+  );
+  if (error) {
+    throw new Error(`Event batch insert failed: ${error.message}`);
   }
 }
 

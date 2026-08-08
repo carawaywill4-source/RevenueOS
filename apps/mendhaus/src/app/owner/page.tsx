@@ -5,6 +5,12 @@ import { PRODUCTS } from "@/catalog/products";
 import { BRAND } from "@/lib/brand";
 import { buildMoneyPlan, getLastHourPulse, getWindowSnapshot, listJournal } from "@/lib/metrics";
 import { ownerGates } from "@/lib/readiness";
+import { getSupabaseAdmin, supabaseConfigured } from "@/lib/supabase";
+import {
+  buildWorldModel,
+  scoreOrganicMastery,
+  summarizeCapabilityGaps,
+} from "@tributeready/revenueos";
 import { probeDurableLedger } from "@/revenueos/durable-store";
 import { createMendhausAdapter } from "@/revenueos/adapter";
 
@@ -41,19 +47,63 @@ export default async function OwnerPage({
     );
   }
 
-  const [plan, hour, d7, journal, durable, adapter] = await Promise.all([
-    buildMoneyPlan(7),
-    getLastHourPulse(),
-    getWindowSnapshot(7),
-    listJournal(50),
-    probeDurableLedger(),
-    Promise.resolve(createMendhausAdapter()),
-  ]);
+  const [plan, hour, d7, journal, durable, adapter, pendingOrders, shippingNotes] =
+    await Promise.all([
+      buildMoneyPlan(7),
+      getLastHourPulse(),
+      getWindowSnapshot(7),
+      listJournal(50),
+      probeDurableLedger(),
+      Promise.resolve(createMendhausAdapter()),
+      supabaseConfigured()
+        ? getSupabaseAdmin()
+            .from("mh_orders")
+            .select("id,email,status,items,gross_revenue_usd,shipping_address,paid_at,created_at")
+            .in("status", ["paid", "fulfilling"])
+            .order("paid_at", { ascending: true })
+            .limit(20)
+            .then((r) => r.data ?? [])
+        : Promise.resolve([]),
+      supabaseConfigured()
+        ? getSupabaseAdmin()
+            .from("mh_journal")
+            .select("detail,created_at")
+            .eq("kind", "order_shipping")
+            .order("created_at", { ascending: false })
+            .limit(40)
+            .then((r) => r.data ?? [])
+        : Promise.resolve([]),
+    ]);
+  const shippingByOrder = new Map<string, Record<string, unknown>>();
+  for (const row of shippingNotes as Array<{ detail?: { orderId?: string; shippingAddress?: Record<string, unknown> } }>) {
+    const orderId = row.detail?.orderId;
+    if (orderId && row.detail?.shippingAddress) {
+      shippingByOrder.set(orderId, row.detail.shippingAddress);
+    }
+  }
   const store = adapter.getExperimentStore();
-  const [experiments, lessons] = await Promise.all([
-    store.listExperiments(BRAND.siteId),
-    store.listLessons({ siteId: BRAND.siteId, industry: BRAND.industry }),
-  ]);
+  const [experiments, lessons, discoveryDoors, capabilityGaps, observation, context] =
+    await Promise.all([
+      store.listExperiments(BRAND.siteId),
+      store.listLessons({ siteId: BRAND.siteId, industry: BRAND.industry }),
+      adapter.listDiscoveryDoors ? adapter.listDiscoveryDoors() : Promise.resolve([]),
+      store.listCapabilityGaps
+        ? store.listCapabilityGaps(BRAND.siteId)
+        : Promise.resolve([]),
+      adapter.observe(),
+      adapter.getContext(),
+    ]);
+  const gapSummary = summarizeCapabilityGaps(capabilityGaps);
+  const world = buildWorldModel({
+    context,
+    observation,
+    banditStats: new Map(),
+  });
+  const organicMastery = scoreOrganicMastery({
+    observation,
+    world,
+    doors: discoveryDoors,
+  });
   const gates = ownerGates();
   const running = experiments.filter((e) => e.status === "running" || e.status === "proposed");
   const winning = experiments
@@ -98,6 +148,141 @@ export default async function OwnerPage({
         <p className="mt-4 text-xs text-ink/50">
           Durable RevenueOS ledger: {durable ? "connected" : "file fallback / not applied yet"}
         </p>
+      </section>
+
+      <section className="mb-10 rounded-2xl border border-line bg-paper p-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-moss">
+          Organic mastery era
+        </h2>
+        <p className="mt-2 text-sm text-ink/70">
+          RevenueOS is the sole business manager. Ads stay locked until organic
+          leads→sales is a weapon — not okay, mastery.
+        </p>
+        <p className="mt-4 font-display text-2xl text-ink">
+          {organicMastery.level.toUpperCase()} · {organicMastery.score}/100 · ads{" "}
+          {organicMastery.adsReadiness}
+        </p>
+        <p className="mt-2 text-sm text-ink/75">{organicMastery.verdict}</p>
+        {organicMastery.drills.length > 0 ? (
+          <ul className="mt-4 list-decimal space-y-1 pl-5 text-sm text-ink/70">
+            {organicMastery.drills.map((drill) => (
+              <li key={drill}>{drill}</li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+
+      <section className="mb-10 rounded-2xl border border-line bg-paper p-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-moss">
+          Discovery doors (governor)
+        </h2>
+        <p className="mt-2 text-sm text-ink/70">
+          Intent topics are scored after 3d/7d. Kill = stop cloning that cluster. Expand = invest more.
+        </p>
+        {discoveryDoors.length === 0 ? (
+          <p className="mt-4 text-sm text-ink/65">No published discovery doors yet.</p>
+        ) : (
+          <ul className="mt-4 space-y-3 text-sm">
+            {discoveryDoors.slice(0, 12).map((door) => (
+              <li key={door.id} className="border-b border-line/70 pb-3">
+                <p className="font-medium">
+                  {door.status.toUpperCase()}
+                  {door.lastScore ? ` · ${door.lastScore.verdict} · ${door.lastScore.stage}` : " · unscored"}
+                  {" · "}
+                  <a className="underline" href={door.url}>
+                    /topics/{door.slug}
+                  </a>
+                </p>
+                <p className="text-ink/65">
+                  Query: {door.query} · cluster {door.clusterKey}
+                </p>
+                {door.lastScore ? (
+                  <p className="text-xs text-ink/55">{door.lastScore.reason}</p>
+                ) : null}
+                {door.killReason ? (
+                  <p className="text-xs text-clay">Killed: {door.killReason}</p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="mb-10 rounded-2xl border border-line bg-paper p-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-moss">
+          Capability gaps
+        </h2>
+        <p className="mt-2 text-sm text-ink/70">
+          High-EV moves RevenueOS wants but cannot execute yet. These train the next limbs of the portable brain.
+        </p>
+        {gapSummary.length === 0 ? (
+          <p className="mt-4 text-sm text-ink/65">No capability gaps recorded yet.</p>
+        ) : (
+          <ul className="mt-4 space-y-3 text-sm">
+            {gapSummary.map((gap) => (
+              <li key={gap.missingCapability} className="border-b border-line/70 pb-3">
+                <p className="font-medium">
+                  CAPABILITY GAP: {gap.missingCapability.replace(/_/g, " ")} · {gap.importance.toUpperCase()}
+                </p>
+                <p className="text-ink/70">
+                  Blocked {gap.timesBlocked} high-value opportunities · EV pressure $
+                  {gap.expectedValueUsd.toFixed(0)}
+                </p>
+                <p className="text-xs text-ink/55">{gap.recommendation}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="mb-10 rounded-2xl border border-line bg-paper p-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-moss">
+          Fulfillment queue
+        </h2>
+        <p className="mt-2 text-sm text-ink/70">
+          Place the CJ order by hand, then mark shipped:{" "}
+          <code className="rounded bg-sand px-1 text-xs">
+            POST /api/admin/fulfill {"{"} orderId, trackingNumber, carrier {"}"}
+          </code>
+        </p>
+        {(pendingOrders as Array<Record<string, unknown>>).length === 0 ? (
+          <p className="mt-4 text-sm text-ink/65">No paid orders waiting on fulfillment.</p>
+        ) : (
+          <ul className="mt-4 space-y-4 text-sm">
+            {(pendingOrders as Array<Record<string, unknown>>).map((order) => {
+              const id = String(order.id);
+              const ship =
+                (order.shipping_address as Record<string, unknown> | null) ??
+                shippingByOrder.get(id) ??
+                null;
+              const items = (order.items as Array<{ name: string; quantity: number }>) ?? [];
+              return (
+                <li key={id} className="border-b border-line/70 pb-4">
+                  <p className="font-medium">
+                    {String(order.status)} · ${Number(order.gross_revenue_usd ?? 0).toFixed(2)} ·{" "}
+                    {String(order.email)}
+                  </p>
+                  <p className="text-xs text-ink/50">{id}</p>
+                  <p className="mt-1 text-ink/75">
+                    {items.map((i) => `${i.quantity}× ${i.name}`).join(", ")}
+                  </p>
+                  {ship ? (
+                    <p className="mt-1 text-ink/70">
+                      Ship to: {String(ship.name ?? "")}, {String(ship.line1 ?? "")}
+                      {ship.line2 ? `, ${String(ship.line2)}` : ""}, {String(ship.city ?? "")}{" "}
+                      {String(ship.state ?? "")} {String(ship.postal_code ?? "")}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-clay">
+                      No shipping address in DB yet — check Stripe session or run
+                      schema-shipping-address.sql.
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
 
       <section className="mb-10 rounded-2xl border border-line bg-paper p-6">
@@ -184,14 +369,23 @@ export default async function OwnerPage({
           )}
         </div>
         <div className="rounded-2xl border border-line bg-paper p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-moss">Lessons</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-moss">
+            Lessons (portable memory)
+          </h2>
           <p className="mt-1 text-xs text-ink/50">
-            Site = local business memory. Industry/global = transferable priors.
+            Industry/global lessons persist across businesses — attaching RevenueOS
+            to a new site loads this learning instead of starting over. Site =
+            local only. ×N = evidence from repeated cycles/sites.
           </p>
           <ul className="mt-3 max-h-80 space-y-2 overflow-auto text-sm">
             {lessons.slice(0, 20).map((lesson) => (
               <li key={lesson.id}>
-                <span className="text-xs uppercase text-moss">{lesson.scope}</span> · {lesson.summary}
+                <span className="text-xs uppercase text-moss">{lesson.scope}</span>
+                {lesson.evidenceCount > 1 ? ` · ×${lesson.evidenceCount}` : ""}
+                {lesson.originSiteIds && lesson.originSiteIds.length > 1
+                  ? ` · ${lesson.originSiteIds.length} businesses`
+                  : ""}{" "}
+                · {lesson.summary}
               </li>
             ))}
           </ul>

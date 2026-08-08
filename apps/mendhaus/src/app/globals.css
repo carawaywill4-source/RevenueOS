@@ -1,14 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f1ea;
-  --foreground: #1f2a24;
-  --ink: #1f2a24;
-  --paper: #fbf8f2;
-  --clay: #c45c3e;
-  --moss: #3d5c4a;
-  --sand: #e8dfd0;
-  --line: #d9d0c3;
+  /* Cool linen + charcoal + spruce — not cream/terracotta */
+  --background: #e8ecf0;
+  --foreground: #12151a;
+  --ink: #12151a;
+  --paper: #f4f6f8;
+  --spruce: #1a4a3c;
+  --steel: #3d5a73;
+  --sand: #dfe4e9;
+  --line: #c5ced6;
+  --clay: #1a4a3c;
+  --moss: #1a4a3c;
 }
 
 @theme inline {
@@ -16,12 +19,14 @@
   --color-foreground: var(--foreground);
   --color-ink: var(--ink);
   --color-paper: var(--paper);
-  --color-clay: var(--clay);
-  --color-moss: var(--moss);
+  --color-clay: var(--spruce);
+  --color-moss: var(--spruce);
   --color-sand: var(--sand);
   --color-line: var(--line);
-  --font-sans: var(--font-figtree);
-  --font-serif: var(--font-fraunces);
+  --color-spruce: var(--spruce);
+  --color-steel: var(--steel);
+  --font-sans: var(--font-outfit);
+  --font-serif: var(--font-source);
 }
 
 * {
@@ -34,26 +39,26 @@ html {
 
 body {
   background:
-    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(61, 92, 74, 0.07), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(196, 92, 62, 0.05), transparent),
-    var(--background);
+    radial-gradient(ellipse 70% 45% at 0% 0%, rgba(26, 74, 60, 0.08), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 100% 10%, rgba(61, 90, 115, 0.07), transparent 50%),
+    linear-gradient(180deg, #eef1f4 0%, var(--background) 40%);
   color: var(--foreground);
-  font-family: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
 }
 
 ::selection {
-  background: #d7c4b0;
-  color: #1f2a24;
+  background: #c5d8d0;
+  color: #12151a;
 }
 
 .font-display {
-  font-family: var(--font-fraunces), Georgia, serif;
+  font-family: var(--font-source), Georgia, "Times New Roman", serif;
 }
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(16px);
   }
   to {
     opacity: 1;
@@ -63,34 +68,49 @@ body {
 
 @keyframes ken {
   from {
-    transform: scale(1.04);
+    transform: scale(1.06);
   }
   to {
     transform: scale(1);
   }
 }
 
+@keyframes line-draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 .animate-rise {
-  animation: rise 0.9s ease-out both;
+  animation: rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .animate-rise-delay {
-  animation: rise 0.9s ease-out 0.12s both;
+  animation: rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
 }
 
 .animate-rise-delay-2 {
-  animation: rise 0.9s ease-out 0.24s both;
+  animation: rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
 }
 
 .animate-ken {
   animation: ken 12s ease-out both;
 }
 
+.animate-rule {
+  transform-origin: left;
+  animation: line-draw 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.25s both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-rise,
   .animate-rise-delay,
   .animate-rise-delay-2,
-  .animate-ken {
+  .animate-ken,
+  .animate-rule {
     animation: none;
   }
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
 import Stripe from "stripe";
 import { recordEvent } from "@/lib/events";
+import { sendMendhausEmail } from "@/lib/mail";
 import { stripeFeeUsd } from "@/lib/money";
 import { getStripe } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase";
@@ -25,6 +25,20 @@ export async function POST(request: Request) {
   }
 
   const supabase = getSupabaseAdmin();
+  const { error: claimError } = await supabase.from("mh_journal").insert({
+    kind: "stripe_event",
+    summary: `stripe-event:${event.id}`,
+    detail: { type: event.type },
+  });
+  if (claimError) {
+    if (claimError.code === "23505") {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    return NextResponse.json(
+      { error: `Could not persist Stripe event idempotency key: ${claimError.message}` },
+      { status: 500 },
+    );
+  }
 
   if (event.type === "charge.refunded") {
     const charge = event.data.object;
@@ -69,11 +83,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ received: true });
   }
 
-  if (event.type !== "checkout.session.completed") {
+  if (
+    event.type !== "checkout.session.completed" &&
+    event.type !== "checkout.session.async_payment_succeeded"
+  ) {
     return NextResponse.json({ received: true });
   }
 
   const session = event.data.object;
+  if (session.payment_status !== "paid") {
+    return NextResponse.json({ received: true, awaitingAsynchronousPayment: true });
+  }
   const orderId = session.metadata?.order_id;
   const email = session.customer_details?.email;
   if (!orderId || !email) {
@@ -88,11 +108,9 @@ export async function POST(request: Request) {
   if (error || !order) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
-  if (["paid", "fulfilling", "shipped", "delivered"].includes(order.status)) {
-    return NextResponse.json({ received: true, duplicate: true });
-  }
-
   const paidTotal = (session.amount_total ?? 0) / 100;
+  const taxTotal = (session.total_details?.amount_tax ?? 0) / 100;
+  const shippingTotal = (session.total_details?.amount_shipping ?? 0) / 100;
   const fee = stripeFeeUsd(paidTotal);
   const paymentIntent =
     typeof session.payment_intent === "string" ? session.payment_intent : null;
@@ -103,7 +121,7 @@ export async function POST(request: Request) {
       Number(order.shipping_cost_usd) -
       Number(order.fulfillment_fee_usd) -
       fee -
-      Number(order.tax_usd)
+      taxTotal
     ).toFixed(2),
   );
 
@@ -139,11 +157,15 @@ export async function POST(request: Request) {
     .upsert({ email: email.toLowerCase() }, { onConflict: "email" });
 
   const orderUpdate: Record<string, unknown> = {
-    status: process.env.MENDHAUS_SUPPLIER_READY === "1" ? "fulfilling" : "paid",
+    // Payment is not fulfillment. A supplier submission must transition this
+    // separately after a reviewed SKU/variant is accepted.
+    status: "paid",
     email: email.toLowerCase(),
     paid_at: new Date().toISOString(),
     payment_intent_id: paymentIntent,
     gross_revenue_usd: paidTotal,
+    shipping_usd: shippingTotal,
+    tax_usd: taxTotal,
     stripe_fee_usd: fee,
     realized_profit_usd: realized,
   };
@@ -151,28 +173,33 @@ export async function POST(request: Request) {
     orderUpdate.shipping_address = shippingAddress;
   }
 
-  const { error: orderUpdateError } = await supabase
+  const { data: transitioned, error: orderUpdateError } = await supabase
     .from("mh_orders")
     .update(orderUpdate)
-    .eq("id", orderId);
+    .eq("id", orderId)
+    .eq("status", "awaiting_payment")
+    .select("id");
 
-  // If shipping_address column is not migrated yet, retry without it and journal the address.
+  // If shipping_address column is not migrated yet, retry without it. Do not
+  // duplicate customer address data into a general-purpose journal.
   if (orderUpdateError && shippingAddress) {
     delete orderUpdate.shipping_address;
-    await supabase.from("mh_orders").update(orderUpdate).eq("id", orderId);
-    await supabase.from("mh_journal").insert({
-      kind: "order_shipping",
-      summary: `Shipping address for order ${orderId}`,
-      detail: { orderId, shippingAddress },
-    });
-  } else if (shippingAddress) {
-    await supabase.from("mh_journal").insert({
-      kind: "order_shipping",
-      summary: `Shipping address for order ${orderId}`,
-      detail: { orderId, shippingAddress },
-    });
+    const retry = await supabase
+      .from("mh_orders")
+      .update(orderUpdate)
+      .eq("id", orderId)
+      .eq("status", "awaiting_payment")
+      .select("id");
+    if (retry.error) {
+      return NextResponse.json({ error: retry.error.message }, { status: 500 });
+    }
+    if (!retry.data?.length) {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
   } else if (orderUpdateError) {
     return NextResponse.json({ error: orderUpdateError.message }, { status: 500 });
+  } else if (!transitioned?.length) {
+    return NextResponse.json({ received: true, duplicate: true });
   }
 
   await recordEvent({
@@ -188,10 +215,8 @@ export async function POST(request: Request) {
   });
 
   if (process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL) {
-    const resend = new Resend(process.env.RESEND_API_KEY);
     const items = (order.items as Array<{ name: string; quantity: number }>) ?? [];
-    await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL,
+    await sendMendhausEmail({
       to: email,
       subject: `Mendhaus order confirmed`,
       text: [
@@ -202,7 +227,7 @@ export async function POST(request: Request) {
         `Total: $${paidTotal.toFixed(2)}`,
         `We'll email tracking when the package ships (typically 3–7 business days for US-warehouse items).`,
         ``,
-        `Questions: ${process.env.RESEND_FROM_EMAIL}`,
+        `Questions: ${process.env.RESEND_REPLY_TO || "care@mendhaus.shop"}`,
       ].join("\n"),
     });
   }

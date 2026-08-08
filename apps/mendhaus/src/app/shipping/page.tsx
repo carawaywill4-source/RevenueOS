@@ -1,12 +1,17 @@
 import type { Metadata } from "next";
-import { FREE_SHIPPING_AT_USD, SHIPPING_FLAT_USD } from "@/lib/brand";
+import { SHIPPING_FLAT_USD } from "@/lib/brand";
+import { loadMerchState } from "@/lib/merch";
+
+export const revalidate = 30;
 
 export const metadata: Metadata = {
   title: "Shipping",
   description: "US shipping times, costs, and tracking for Mendhaus orders.",
 };
 
-export default function ShippingPage() {
+export default async function ShippingPage() {
+  const merch = await loadMerchState();
+
   return (
     <article className="mx-auto max-w-2xl px-4 py-12 text-sm leading-7 text-ink/80">
       <h1 className="font-display text-4xl text-ink">Shipping</h1>
@@ -17,7 +22,7 @@ export default function ShippingPage() {
       </p>
       <h2 className="mt-8 font-display text-2xl text-ink">Cost</h2>
       <p>
-        Flat-rate shipping is ${SHIPPING_FLAT_USD.toFixed(2)}. Orders ${FREE_SHIPPING_AT_USD}+ ship
+        Flat-rate shipping is ${SHIPPING_FLAT_USD.toFixed(2)}. Orders ${merch.freeShippingAtUsd}+ ship
         free. Tax is only collected after we register for Stripe Tax where we have nexus — we will
         not invent a tax rate.
       </p>

@@ -29,6 +29,17 @@ const CATEGORY_HERO: Record<ProductCategory, string> = {
   renter: U("photo-1502672260266-1c1ef2d93688"),
 };
 
+const CATEGORY_CONTEXT: Record<ProductCategory, string[]> = {
+  kitchen: [U("photo-1556910103-1c02745aae4d"), U("photo-1556911220-e15b29be8c8f"), U("photo-1600566753190-17f0baa2a6c3")],
+  bathroom: [U("photo-1552321554-5fefe8c9ef14"), U("photo-1620626011761-996317b8d101"), U("photo-1584622650111-993a426fbf0a")],
+  bedroom: [U("photo-1616594039964-ae9021a400a0"), U("photo-1505693416388-ac5ce068fe85"), U("photo-1616486338812-3dadae4b4ace")],
+  closet: [U("photo-1558618666-fcd25c85cd64"), U("photo-1558769132-cb1aea458c5e"), U("photo-1594633312681-425c7b97ccd1")],
+  desk: [U("photo-1497366216548-37526070297c"), U("photo-1497215728101-856f4ea42174"), U("photo-1593062096033-1b0b6b4f7a43")],
+  cleaning: [U("photo-1581578731548-c64695cc6952"), U("photo-1527515637462-cff94eecc1ac"), U("photo-1583337130417-3346a1be7dee")],
+  lighting: [U("photo-1513506003901-1e6a229e2d15"), U("photo-1507473885765-e6ed057f782c"), U("photo-1565814636199-ae5429e39cd4")],
+  renter: [U("photo-1502672260266-1c1ef2d93688"), U("photo-1524758631624-e2822e304c36"), U("photo-1522708323590-d24dbb6b0267")],
+};
+
 const PRODUCT_HERO: Record<string, string> = {
   "mh-under-sink-caddy": U("photo-1556911220-bff31c812dba"),
   "mh-roll-up-dish-rack": U("photo-1556910103-1c02745aae4d"),
@@ -81,7 +92,9 @@ export function getProductMedia(
   const hero = PRODUCT_HERO[productId] ?? CATEGORY_HERO[category];
   return {
     hero,
-    gallery: [hero],
+    // These are room-context images, not product-packaging photography. The
+    // PDP labels that distinction until a reviewed supplier gallery exists.
+    gallery: [...new Set([hero, ...CATEGORY_CONTEXT[category]])],
     alt: `${name} — lifestyle context`,
     source: "editorial",
   };

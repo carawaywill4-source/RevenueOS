@@ -21,7 +21,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE);
-      if (raw) setLines(JSON.parse(raw) as CartLine[]);
+      if (raw) {
+        const savedLines = JSON.parse(raw) as CartLine[];
+        queueMicrotask(() => setLines(savedLines));
+      }
     } catch {
       /* ignore */
     }

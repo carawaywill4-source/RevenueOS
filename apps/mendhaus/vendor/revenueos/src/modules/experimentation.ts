@@ -22,7 +22,14 @@ export function createProposedExperiment(
   const iso = now.toISOString();
   const metric = hypothesis.precursorMetric ?? "purchases";
   const baseline = precursorValueFromObservation(metric, observation);
-  const timeToSignalDays = 14;
+  const timeToSignalDays =
+    hypothesis.category === "conversion"
+      ? 3
+      : hypothesis.category === "pricing"
+        ? 7
+        : hypothesis.category === "operations"
+          ? 7
+          : 14;
   const measurement: MeasurementPlan = {
     metric,
     baselineValue: baseline,
@@ -35,7 +42,9 @@ export function createProposedExperiment(
   return {
     id: newId("exp"),
     siteId,
-    status: hypothesis.safeActionType ? "running" : "proposed",
+    // Execution, not selection, starts an experiment. A proposed action must
+    // never be attributed because an adapter may reject or fail it.
+    status: "proposed",
     hypothesis,
     actions: [],
     predictedOutcome: hypothesis.predictedDelta,

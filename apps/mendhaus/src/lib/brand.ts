@@ -1,16 +1,18 @@
 export const BRAND = {
   name: "Mendhaus",
-  tagline: "Small fixes for a better home.",
+  tagline: "Fix the room. Keep the lease.",
   domainHint: "mendhaus.shop",
   supportEmail: "care@mendhaus.shop",
   timezone: "America/Denver",
   industry: "home-goods",
   siteId: "mendhaus",
   voice:
-    "Calm, specific, adult. No fake scarcity, no fake reviews, no miracle claims. Describe what the product does and how it installs.",
+    "Precise, adult, unhurried. Name the annoyance, the install constraint, and the ship time. No fake scarcity, no fake reviews, no miracle claims.",
+  dailyRevenueTargetUsd: 10_000,
 } as const;
 
-export const SHIPPING_FLAT_USD = 5.95;
-export const FREE_SHIPPING_AT_USD = 49;
+/** Push kit AOV; flat rate still covers light single-SKU orders. */
+export const SHIPPING_FLAT_USD = 6.95;
+export const FREE_SHIPPING_AT_USD = 79;
 export const STRIPE_PERCENT = 0.029;
 export const STRIPE_FIXED_USD = 0.3;

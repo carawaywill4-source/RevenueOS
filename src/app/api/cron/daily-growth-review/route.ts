@@ -14,6 +14,8 @@ import {
   formatHourlyProfitEmail,
   hourlyEmailSubject,
 } from "@/revenueos/hourly-email";
+import { claimHourlyEmailSlot } from "@/revenueos/hourly-email-lock";
+import { planRevenueBrief } from "@/revenueos/ai-planner";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -22,13 +24,13 @@ const REPORT_RECIPIENT = "care@tributeready.org";
 const MAX_CHAIN_DEPTH = 3;
 const CHAIN_DELAY_MS = 4_000;
 
-/** Hourly digest at minute 0. Chained minute hunts do not email. */
-function shouldSendHourlyEmail(request: Request): boolean {
+/** Hourly digest once per UTC hour. Chained minute hunts do not email. */
+function wantsHourlyEmail(request: Request): boolean {
   const url = new URL(request.url);
   if (url.searchParams.get("email") === "1") return true;
   if (url.searchParams.has("chain")) return false;
   if (request.headers.get("x-revenueos-hunt") === "chain") return false;
-  return new Date().getUTCMinutes() === 0;
+  return true;
 }
 
 function chainDepth(request: Request): number {
@@ -82,7 +84,6 @@ export async function GET(request: Request) {
 
   try {
     const hunt = await runContinuousHunt({
-      // Heartbeat ticks burn ~50s; chained ticks burn a bit less to stay nested-safe.
       budgetMs: depth === 0 ? 50_000 : 35_000,
       maxRounds: depth === 0 ? 6 : 4,
     });
@@ -90,23 +91,51 @@ export async function GET(request: Request) {
     const durableMemory = await probeDurableLedger();
 
     let emailId: string | undefined;
-    const sendEmail = shouldSendHourlyEmail(request);
-    if (
-      sendEmail &&
-      process.env.RESEND_API_KEY &&
-      process.env.RESEND_FROM_EMAIL
-    ) {
-      const text = formatHourlyProfitEmail(snapshot);
-      const { data, error } = await new Resend(
-        process.env.RESEND_API_KEY,
-      ).emails.send({
-        from: process.env.RESEND_FROM_EMAIL,
-        to: REPORT_RECIPIENT,
-        subject: hourlyEmailSubject(snapshot),
-        text,
-      });
-      if (error) throw new Error(error.message);
-      emailId = data?.id;
+    let emailSkip: string | undefined;
+    // Force only with ?email=1&force=1 — still goes through the hourly claim (max 1/hour).
+    const url = new URL(request.url);
+    const wantEmail = wantsHourlyEmail(request);
+    const forceRequested =
+      url.searchParams.get("email") === "1" && url.searchParams.get("force") === "1";
+
+    if (wantEmail && process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL) {
+      const claimed = await claimHourlyEmailSlot("tributeready");
+      if (!claimed) {
+        emailSkip = forceRequested ? "already_sent_this_hour" : "already_sent_this_hour";
+      } else {
+        try {
+          const brief = await planRevenueBrief(snapshot);
+          const text = [
+            formatHourlyProfitEmail(snapshot),
+            "",
+            `Cycle analysis (${brief.source}): ${brief.report}`,
+            `Evidence: ${brief.evidence}`,
+            `Next decision: ${brief.nextMove}`,
+            brief.fallbackReason ? `Planner fallback: ${brief.fallbackReason}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n");
+          const { data, error } = await new Resend(process.env.RESEND_API_KEY).emails.send({
+            from: process.env.RESEND_FROM_EMAIL,
+            to: REPORT_RECIPIENT,
+            subject: hourlyEmailSubject(snapshot),
+            text,
+          });
+          if (error) {
+            emailSkip = error.message;
+            console.error("hourly email failed", error);
+          } else {
+            emailId = data?.id;
+          }
+        } catch (error) {
+          emailSkip = (error as Error).message;
+          console.error("hourly email failed", error);
+        }
+      }
+    } else if (wantEmail) {
+      emailSkip = "resend_not_configured";
+    } else {
+      emailSkip = "chain_tick";
     }
 
     if (shouldChainHunt(snapshot)) {
@@ -134,6 +163,7 @@ export async function GET(request: Request) {
       memory: durableMemory ? "durable" : "ephemeral",
       emailed: Boolean(emailId),
       emailId,
+      emailSkip,
       hourPlan: snapshot.cycle?.hourPlan ?? null,
       overdrive: snapshot.cycle?.ambition?.overdrive ?? false,
       bottleneck: snapshot.bottleneck,
@@ -145,6 +175,14 @@ export async function GET(request: Request) {
       diagnosis: snapshot.cycle?.scorecard.diagnosis ?? null,
       attributions: snapshot.cycle?.attributions ?? [],
       executed: snapshot.cycle?.executed ?? [],
+      planner: snapshot.cycle?.plannerDecision
+        ? {
+            source: snapshot.cycle.plannerDecision.source,
+            selected: snapshot.cycle.plannerDecision.selectedOpportunityIds,
+            rationale: snapshot.cycle.plannerDecision.rationale,
+            fallbackReason: snapshot.cycle.plannerDecision.fallbackReason,
+          }
+        : null,
       strategy: snapshot.cycle?.strategy ?? null,
       anomalies: snapshot.cycle?.anomalies ?? [],
       ambition: snapshot.cycle?.ambition ?? null,

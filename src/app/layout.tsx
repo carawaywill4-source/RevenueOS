@@ -13,10 +13,19 @@ const cormorant = Cormorant_Garamond({
   weight: ["400", "500", "600", "700"],
 });
 
+function metadataBase() {
+  const fallback = "https://tributeready.org";
+  try {
+    return new URL(process.env.NEXT_PUBLIC_APP_URL || fallback);
+  } catch {
+    // Metadata must never make a production build fail because a deployment
+    // environment supplied an invalid public URL.
+    return new URL(fallback);
+  }
+}
+
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_APP_URL || "https://tributeready.org",
-  ),
+  metadataBase: metadataBase(),
   title: {
     default: "TributeReady — A life, beautifully remembered",
     template: "%s | TributeReady",

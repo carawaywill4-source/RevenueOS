@@ -9,7 +9,7 @@ import type {
   Scorecard,
   WorldModel,
 } from "../types";
-import { newId } from "../ledger/store";
+import { toPortableLesson } from "../memory/portable";
 
 export function hourVerdictOf(pulse?: HourPulse): HourVerdict {
   if (!pulse) return "thin_hour";
@@ -54,18 +54,18 @@ function learnFromLastHour(input: {
     return `Last hour slipped vs the prior hour ($${revenue.toFixed(2)} < $${prior.toFixed(2)}). That is a lesson, not a reason to stop. Change the playbook this hour.`;
   }
   if (revenue <= 0 && views < 10) {
-    return `Learned: ${views} view(s) last hour — discovery failed. Next hour must produce strangers, not excuses.`;
+    return `FAILING hour: ${views} view(s), $0 made. Discovery tool failed. Next hour: buyable research → sellable door → index. Strangers who can buy — money is the only success.`;
   }
   if (revenue <= 0 && views >= 10 && checkouts === 0) {
-    return `Learned: ${views} view(s) arrived and none started checkout (friction=${input.world.shopper.primaryFriction}). Next hour attack conversion, not more empty traffic alone.`;
+    return `FAILING hour: ${views} view(s), $0 made (friction=${input.world.shopper.primaryFriction}). Traffic without sales is still failure. Next hour close — do not mint more vanity pages.`;
   }
   if (revenue <= 0 && checkouts > 0 && purchases === 0) {
-    return `Learned: ${checkouts} checkout(s) and $0. Demand is dying at payment. Next hour close checkout, don't celebrate the click.`;
+    return `FAILING hour: ${checkouts} checkout(s), $0 made. Payment is killing money. Close checkout — clicks are not success.`;
   }
   if (revenue <= 0) {
-    return "Learned: a $0 hour teaches what not to repeat. Next hour a different, harder, executable bet. Quitting is forbidden.";
+    return "FAILING hour: $0 made for the customer. That outcome is forbidden as a steady state. Different, harder, executable bet next hour until money prints.";
   }
-  return `Learned: $${revenue.toFixed(2)} / ${purchases} sale(s) last hour. Not enough. Compound what worked and test one new lever so the next hour is strictly better.`;
+  return `Money printed: $${revenue.toFixed(2)} / ${purchases} sale(s). Still not enough vs the north star. Compound what sold and beat $${(revenue + 0.01).toFixed(2)} next hour.`;
 }
 
 /**
@@ -94,10 +94,10 @@ export function buildHourPlan(input: {
 
   const confession =
     verdict === "zero_hour"
-      ? `ZERO HOUR. $${revenue.toFixed(2)} in the last 60 minutes is a stain, not a lull. We do not excuse it, baptize it as "brand building," wait, or quit. Repentance is overdrive + learning from that hour so the next one is not barren. Giving up is not an option.`
+      ? `ZERO HOUR = FAILING. $${revenue.toFixed(2)} made for the customer in 60 minutes. Sales are the only success; everything else is a tool. Do not excuse $0, call it brand building, wait, or quit. Overdrive + learn until money prints. Failure is not an option.`
       : verdict === "thin_hour"
-        ? `Thin hour: $${revenue.toFixed(2)} / ${purchases} sale(s). Better than empty, still not enough. Want more. Learn from it. Beat $${nextHourBarUsd.toFixed(2)} next hour.`
-        : `Hour produced $${revenue.toFixed(2)}. Do not coast — want better. Next hour bar is $${nextHourBarUsd.toFixed(2)}. A later $0 hour would still be failure.`;
+        ? `Thin hour: only $${revenue.toFixed(2)} / ${purchases} sale(s) made. Better than $0, still failing vs the bar. Want more money. Beat $${nextHourBarUsd.toFixed(2)} next hour.`
+        : `Hour made $${revenue.toFixed(2)} for the customer. Do not coast — more money. Next bar $${nextHourBarUsd.toFixed(2)}. A later $0 hour is failure.`;
 
   const moves: HourPlanMove[] = [];
   const seen = new Set<string>();
@@ -114,8 +114,8 @@ export function buildHourPlan(input: {
 
   if (overdrive && views < 10) {
     moves.unshift({
-      title: "Overdrive discovery: get strangers in the door this hour",
-      why: `${views} landing view(s) last hour. Without traffic there is no sale. IndexNow, high-intent pages, directories — all at once, no waiting, no quitting.`,
+      title: "Overdrive discovery: research the internet, publish, index",
+      why: `${views} landing view(s) last hour. Without traffic there is no sale. Run market research on the live web, publish an intent topic, IndexNow + sitemap ping — all at once. Do not rotate promos into silence.`,
     });
   } else if (overdrive && views >= 10 && purchases === 0) {
     moves.unshift({
@@ -146,7 +146,7 @@ export function buildHourPlan(input: {
   };
 }
 
-/** Every hour, including non-zero hours, becomes a durable lesson. */
+/** Every hour becomes a portable lesson so new businesses inherit the failure signal. */
 export function lessonFromHour(input: {
   siteId: string;
   industry: string;
@@ -155,20 +155,23 @@ export function lessonFromHour(input: {
 }): Lesson {
   const now = input.now ?? new Date();
   const zero = input.hourPlan.overdrive;
-  return {
-    id: newId("lesson"),
-    scope: "site",
+  return toPortableLesson({
     siteId: input.siteId,
     industry: input.industry,
-    patternKey: zero ? "zero-hour:overdrive" : `hour:${input.hourPlan.hourVerdict}`,
-    summary: `${input.hourPlan.learnedFromLastHour} Next-hour bar: $${input.hourPlan.nextHourBarUsd.toFixed(2)}. Never give up.`,
-    evidenceCount: 1,
-    transferable: true,
-    sentiment: zero ? "negative" : input.hourPlan.hourVerdict === "won_hour" ? "positive" : "neutral",
-    rankingWeight: zero ? 1.4 : 1.15,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-  };
+    now,
+    lesson: {
+      patternKey: zero ? "zero-hour:overdrive" : `hour:${input.hourPlan.hourVerdict}`,
+      summary: `${input.hourPlan.learnedFromLastHour} Next-hour bar: $${input.hourPlan.nextHourBarUsd.toFixed(2)}. Never give up.`,
+      evidenceCount: 1,
+      transferable: true,
+      sentiment: zero
+        ? "negative"
+        : input.hourPlan.hourVerdict === "won_hour"
+          ? "positive"
+          : "neutral",
+      rankingWeight: zero ? 1.4 : 1.15,
+    },
+  });
 }
 
 /** @deprecated use lessonFromHour — kept so existing imports still typecheck during rollout. */

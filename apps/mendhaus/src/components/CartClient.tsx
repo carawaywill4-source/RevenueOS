@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getProductMedia } from "@/catalog/media";
+import { KITS } from "@/catalog/kits";
 import { PRODUCTS, getProductById } from "@/catalog/products";
 import { useCart } from "@/components/CartProvider";
 import { FREE_SHIPPING_AT_USD } from "@/lib/brand";
@@ -12,7 +13,17 @@ import { checkoutAllowed } from "@/lib/readiness-public";
 import { getOrCreateSessionId, readAttributionCookie } from "@/lib/session";
 import { track } from "@/lib/track";
 
-export function CartClient() {
+type Props = {
+  unitPrices: Record<string, number>;
+  freeShippingAtUsd: number;
+  kitPromo?: { kitId: string; percentOff: number; label: string } | null;
+};
+
+export function CartClient({
+  unitPrices,
+  freeShippingAtUsd = FREE_SHIPPING_AT_USD,
+  kitPromo = null,
+}: Props) {
   const { lines, setQty, remove, clear } = useCart();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -23,7 +34,7 @@ export function CartClient() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("cancelled") === "1") setCancelled(true);
+    if (params.get("cancelled") === "1") queueMicrotask(() => setCancelled(true));
   }, []);
 
   useEffect(() => {
@@ -31,18 +42,35 @@ export function CartClient() {
   }, [lines.length]);
 
   const priced = useMemo(() => {
+    const cartProductIds = lines.map((line) => line.productId);
+    const kit = kitPromo ? KITS.find((candidate) => candidate.id === kitPromo.kitId) : null;
+    const kitComplete = Boolean(kit && kit.productIds.every((id) => cartProductIds.includes(id)));
     const resolved = lines
       .map((line) => {
         const product = getProductById(line.productId) ?? PRODUCTS.find((p) => p.id === line.productId);
-        return product ? { ...line, product } : null;
+        if (!product) return null;
+        return {
+          ...line,
+          product,
+          unitPriceUsd:
+            kitComplete && kit?.productIds.includes(product.id)
+              ? Number((product.priceUsd * (1 - kitPromo!.percentOff / 100)).toFixed(2))
+              : (unitPrices[product.id] ?? product.priceUsd),
+        };
       })
       .filter(Boolean) as Array<{
       productId: string;
       quantity: number;
       product: (typeof PRODUCTS)[number];
+      unitPriceUsd: number;
     }>;
-    return { resolved, quote: resolved.length ? quoteCart(resolved) : null };
-  }, [lines]);
+    return {
+      resolved,
+      quote: resolved.length
+        ? quoteCart(resolved, { freeShippingAtUsd })
+        : null,
+    };
+  }, [lines, unitPrices, freeShippingAtUsd, kitPromo]);
 
   async function checkout() {
     setBusy(true);
@@ -90,6 +118,7 @@ export function CartClient() {
       ) : null}
       {priced.resolved.map((line) => {
         const media = getProductMedia(line.product.id, line.product.category, line.product.name);
+        const onSale = line.unitPriceUsd < line.product.priceUsd;
         return (
           <div
             key={line.productId}
@@ -103,7 +132,14 @@ export function CartClient() {
                 <Link href={`/product/${line.product.slug}`} className="font-medium text-ink">
                   {line.product.name}
                 </Link>
-                <p className="text-sm text-ink/60">${line.product.priceUsd.toFixed(2)}</p>
+                <p className="text-sm text-ink/60">
+                  ${line.unitPriceUsd.toFixed(2)}
+                  {onSale ? (
+                    <span className="ml-2 text-ink/35 line-through">
+                      ${line.product.priceUsd.toFixed(2)}
+                    </span>
+                  ) : null}
+                </p>
                 <label className="mt-2 block text-xs text-ink/60">
                   Qty
                   <input
@@ -146,11 +182,18 @@ export function CartClient() {
             <dt>Total</dt>
             <dd>${priced.quote.grossRevenueUsd.toFixed(2)}</dd>
           </div>
-          {priced.quote.subtotalUsd < FREE_SHIPPING_AT_USD ? (
+          {priced.quote.subtotalUsd < freeShippingAtUsd ? (
             <p className="text-xs text-ink/60">
-              Add ${(FREE_SHIPPING_AT_USD - priced.quote.subtotalUsd).toFixed(2)} for free shipping.
+              Add ${(freeShippingAtUsd - priced.quote.subtotalUsd).toFixed(2)} for free shipping.
             </p>
           ) : null}
+          {kitPromo && (
+            <p className="pt-2 text-xs text-spruce">
+              {priced.resolved.some((line) => line.unitPriceUsd < line.product.priceUsd)
+                ? `${kitPromo.label} is applied to the complete kit.`
+                : `Add every item in the ${kitPromo.label} to unlock its kit price.`}
+            </p>
+          )}
         </dl>
       ) : null}
 

@@ -3,11 +3,13 @@ import { z } from "zod";
 import { getProductById } from "@/catalog/products";
 import { parseAttribution } from "@/lib/attribution";
 import { recordEvent } from "@/lib/events";
+import { effectiveCartUnitPrice, kitPromoAppliesToCart, loadMerchState } from "@/lib/merch";
+import { KITS } from "@/catalog/kits";
 import { quoteCart } from "@/lib/money";
 import { checkoutAllowed } from "@/lib/readiness";
 import { getStripe } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { getListingForProduct } from "@/lib/supplier-listings";
+import { getVerifiedListingForCheckout } from "@/lib/supplier-listings";
 
 const Body = z.object({
   items: z
@@ -46,20 +48,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid cart" }, { status: 400 });
   }
 
+  const merch = await loadMerchState();
+  const cartProductIds = parsed.data.items.map((item) => item.productId);
+  const qualifyingKitId = kitPromoAppliesToCart(merch.promo, cartProductIds)
+    ? merch.promo?.kitId
+    : undefined;
   let lines;
   try {
     lines = await Promise.all(
       parsed.data.items.map(async (item) => {
         const product = getProductById(item.productId);
         if (!product || !product.inStock) throw new Error("Unavailable product");
-        const listing = await getListingForProduct(product.id);
-        if (listing?.stock != null && listing.stock <= 0) throw new Error("Out of stock");
-        const cogsUsd = listing?.unitCostUsd ?? product.cogsUsd;
+        const { listing, reason } = await getVerifiedListingForCheckout(product.id);
+        if (!listing) throw new Error(reason ?? "Supplier inventory is unavailable");
+        const cogsUsd = listing.unitCostUsd!;
+        const unitPriceUsd = effectiveCartUnitPrice(product, merch.promo, cartProductIds);
         const priced = { ...product, cogsUsd };
-        const fee = Number((priced.priceUsd * 0.029 + 0.3).toFixed(2));
+        const fee = Number((unitPriceUsd * 0.029 + 0.3).toFixed(2));
         const profit = Number(
           (
-            priced.priceUsd -
+            unitPriceUsd -
             cogsUsd -
             priced.shippingCostUsd -
             priced.fulfillmentFeeUsd -
@@ -67,14 +75,17 @@ export async function POST(request: Request) {
           ).toFixed(2),
         );
         if (profit < product.minMarginUsd) throw new Error("Margin floor violated");
-        return { ...item, product: priced };
+        return { ...item, product: priced, unitPriceUsd };
       }),
     );
-  } catch {
-    return NextResponse.json({ error: "A product in the cart is unavailable" }, { status: 400 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: (error as Error).message || "A product in the cart is unavailable" },
+      { status: 400 },
+    );
   }
 
-  const quote = quoteCart(lines);
+  const quote = quoteCart(lines, { freeShippingAtUsd: merch.freeShippingAtUsd });
 
   const attribution = parseAttribution(JSON.stringify(parsed.data.attribution ?? {}));
   const supabase = getSupabaseAdmin();
@@ -98,8 +109,13 @@ export async function POST(request: Request) {
         slug: line.product.slug,
         name: line.product.name,
         quantity: line.quantity,
-        unitPriceUsd: line.product.priceUsd,
+        unitPriceUsd: line.unitPriceUsd,
         cogsUsd: line.product.cogsUsd,
+        kitId:
+          qualifyingKitId &&
+          KITS.find((kit) => kit.id === qualifyingKitId)?.productIds.includes(line.product.id)
+            ? qualifyingKitId
+            : undefined,
       })),
       subtotal_usd: quote.subtotalUsd,
       shipping_usd: quote.shippingUsd,
@@ -132,45 +148,57 @@ export async function POST(request: Request) {
   const stripe = getStripe();
   const taxEnabled = process.env.MENDHAUS_STRIPE_TAX === "1";
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    customer_email: parsed.data.email,
-    success_url: `${appUrl}/order/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appUrl}/cart?cancelled=1`,
-    metadata: {
-      order_id: order.id,
-      session_id: parsed.data.sessionId,
-      site_id: "mendhaus",
-      pattern_key: attribution?.patternKey ?? "",
-    },
-    shipping_address_collection: { allowed_countries: ["US"] },
-    line_items: [
-      ...lines.map((line) => ({
-        quantity: line.quantity,
-        price_data: {
-          currency: "usd",
-          unit_amount: Math.round(line.product.priceUsd * 100),
-          product_data: {
-            name: line.product.name,
-            description: line.product.tagline,
-          },
-        },
-      })),
-      ...(quote.shippingUsd > 0
-        ? [
-            {
-              quantity: 1,
-              price_data: {
-                currency: "usd" as const,
-                unit_amount: Math.round(quote.shippingUsd * 100),
-                product_data: { name: "Shipping" },
-              },
+  let session;
+  try {
+    session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer_email: parsed.data.email,
+      success_url: `${appUrl}/order/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/cart?cancelled=1`,
+      metadata: {
+        order_id: order.id,
+        session_id: parsed.data.sessionId,
+        site_id: "mendhaus",
+        pattern_key: attribution?.patternKey ?? "",
+        promo_id: merch.promo?.id ?? "",
+        kit_id: qualifyingKitId ?? "",
+        merch_updated_at: merch.updatedAt ?? "",
+      },
+      shipping_address_collection: { allowed_countries: ["US"] },
+      line_items: [
+        ...lines.map((line) => ({
+          quantity: line.quantity,
+          price_data: {
+            currency: "usd",
+            unit_amount: Math.round(line.unitPriceUsd * 100),
+            product_data: {
+              name: line.product.name,
+              description: line.product.tagline,
             },
-          ]
-        : []),
-    ],
-    ...(taxEnabled ? { automatic_tax: { enabled: true } } : {}),
-  });
+          },
+        })),
+        ...(quote.shippingUsd > 0
+          ? [
+              {
+                quantity: 1,
+                price_data: {
+                  currency: "usd" as const,
+                  unit_amount: Math.round(quote.shippingUsd * 100),
+                  product_data: { name: "Shipping" },
+                },
+              },
+            ]
+          : []),
+      ],
+      ...(taxEnabled ? { automatic_tax: { enabled: true } } : {}),
+    });
+  } catch (error) {
+    await supabase.from("mh_orders").update({ status: "cancelled" }).eq("id", order.id);
+    return NextResponse.json(
+      { error: `Could not start secure checkout: ${(error as Error).message}` },
+      { status: 502 },
+    );
+  }
 
   await supabase
     .from("mh_orders")

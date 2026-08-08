@@ -1,18 +1,23 @@
 import type { Metadata } from "next";
-import { Figtree, Fraunces } from "next/font/google";
+import { Outfit, Source_Serif_4 } from "next/font/google";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
+import { PromoBanner } from "@/components/PromoBanner";
 import { Providers } from "@/components/Providers";
 import { BRAND } from "@/lib/brand";
+import { loadMerchState } from "@/lib/merch";
 import "./globals.css";
 
-const figtree = Figtree({
-  variable: "--font-figtree",
+/** Merch / promo state must stay fresh for RevenueOS deals. */
+export const revalidate = 30;
+
+const outfit = Outfit({
+  variable: "--font-outfit",
   subsets: ["latin"],
 });
 
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
+const sourceSerif = Source_Serif_4({
+  variable: "--font-source",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
@@ -26,11 +31,11 @@ export const metadata: Metadata = {
     template: `%s | ${BRAND.name}`,
   },
   description:
-    "Small, useful products that fix annoying problems around the home. Honest shipping, clear returns, no fake reviews.",
+    "Problem kits and single fixes for kitchen, bathroom, desk, closet, and renters. Honest install notes, US shipping, no fake reviews.",
   openGraph: {
     title: `${BRAND.name} — ${BRAND.tagline}`,
     description:
-      "Organization, kitchen, bathroom, desk, and renter-friendly upgrades that actually solve something.",
+      "Curated home fixes sold as kits that clear a real annoyance — under the sink, in the shower, at the desk.",
     url: "/",
     siteName: BRAND.name,
     type: "website",
@@ -38,7 +43,8 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const merch = await loadMerchState();
   const jsonLd = [
     {
       "@context": "https://schema.org",
@@ -57,8 +63,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   ];
 
   return (
-    <html lang="en" className={`${figtree.variable} ${fraunces.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-background text-ink">
+    <html lang="en" className={`${outfit.variable} ${sourceSerif.variable} h-full antialiased`}>
+      <body className="flex min-h-full flex-col bg-background text-ink">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -66,6 +72,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
         <Providers>
+          <PromoBanner merch={merch} />
           <Header />
           <main className="flex-1">{children}</main>
           <Footer />

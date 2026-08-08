@@ -4,6 +4,7 @@ import { getOrCreateSessionId, readAttributionCookie } from "@/lib/session";
 import type { MhEventName } from "@/lib/events";
 
 type QueuedEvent = {
+  eventId: string;
   name: MhEventName;
   sessionId: string;
   productId?: string;
@@ -22,7 +23,12 @@ function readQueue(): QueuedEvent[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = sessionStorage.getItem(QUEUE_KEY);
-    return raw ? (JSON.parse(raw) as QueuedEvent[]) : [];
+    return raw
+      ? (JSON.parse(raw) as Array<Partial<QueuedEvent>>).map((event) => ({
+          ...event,
+          eventId: event.eventId ?? crypto.randomUUID(),
+        })) as QueuedEvent[]
+      : [];
   } catch {
     return [];
   }
@@ -91,6 +97,7 @@ export function track(
 ) {
   if (typeof window === "undefined") return;
   const event: QueuedEvent = {
+    eventId: crypto.randomUUID(),
     name,
     sessionId: getOrCreateSessionId(),
     productId: opts.productId,

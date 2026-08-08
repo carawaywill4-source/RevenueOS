@@ -1,9 +1,11 @@
 import type { MetadataRoute } from "next";
 import { CATEGORIES, PRODUCTS } from "@/catalog/products";
+import { listPublishedTopics } from "@/lib/discovery";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = (process.env.NEXT_PUBLIC_APP_URL || "https://mendhaus.shop").replace(/\/$/, "");
   const now = new Date();
+  const topics = await listPublishedTopics();
   return [
     { url: `${base}/`, lastModified: now },
     { url: `${base}/shop`, lastModified: now },
@@ -19,5 +21,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${base}/contact`, lastModified: now },
     ...CATEGORIES.map((slug) => ({ url: `${base}/category/${slug}`, lastModified: now })),
     ...PRODUCTS.map((p) => ({ url: `${base}/product/${p.slug}`, lastModified: now })),
+    ...topics.map((topic) => ({
+      url: `${base}/topics/${topic.slug}`,
+      lastModified: new Date(topic.publishedAt),
+    })),
   ];
 }

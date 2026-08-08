@@ -1,4 +1,4 @@
-import type { HourPulse } from "@tributeready/revenueos";
+import type { DiscoveryDoorMetrics, HourPulse } from "@tributeready/revenueos";
 import { PRODUCTS } from "@/catalog/products";
 import { MH_EVENTS } from "./events";
 import { supabaseConfigured, getSupabaseAdmin } from "./supabase";
@@ -9,16 +9,23 @@ export type FunnelCounts = Partial<Record<string, number>>;
 async function countEventsByName(sinceIso: string): Promise<FunnelCounts> {
   const sb = getSupabaseAdmin();
   const counts: FunnelCounts = {};
-  await Promise.all(
+  const results = await Promise.all(
     MH_EVENTS.map(async (name) => {
       const { count, error } = await sb
         .from("mh_events")
         .select("id", { count: "exact", head: true })
         .eq("event_name", name)
         .gte("created_at", sinceIso);
-      if (!error && count != null) counts[name] = count;
+      return { name, count, error };
     }),
   );
+  const failed = results.find((result) => result.error);
+  if (failed?.error) {
+    throw new Error(`Could not measure ${failed.name}: ${failed.error.message}`);
+  }
+  for (const result of results) {
+    if (result.count != null) counts[result.name] = result.count;
+  }
   return counts;
 }
 
@@ -109,7 +116,7 @@ export async function getWindowSnapshot(days: number): Promise<WindowSnapshot> {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   const sb = getSupabaseAdmin();
 
-  const [events, { data: orders }] = await Promise.all([
+  const [events, { data: orders, error: ordersError }] = await Promise.all([
     countEventsByName(since),
     sb
       .from("mh_orders")
@@ -118,6 +125,7 @@ export async function getWindowSnapshot(days: number): Promise<WindowSnapshot> {
       )
       .gte("created_at", since),
   ]);
+  if (ordersError) throw new Error(`Could not measure orders: ${ordersError.message}`);
 
   const snapshot = emptySnapshot(days);
   snapshot.events = events;
@@ -190,7 +198,7 @@ export async function getLastHourPulse(): Promise<HourPulse> {
   }
   const sb = getSupabaseAdmin();
   const since = start.toISOString();
-  const [eventCounts, { data: orders }] = await Promise.all([
+  const [eventCounts, { data: orders, error: ordersError }] = await Promise.all([
     countEventsByName(since),
     sb
       .from("mh_orders")
@@ -198,6 +206,7 @@ export async function getLastHourPulse(): Promise<HourPulse> {
       .gte("paid_at", since)
       .in("status", ["paid", "fulfilling", "shipped", "delivered"]),
   ]);
+  if (ordersError) throw new Error(`Could not measure hourly orders: ${ordersError.message}`);
   const purchases = (orders ?? []).length;
   const revenueUsd = (orders ?? []).reduce(
     (sum, row) => sum + (Number((row as { gross_revenue_usd: number }).gross_revenue_usd) || 0),
@@ -234,7 +243,10 @@ export async function buildMoneyPlan(days = 7): Promise<MoneyPlan> {
   const revenue = snap.orders.grossRevenueUsd;
   const aov = orders > 0 ? revenue / orders : 0;
   const refunds = snap.orders.refundsUsd;
-  const grossProfit = snap.orders.realizedProfitUsd || snap.orders.estimatedProfitUsd;
+  const grossProfit =
+    snap.orders.realizedProfitUsd !== 0
+      ? snap.orders.realizedProfitUsd
+      : snap.orders.estimatedProfitUsd;
   const net = grossProfit - refunds;
   const topProductId = topKey(snap.attribution.products);
   const topProduct = PRODUCTS.find((p) => p.id === topProductId);
@@ -271,4 +283,99 @@ export async function listJournal(limit = 40) {
     .order("created_at", { ascending: false })
     .limit(limit);
   return data ?? [];
+}
+
+/** On-site proxy metrics for one discovery door (topic slug). */
+export async function measureDiscoveryDoorMetrics(input: {
+  slug: string;
+  productIds: string[];
+  publishedAt: string;
+}): Promise<DiscoveryDoorMetrics> {
+  if (!supabaseConfigured()) {
+    return {
+      submitted: true,
+      topicViews: 0,
+      productViews: 0,
+      addToCarts: 0,
+      checkouts: 0,
+      purchases: 0,
+      revenueUsd: 0,
+      indexed: null,
+      impressions: null,
+      clicks: null,
+    };
+  }
+  const sb = getSupabaseAdmin();
+  const since = input.publishedAt;
+  const path = `/topics/${input.slug}`;
+
+  const [landing, pageViews, productViews, carts] = await Promise.all([
+    sb
+      .from("mh_events")
+      .select("id", { count: "exact", head: true })
+      .eq("event_name", "landing_view")
+      .gte("created_at", since)
+      .contains("metadata", { topic_slug: input.slug }),
+    sb
+      .from("mh_events")
+      .select("id", { count: "exact", head: true })
+      .eq("event_name", "page_view")
+      .gte("created_at", since)
+      .contains("metadata", { path }),
+    input.productIds.length
+      ? sb
+          .from("mh_events")
+          .select("id", { count: "exact", head: true })
+          .eq("event_name", "product_view")
+          .gte("created_at", since)
+          .in("product_id", input.productIds)
+      : Promise.resolve({ count: 0, error: null }),
+    input.productIds.length
+      ? sb
+          .from("mh_events")
+          .select("id", { count: "exact", head: true })
+          .eq("event_name", "add_to_cart")
+          .gte("created_at", since)
+          .in("product_id", input.productIds)
+      : Promise.resolve({ count: 0, error: null }),
+  ]);
+
+  let purchases = 0;
+  let revenueUsd = 0;
+  let checkouts = 0;
+  if (input.productIds.length) {
+    const { data: orders } = await sb
+      .from("mh_orders")
+      .select("items,gross_revenue_usd,status")
+      .gte("created_at", since)
+      .in("status", ["paid", "fulfilling", "shipped", "delivered"]);
+    for (const order of orders ?? []) {
+      const items = (order.items as Array<{ productId?: string }>) ?? [];
+      if (!items.some((item) => item.productId && input.productIds.includes(item.productId))) {
+        continue;
+      }
+      purchases += 1;
+      revenueUsd += Number(order.gross_revenue_usd ?? 0);
+    }
+    const { count } = await sb
+      .from("mh_events")
+      .select("id", { count: "exact", head: true })
+      .eq("event_name", "checkout_started")
+      .gte("created_at", since);
+    checkouts = count ?? 0;
+  }
+
+  const topicViews = Math.max(landing.count ?? 0, pageViews.count ?? 0);
+  return {
+    submitted: true,
+    topicViews,
+    productViews: productViews.count ?? 0,
+    addToCarts: carts.count ?? 0,
+    checkouts,
+    purchases,
+    revenueUsd: Number(revenueUsd.toFixed(2)),
+    indexed: null,
+    impressions: null,
+    clicks: null,
+  };
 }

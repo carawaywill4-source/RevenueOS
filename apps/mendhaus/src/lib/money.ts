@@ -6,19 +6,33 @@ export type CartLine = {
   quantity: number;
 };
 
+export type PricedCartLine = CartLine & {
+  product: Product;
+  /** Sale / promo unit price when set; otherwise catalog list price. */
+  unitPriceUsd?: number;
+};
+
 export function stripeFeeUsd(amountUsd: number) {
   return Number((amountUsd * STRIPE_PERCENT + STRIPE_FIXED_USD).toFixed(2));
 }
 
-export function shippingUsd(subtotalUsd: number) {
-  return subtotalUsd >= FREE_SHIPPING_AT_USD ? 0 : SHIPPING_FLAT_USD;
+export function shippingUsd(subtotalUsd: number, freeShippingAtUsd = FREE_SHIPPING_AT_USD) {
+  return subtotalUsd >= freeShippingAtUsd ? 0 : SHIPPING_FLAT_USD;
 }
 
-export function quoteCart(lines: Array<CartLine & { product: Product }>) {
+export function quoteCart(
+  lines: PricedCartLine[],
+  opts?: { freeShippingAtUsd?: number },
+) {
   const subtotal = Number(
-    lines.reduce((sum, line) => sum + line.product.priceUsd * line.quantity, 0).toFixed(2),
+    lines
+      .reduce(
+        (sum, line) => sum + (line.unitPriceUsd ?? line.product.priceUsd) * line.quantity,
+        0,
+      )
+      .toFixed(2),
   );
-  const shipping = shippingUsd(subtotal);
+  const shipping = shippingUsd(subtotal, opts?.freeShippingAtUsd ?? FREE_SHIPPING_AT_USD);
   const tax = 0; // Stripe Tax after owner registers — do not fake collection.
   const gross = Number((subtotal + shipping + tax).toFixed(2));
   const cogs = Number(

@@ -1,14 +1,21 @@
 import type {
   ActionResult,
   BusinessContext,
+  DiscoveryDoor,
+  DiscoveryDoorMetrics,
   MarketSignals,
+  MoneyPlan,
   Observation,
   Opportunity,
+  PlannerDecision,
   PrecursorMetric,
   SafeAction,
+  ShortfallReport,
 } from "../types";
 import type { SeedLesson } from "../ledger/seed";
 import type { ExperimentStore } from "../ledger/store";
+import type { ProfitMandate } from "../modules/profit-maximizer";
+import type { OrganicMasteryReport } from "../modules/organic-mastery";
 
 /**
  * Portable plug. Every site — TributeReady, Riley, any future customer —
@@ -41,4 +48,32 @@ export interface SiteAdapter {
 
   /** Optional site/industry lessons to seed the ledger on first run. */
   getSeedLessons?(): SeedLesson[] | Promise<SeedLesson[]>;
+
+  /**
+   * Optional bounded AI planner supplied by the host app. The shared executor
+   * validates every selected id against the opportunities it already produced.
+   */
+  planDecision?(input: {
+    observation: Observation;
+    opportunities: Opportunity[];
+    safeActions: SafeAction[];
+    shortfall?: ShortfallReport;
+    moneyPlan?: MoneyPlan;
+    profitMandate?: ProfitMandate;
+    organicMastery?: OrganicMasteryReport;
+  }): Promise<PlannerDecision>;
+
+  /** Published discovery doors under governor control. */
+  listDiscoveryDoors?(): Promise<DiscoveryDoor[]>;
+
+  /** Measure on-site (and optional search) metrics for one door. */
+  measureDiscoveryDoor?(door: DiscoveryDoor): Promise<DiscoveryDoorMetrics>;
+
+  /** Explicitly declare limbs the site cannot execute yet. */
+  listUnavailableCapabilities?(): Promise<
+    Array<{ capability: string; reason: string }>
+  >;
+
+  /** Retire a killed discovery door so it stops receiving investment. */
+  retireDiscoveryDoor?(doorId: string, reason: string): Promise<ActionResult>;
 }

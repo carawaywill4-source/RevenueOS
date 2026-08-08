@@ -14,10 +14,10 @@ import { dayVerdict } from "../intelligence/shortfall";
 import { hourVerdictOf, isZeroHour } from "../intelligence/hour";
 
 /**
- * Competitive drive aimed at a $10,000 contribution-profit day. Matching or
- * slightly beating the prior record is failure while under the north star.
- * Every lost day raises aggression and learning pressure. After crushing
- * $10k/day, the bar stretches again so the brain never coasts.
+ * Competitive drive aimed at money made for the customer.
+ * Matching the prior record while under $10k/day is still failure.
+ * $0 is failing software. Learning and aggression exist to end that failure —
+ * never to make peace with it. After crushing $10k/day, stretch again.
  */
 
 export function buildAmbition(input: {
@@ -111,22 +111,22 @@ export function buildAmbition(input: {
     : "";
 
   const zeroHourClause = overdrive
-    ? " ZERO HOUR: last 60 minutes printed $0. That is failure. Overdrive until the next hour is not empty."
+    ? " ZERO HOUR: $0 last 60 minutes = failing hour. Money made is the only success. Overdrive until cash prints."
     : "";
 
   let verdict: string;
   if (verdictDay === "won_day" && onPace) {
-    verdict = `NORTH STAR DAY: $${current.toFixed(0)} ≥ $${northStar.toLocaleString()}. Bar resets — next target $${targetProfitUsd.toFixed(0)}. Keep pressing.${hardSellClause}${zeroHourClause}`;
+    verdict = `SUCCESS: $${current.toFixed(0)} ≥ $${northStar.toLocaleString()} contribution profit made for the customer. Bar resets → $${targetProfitUsd.toFixed(0)}. Keep pressing.${hardSellClause}${zeroHourClause}`;
   } else if (usedNorthStar) {
     const milestone =
       current <= 0
-        ? `First sale (~$${(input.unitEconomics?.contributionMarginUsd ?? 1).toFixed(2)} margin) is only the first milestone on the path to $${northStar.toLocaleString()}/day.`
+        ? `FAILING SOFTWARE: $0 made. First sale (~$${(input.unitEconomics?.contributionMarginUsd ?? 1).toFixed(2)} margin) is the minimum escape — then compound to $${northStar.toLocaleString()}/day. Failure is not an option.`
         : path
           ? path.note
-          : `Need the machine that produces $${northStar.toLocaleString()} contribution profit in a day.`;
-    verdict = `LOST DAY vs $${northStar.toLocaleString()} north star. Current $${current.toFixed(2)} — shortfall $${shortfallUsd.toFixed(0)}. Matching the old record ($${recordProfit.toFixed(2)}) is still failure. ${milestone} Firing ${concurrentBets} bet(s). Giving up is not an option — learn from the last hour and want better.${hardSellClause}${zeroHourClause}`;
+          : `Still failing vs $${northStar.toLocaleString()}/day until the money machine compounds.`;
+    verdict = `FAILING vs $${northStar.toLocaleString()} north star. Only $${current.toFixed(2)} made — shortfall $${shortfallUsd.toFixed(0)}. Matching the old record ($${recordProfit.toFixed(2)}) is still failure. Sales = success; everything else is a tool. ${milestone} Firing ${concurrentBets} bet(s). Hate this gap — learn and hunt until money prints.${hardSellClause}${zeroHourClause}`;
   } else {
-    verdict = `Under stretch target $${targetProfitUsd.toFixed(0)} (north star already cleared once). Currently $${current.toFixed(2)}, gap $${gapToTargetUsd.toFixed(2)}. Firing ${concurrentBets} bet(s).${hardSellClause}${zeroHourClause} Not satisfied.`;
+    verdict = `Under stretch $${targetProfitUsd.toFixed(0)} after clearing north star once. Currently $${current.toFixed(2)}, gap $${gapToTargetUsd.toFixed(2)}. Firing ${concurrentBets} bet(s).${hardSellClause}${zeroHourClause} Not satisfied — more money.`;
   }
 
   return {

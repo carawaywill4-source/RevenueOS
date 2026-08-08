@@ -122,6 +122,57 @@ export function formatCycleReport(
         `  ${i + 1}. ${move.title}${move.ownerGated ? " (owner)" : ""} — ${move.why}`,
     ),
     "",
+    "SUCCESS CRITERION (money made for the customer)",
+    result.profitMandate?.successDeclaration ??
+      "SUCCESS = money made for the customer. Everything else is a tool. Failure is not an option.",
+    "",
+    "ORGANIC MASTERY ERA (business manager — ads locked until lethal)",
+    result.organicMastery
+      ? [
+          result.organicMastery.verdict,
+          result.organicMastery.mission,
+          `Ads readiness: ${result.organicMastery.adsReadiness}`,
+          ...(result.organicMastery.gaps.length
+            ? [`Gaps: ${result.organicMastery.gaps.join("; ")}`]
+            : []),
+          ...(result.organicMastery.drills.length
+            ? [
+                "Mastery drills:",
+                ...result.organicMastery.drills.map((d, i) => `  ${i + 1}. ${d}`),
+              ]
+            : []),
+        ].join("\n")
+      : "Organic mastery unscored.",
+    "",
+    "PORTABLE MEMORY (survives new business attach)",
+    (() => {
+      const portable = lessons.filter(
+        (l) => l.scope === "global" || l.scope === "industry",
+      );
+      return portable.length
+        ? `${portable.length} transferable lesson(s) in this cycle's view (industry/global). New sites inherit these — learning does not reset.`
+        : "No industry/global lessons in view yet — next cycles will promote transferable learning.";
+    })(),
+    ...lessons
+      .filter((l) => l.scope === "global" || l.scope === "industry")
+      .slice(0, 5)
+      .map(
+        (l) =>
+          `  · [${l.scope}] ${l.patternKey} ×${l.evidenceCount}${l.originSiteIds?.length ? ` (from ${l.originSiteIds.length} site(s))` : ""}`,
+      ),
+    "",
+    "PROFIT MANDATE (tools in service of sales)",
+    result.profitMandate
+      ? [
+          `Focus: ${result.profitMandate.focus.toUpperCase()} · failurePressure ${result.profitMandate.failurePressure}`,
+          result.profitMandate.order,
+          result.profitMandate.why,
+          `Need ~${result.profitMandate.ordersNeeded} orders/day @ $${result.profitMandate.contributionMarginUsd.toFixed(2)} margin · ~${result.profitMandate.visitorsNeeded} buyable visitors · shortfall $${result.profitMandate.shortfallUsd.toFixed(0)} (${(result.profitMandate.pctOfNorthStar * 100).toFixed(2)}% of $${result.profitMandate.northStarDailyProfitUsd.toLocaleString()})`,
+          `Falsifier: ${result.profitMandate.falsifier}`,
+          `Heartbeats this cycle: ${result.profitMandate.heartbeatActionTypes.join(", ")}`,
+        ].join("\n")
+      : "Profit mandate unavailable.",
+    "",
     "NORTH STAR ($10k day)",
     shortfall.learningImperative,
     `Day verdict: ${shortfall.dayVerdict} · current $${shortfall.currentProfitUsd.toFixed(2)} · shortfall $${shortfall.shortfallUsd.toFixed(0)} · ${(shortfall.pctOfNorthStar * 100).toFixed(2)}% of $${shortfall.northStarDailyProfitUsd.toLocaleString()}`,
@@ -240,6 +291,44 @@ export function formatCycleReport(
     "",
     ...(scorecard.diagnosis
       ? ["DIAGNOSIS (stuck — changing approach)", scorecard.diagnosis, ""]
+      : []),
+    ...(result.plannerDecision
+      ? [
+          "PLANNER DECISION",
+          `Source: ${result.plannerDecision.source}${result.plannerDecision.fallbackReason ? ` (fallback: ${result.plannerDecision.fallbackReason})` : ""}`,
+          result.plannerDecision.rationale,
+          ...(result.plannerDecision.evidence.length
+            ? [`Evidence: ${result.plannerDecision.evidence.join(" · ")}`]
+            : []),
+          result.plannerDecision.selectedOpportunityIds.length
+            ? `Selected: ${result.plannerDecision.selectedOpportunityIds.join(", ")}`
+            : "Selected: (deterministic ranking)",
+          `Falsifier: ${result.plannerDecision.falsifier}`,
+          "",
+        ]
+      : []),
+    ...(result.governorDecisions?.length || result.publishAllowed === false
+      ? [
+          "DISCOVERY GOVERNOR",
+          result.publishAllowed === false
+            ? "Publish gated — measure existing doors before minting more content."
+            : "Publish capacity available.",
+          ...(result.governorDecisions ?? []).slice(0, 6).map(
+            (d) =>
+              `- ${d.verdict.toUpperCase()} [${d.stage}] ${d.clusterKey}: ${d.reason}`,
+          ),
+          "",
+        ]
+      : []),
+    ...(result.capabilityGaps?.length
+      ? [
+          "CAPABILITY GAPS (limbs RevenueOS still needs)",
+          ...result.capabilityGaps.slice(0, 6).map(
+            (g) =>
+              `- ${g.missingCapability} ×${g.timesBlocked} (${g.importance}) — ${g.desiredAction.slice(0, 120)}`,
+          ),
+          "",
+        ]
       : []),
     "NEXT ACTION",
     scorecard.nextAction,

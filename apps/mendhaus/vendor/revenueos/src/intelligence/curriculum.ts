@@ -8,9 +8,9 @@ import type {
 } from "../types";
 
 /**
- * Active learning curriculum: given how far we are from a $10k day, decide what
- * information would most reduce the shortfall if learned next. This keeps the
- * brain adjusting instead of randomly thrashing or obsessing one lever.
+ * Active learning curriculum under the organic mastery era.
+ * RevenueOS is the sole business manager. Until organic leads→sales is mastered,
+ * the curriculum refuses to "wait for ads" and drills organic excellence.
  */
 
 export function buildCurriculum(input: {
@@ -25,7 +25,7 @@ export function buildCurriculum(input: {
     return make(
       "operations",
       "Prove fulfillment is reliable on paid orders",
-      "Cannot scale to a $10k day on a broken delivery promise.",
+      "Cannot master organic growth on a broken delivery promise.",
       "Fulfillment failure rate and refund precursors",
     );
   }
@@ -33,8 +33,8 @@ export function buildCurriculum(input: {
   if (regime.regime === "decline") {
     return make(
       "conversion",
-      "Diagnose what broke in the money funnel",
-      "Decline regime — learn the regression cause before pouring more traffic.",
+      "Diagnose what broke in the organic money funnel",
+      "Decline — learn the regression before pouring more organic traffic.",
       "Which step's drop-off widened vs. the prior winning window",
     );
   }
@@ -42,9 +42,9 @@ export function buildCurriculum(input: {
   if (observation.bottleneck.level >= 4 || observation.funnel.landingViews < 30) {
     return make(
       "acquisition",
-      "Find the first repeatable qualified-traffic channel",
-      `$${shortfall.shortfallUsd.toFixed(0)} shortfall is mostly empty top-of-funnel. Learn which persona×channel actually arrives.`,
-      "Arrival rate and intent quality by channel/persona arm",
+      "Master organic qualified demand (buyable queries → indexed doors)",
+      `Organic era: $${shortfall.shortfallUsd.toFixed(0)} shortfall with empty top-of-funnel. Ads locked until organic leads work. Learn which intent clusters arrive and can buy.`,
+      "Organic arrival rate + intent quality by query cluster / door",
     );
   }
 
@@ -56,17 +56,17 @@ export function buildCurriculum(input: {
   ) {
     return make(
       "conversion",
-      `Remove ${world.shopper.primaryFriction} friction on existing traffic`,
-      "Traffic without closes cannot compound to a $10k day. Learn which message/offer/trust fix converts.",
-      "Visitor→purchase lift by messaging angle and friction hypothesis",
+      `Master organic close: remove ${world.shopper.primaryFriction} friction`,
+      "Organic leads without sales is not mastery — it is failure. Learn which message/offer/trust fix converts strangers who already arrived.",
+      "Organic visitor→purchase lift by messaging angle and friction hypothesis",
     );
   }
 
   if (observation.bottleneck.level === 2) {
     return make(
       "conversion",
-      "Close checkout drop-off",
-      "Demand is arriving but dying at payment — learn the checkout fix.",
+      "Master checkout close on organic demand",
+      "Organic demand dies at payment — learn the checkout fix before scaling doors or dreaming of ads.",
       "Checkout start→purchase conversion under alternate checkout copy/price framing",
     );
   }
@@ -74,17 +74,17 @@ export function buildCurriculum(input: {
   if (shortfall.pctOfNorthStar < 0.1) {
     return make(
       "acquisition",
-      "Scale the winning acquisition arm aggressively",
-      "Selling exists but volume is tiny vs. $10k. Learn how far the best channel can scale before diminishing returns.",
-      "Marginal orders per incremental discovery action on the top arm",
+      "Scale winning organic arms to mastery volume",
+      "Selling exists but far from $10k. Compound only expand-verdict organic clusters — mastery is volume with close rate intact.",
+      "Marginal orders per organic discovery action on the top converting cluster",
     );
   }
 
   return make(
     "pricing",
-    "Raise contribution per order without killing conversion",
-    "Approaching meaningful volume — learn whether margin/packaging expands the day faster than more traffic.",
-    "Contribution profit per visitor under alternate offer structures",
+    "Raise contribution per organic order without killing conversion",
+    "Organic volume meaningful — learn whether margin/packaging expands the day faster than more doors.",
+    "Contribution profit per organic visitor under alternate offer structures",
   );
 }
 

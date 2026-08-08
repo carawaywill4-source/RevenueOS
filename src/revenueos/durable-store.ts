@@ -1,9 +1,14 @@
 import {
   createFileExperimentStore,
   type Attribution,
+  type CapabilityGap,
+  type CycleReportRecord,
+  type DiscoveryDoor,
   type Experiment,
   type ExperimentStore,
+  type ExposureRecord,
   type Lesson,
+  type PlannerRunRecord,
   type Scorecard,
 } from "@tributeready/revenueos";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
@@ -59,7 +64,14 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         .eq("site_id", siteId)
         .order("created_at", { ascending: false });
       if (error) return fallback.listExperiments(siteId);
-      return (data ?? []).map((row) => row.document as Experiment);
+      return (data ?? [])
+        .map((row) => row.document as Experiment)
+        .filter(
+          (exp) =>
+            exp &&
+            exp.hypothesis?.patternKey != null &&
+            !String(exp.id).startsWith("hourly-email:"),
+        );
     },
 
     async getExperiment(id) {
@@ -108,6 +120,23 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
           return false;
         })
         .map((row) => row.document as Lesson);
+    },
+
+    async listAllLessons() {
+      if (!(await supabaseAvailable())) {
+        return fallback.listAllLessons
+          ? fallback.listAllLessons()
+          : fallback.listLessons({ siteId: "" });
+      }
+      const { data, error } = await sb()
+        .from("revenueos_lessons")
+        .select("document");
+      if (error) {
+        return fallback.listAllLessons
+          ? fallback.listAllLessons()
+          : [];
+      }
+      return (data ?? []).map((row) => row.document as Lesson);
     },
 
     async saveLesson(lesson: Lesson) {
@@ -172,6 +201,135 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         .eq("site_id", siteId);
       if (error) return fallback.listAttributions(siteId);
       return (data ?? []).map((row) => row.document as Attribution);
+    },
+
+    async listPlannerRuns(siteId, limit = 48) {
+      if (!(await supabaseAvailable())) return fallback.listPlannerRuns!(siteId, limit);
+      const { data, error } = await sb()
+        .from("revenueos_planner_runs")
+        .select("document")
+        .eq("site_id", siteId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (error) return fallback.listPlannerRuns!(siteId, limit);
+      return (data ?? []).map((row) => row.document as PlannerRunRecord);
+    },
+
+    async savePlannerRun(record: PlannerRunRecord) {
+      if (!(await supabaseAvailable())) return fallback.savePlannerRun!(record);
+      const { error } = await sb().from("revenueos_planner_runs").upsert({
+        id: record.id,
+        site_id: record.siteId,
+        source: record.source,
+        policy_rejected: record.policyRejected,
+        document: record,
+      });
+      if (error) return fallback.savePlannerRun!(record);
+    },
+
+    async listCycleReports(siteId, limit = 30) {
+      if (!(await supabaseAvailable())) return fallback.listCycleReports!(siteId, limit);
+      const { data, error } = await sb()
+        .from("revenueos_cycle_reports")
+        .select("document")
+        .eq("site_id", siteId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (error) return fallback.listCycleReports!(siteId, limit);
+      return (data ?? []).map((row) => row.document as CycleReportRecord);
+    },
+
+    async saveCycleReport(record: CycleReportRecord) {
+      if (!(await supabaseAvailable())) return fallback.saveCycleReport!(record);
+      const { error } = await sb().from("revenueos_cycle_reports").upsert({
+        id: record.id,
+        site_id: record.siteId,
+        observed_at: record.observedAt,
+        planner_source: record.plannerSource ?? null,
+        document: record,
+      });
+      if (error) return fallback.saveCycleReport!(record);
+    },
+
+    async listExposures(siteId, limit = 100) {
+      if (!(await supabaseAvailable())) return fallback.listExposures!(siteId, limit);
+      const { data, error } = await sb()
+        .from("revenueos_exposures")
+        .select("document")
+        .eq("site_id", siteId)
+        .order("started_at", { ascending: false })
+        .limit(limit);
+      if (error) return fallback.listExposures!(siteId, limit);
+      return (data ?? []).map((row) => row.document as ExposureRecord);
+    },
+
+    async saveExposure(record: ExposureRecord) {
+      if (!(await supabaseAvailable())) return fallback.saveExposure!(record);
+      const { error } = await sb().from("revenueos_exposures").upsert({
+        id: record.id,
+        site_id: record.siteId,
+        experiment_id: record.experimentId ?? null,
+        action_type: record.actionType,
+        exposure_key: record.exposureKey,
+        version: record.version,
+        started_at: record.startedAt,
+        ended_at: record.endedAt ?? null,
+        document: record,
+      });
+      if (error) return fallback.saveExposure!(record);
+    },
+
+    async listDiscoveryDoors(siteId) {
+      if (!(await supabaseAvailable())) return fallback.listDiscoveryDoors!(siteId);
+      const { data, error } = await sb()
+        .from("revenueos_discovery_doors")
+        .select("document")
+        .eq("site_id", siteId)
+        .order("published_at", { ascending: false });
+      if (error) return fallback.listDiscoveryDoors!(siteId);
+      return (data ?? []).map((row) => row.document as DiscoveryDoor);
+    },
+
+    async saveDiscoveryDoor(door: DiscoveryDoor) {
+      if (!(await supabaseAvailable())) return fallback.saveDiscoveryDoor!(door);
+      const { error } = await sb().from("revenueos_discovery_doors").upsert({
+        id: door.id,
+        site_id: door.siteId,
+        cluster_key: door.clusterKey,
+        status: door.status,
+        published_at: door.publishedAt,
+        document: door,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) return fallback.saveDiscoveryDoor!(door);
+    },
+
+    async listCapabilityGaps(siteId) {
+      if (!(await supabaseAvailable())) return fallback.listCapabilityGaps!(siteId);
+      let query = sb().from("revenueos_capability_gaps").select("document");
+      if (siteId) query = query.eq("site_id", siteId);
+      const { data, error } = await query.order("last_seen_at", { ascending: false });
+      if (error) return fallback.listCapabilityGaps!(siteId);
+      return (data ?? []).map((row) => row.document as CapabilityGap);
+    },
+
+    async saveCapabilityGap(gap: CapabilityGap) {
+      if (!(await supabaseAvailable())) return fallback.saveCapabilityGap!(gap);
+      const { error } = await sb().from("revenueos_capability_gaps").upsert(
+        {
+          id: gap.id,
+          site_id: gap.siteId,
+          missing_capability: gap.missingCapability,
+          desired_action: gap.desiredAction,
+          importance: gap.importance,
+          times_blocked: gap.timesBlocked,
+          document: gap,
+          first_seen_at: gap.firstSeenAt,
+          last_seen_at: gap.lastSeenAt,
+        },
+        { onConflict: "site_id,missing_capability,desired_action" },
+      );
+      if (error) return fallback.saveCapabilityGap!(gap);
     },
   };
 }

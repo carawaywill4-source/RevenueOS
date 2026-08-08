@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
 import { z } from "zod";
 import { BRAND } from "@/lib/brand";
+import { sendMendhausEmail, resendConfigured } from "@/lib/mail";
 import { getSupabaseAdmin, supabaseConfigured } from "@/lib/supabase";
 
 const Body = z.object({
@@ -65,11 +65,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL && order.email) {
-    const resend = new Resend(process.env.RESEND_API_KEY);
+  if (resendConfigured() && order.email) {
     const items = (order.items as Array<{ name: string; quantity: number }>) ?? [];
-    await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL,
+    await sendMendhausEmail({
       to: order.email,
       subject: `Your Mendhaus order shipped`,
       text: [

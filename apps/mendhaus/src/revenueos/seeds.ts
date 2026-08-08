@@ -6,6 +6,30 @@ import type { SeedLesson } from "@tributeready/revenueos";
  */
 export const MENDHAUS_SEED_LESSONS: SeedLesson[] = [
   {
+    id: "mh_10k_day_attack",
+    scope: "site",
+    siteId: "mendhaus",
+    patternKey: "objective:10k-day",
+    summary:
+      "Primary attack target: $10,000/day gross revenue. Prefer kit merchandising (Kitchen Reset, Renter Bath, Desk Day, Entry Clear) that lands AOV in the $100–$165 band. Organic SEO, Pinterest, and problem-page content are the acquisition engines. Never buy ads without owner approval.",
+    evidenceCount: 1,
+    transferable: false,
+    sentiment: "positive",
+    rankingWeight: 1.4,
+  },
+  {
+    id: "mh_kit_aov",
+    scope: "site",
+    siteId: "mendhaus",
+    patternKey: "conversion:kit-aov",
+    summary:
+      "Single $20 SKUs cannot carry a $10k/day store without impossible traffic. Push kits and free-shipping threshold ($79) so each converted visitor is worth the acquisition effort.",
+    evidenceCount: 1,
+    transferable: false,
+    sentiment: "positive",
+    rankingWeight: 1.25,
+  },
+  {
     id: "mh_profit_not_popularity",
     scope: "site",
     siteId: "mendhaus",
@@ -29,6 +53,19 @@ export const MENDHAUS_SEED_LESSONS: SeedLesson[] = [
     sentiment: "positive",
     rankingWeight: 1.25,
   },
+  {
+    id: "mh_empty_hour_internet",
+    scope: "site",
+    siteId: "mendhaus",
+    patternKey: "discovery-attack",
+    summary:
+      "A near-zero view hour is discovery failure. Do not rotate promos into silence. Research the live internet, publish a new intent topic, IndexNow it, and ping sitemaps before any merchandising experiment.",
+    evidenceCount: 1,
+    transferable: true,
+    sentiment: "negative",
+    rankingWeight: 1.45,
+  },
+
   {
     id: "mh_us_warehouse_first",
     scope: "industry",
@@ -98,5 +135,17 @@ export const MENDHAUS_SEED_LESSONS: SeedLesson[] = [
     transferable: false,
     sentiment: "neutral",
     rankingWeight: 1.0,
+  },
+  {
+    id: "mh_merch_margin_safe",
+    scope: "site",
+    siteId: "mendhaus",
+    patternKey: "merch:optimize-heartbeat",
+    summary:
+      "Autonomous merchandising may run kit/site deals, rotate homepage focus, and tune free-shipping ($49–$99). Never fake scarcity. Never discount below minMarginUsd / confirmed COGS. Prefer kit AOV $100–$165.",
+    evidenceCount: 1,
+    transferable: true,
+    sentiment: "positive",
+    rankingWeight: 1.2,
   },
 ];

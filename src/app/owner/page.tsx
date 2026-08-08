@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { timingSafeEqual } from "node:crypto";
+import { summarizeCapabilityGaps } from "@tributeready/revenueos";
 import {
   buildGrowthSnapshot,
   formatExecutiveReport,
   type GrowthSnapshot,
 } from "@/lib/growthos";
+import { createTributeReadyAdapter } from "@/revenueos/adapter";
 
 export const metadata: Metadata = {
   title: "Owner dashboard",
@@ -72,6 +74,12 @@ export default async function OwnerPage({
 
   const snapshot = await buildGrowthSnapshot();
   const report = formatExecutiveReport(snapshot);
+  const adapter = createTributeReadyAdapter();
+  const store = adapter.getExperimentStore();
+  const capabilityGaps = store?.listCapabilityGaps
+    ? await store.listCapabilityGaps(adapter.id)
+    : [];
+  const gapSummary = summarizeCapabilityGaps(capabilityGaps);
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-12 text-stone-800">
@@ -109,6 +117,41 @@ export default async function OwnerPage({
           </p>
         </section>
       </div>
+
+      <section className="mt-6 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+        <h2 className="text-sm font-semibold tracking-wide text-stone-500 uppercase">
+          Capability gaps
+        </h2>
+        <p className="mt-2 text-sm text-stone-600">
+          High-EV moves blocked by missing limbs (GSC, discovery publish,
+          outreach). Training signal for the next RevenueOS capabilities.
+        </p>
+        {gapSummary.length === 0 ? (
+          <p className="mt-4 text-sm text-stone-500">
+            No persisted gaps yet — they appear after cycles block high-EV
+            plays.
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-3 text-sm">
+            {gapSummary.map((gap) => (
+              <li
+                key={gap.missingCapability}
+                className="border-b border-stone-100 pb-3 last:border-0"
+              >
+                <div className="font-medium text-stone-900">
+                  {gap.missingCapability.replace(/_/g, " ")} ·{" "}
+                  {gap.importance.toUpperCase()}
+                </div>
+                <p className="mt-1 text-stone-600">
+                  Blocked {gap.timesBlocked}× · EV pressure $
+                  {gap.expectedValueUsd.toFixed(0)}
+                </p>
+                <p className="mt-1 text-xs text-stone-500">{gap.recommendation}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {snapshot.cycle ? (
         <section className="mt-6 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">

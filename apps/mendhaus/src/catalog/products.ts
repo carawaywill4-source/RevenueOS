@@ -141,21 +141,6 @@ function spocketUs(partial: {
   };
 }
 
-function cjChina(partial: {
-  skuHint: string;
-  notes: string;
-}): Supplier {
-  return {
-    network: "cj_china",
-    skuHint: partial.skuHint,
-    etaDaysMin: 9,
-    etaDaysMax: 14,
-    shipsTo: [...US_ONLY],
-    notes: `${partial.notes} Ships from China: expect 9–14 days, not 3–7. Label transit time honestly on the product page.`,
-    ownerAction: OWNER_ACTION,
-  };
-}
-
 export const PRODUCTS: Product[] = [
   defineProduct({
     id: "mh-under-sink-caddy",
@@ -167,7 +152,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "A two-tier sliding caddy that lifts supplies off the floor, with a removable drip tray you can wipe. Measure your cabinet opening before ordering; this is not a one-size cabinet.",
     category: "kitchen",
-    priceUsd: 39,
+    priceUsd: 48,
     compareAtUsd: 48,
     cogsUsd: 9.7,
     shippingCostUsd: 5.4,
@@ -224,7 +209,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "A roll-up rack that sits across a standard sink, drains into the basin, and rolls up when you need the counter. Confirm your sink width; it will not span a farmhouse apron or an extra-wide double sink.",
     category: "kitchen",
-    priceUsd: 34,
+    priceUsd: 42,
     cogsUsd: 2.92,
     shippingCostUsd: 5.1,
     fulfillmentFeeUsd: 3.0,
@@ -447,7 +432,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "A spring-tension pole caddy that wedges between tub/floor and ceiling. Stability depends on a level ceiling, the right height range, and not overloading the top shelf. Check your lease before installing anything that presses on ceiling texture.",
     category: "bathroom",
-    priceUsd: 58,
+    priceUsd: 68,
     compareAtUsd: 69,
     cogsUsd: 8.8,
     shippingCostUsd: 7.8,
@@ -560,7 +545,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "An automatic foam soap dispenser for the bathroom or kitchen sink. Fill it with liquid soap according to the reservoir marks — overfilling makes a mess. Needs batteries or USB power depending on the unit; check the listing.",
     category: "bathroom",
-    priceUsd: 32,
+    priceUsd: 36,
     cogsUsd: 10.28,
     shippingCostUsd: 5.1,
     fulfillmentFeeUsd: 2.9,
@@ -601,7 +586,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "A freestanding stand with a spindle and a small shelf for spares. It sits on the floor; it will tip if you yank the roll sideways like a wall holder. Place it where it cannot be kicked in a tiny bathroom.",
     category: "bathroom",
-    priceUsd: 36,
+    priceUsd: 42,
     cogsUsd: 2.28,
     shippingCostUsd: 6.4,
     fulfillmentFeeUsd: 3.4,
@@ -754,7 +739,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "A blackout liner meant to hang from a tension or existing curtain rod behind the decorative curtain. It reduces light; it will not make a room pitch-black if light leaks around the frame. No adhesive on glass.",
     category: "bedroom",
-    priceUsd: 32,
+    priceUsd: 36,
     compareAtUsd: 40,
     cogsUsd: 3.19,
     shippingCostUsd: 4.9,
@@ -908,7 +893,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "A hanging organizer with fabric cubbies that slips over the closet rod. It steals some hanging width. It will sag if you load it with jeans and boots; it is for sweaters, tees, and light accessories.",
     category: "closet",
-    priceUsd: 38,
+    priceUsd: 44,
     compareAtUsd: 46,
     cogsUsd: 1.67,
     shippingCostUsd: 6.2,
@@ -965,7 +950,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "A rigid aluminum riser that lifts a notebook a few inches and leaves space for a keyboard. Check weight rating vs your machine. This is not an ergonomic medical device and will not fix neck pain by itself.",
     category: "desk",
-    priceUsd: 44,
+    priceUsd: 54,
     compareAtUsd: 55,
     cogsUsd: 11.02,
     shippingCostUsd: 5.6,
@@ -1022,7 +1007,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "A wood or wood-look stand with a shallow drawer that raises a monitor and hides small supplies. Confirm width vs your monitor feet and the weight rating. Not for ultra-wide monitors that overhang badly.",
     category: "desk",
-    priceUsd: 54,
+    priceUsd: 64,
     compareAtUsd: 68,
     cogsUsd: 17.35,
     shippingCostUsd: 8.4,
@@ -1232,7 +1217,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "A three-pack of rechargeable puck lights with adhesive or magnetic mounts. Battery life depends on brightness and how often you use them. They are task lights, not a room's only illumination.",
     category: "lighting",
-    priceUsd: 36,
+    priceUsd: 42,
     cogsUsd: 2.69,
     shippingCostUsd: 4.2,
     fulfillmentFeeUsd: 2.6,
@@ -1400,7 +1385,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "A rubber-bristle broom plus dustpan that gathers hair on hard floors. It is not a carpet rake, not an allergy treatment, and not a substitute for washing bedding. Works poorly on thick carpet.",
     category: "cleaning",
-    priceUsd: 32,
+    priceUsd: 38,
     compareAtUsd: 39,
     cogsUsd: 3.29,
     shippingCostUsd: 5.4,
@@ -1625,7 +1610,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "A hook rail that hangs over a standard interior door. It needs enough clearance with the frame and a door thick enough for the bracket. It can scratch paint if it rattles — use bumpers. Check your lease; over-door hardware is usually allowed but not universally.",
     category: "renter",
-    priceUsd: 28,
+    priceUsd: 32,
     cogsUsd: 0.86,
     shippingCostUsd: 4.8,
     fulfillmentFeeUsd: 2.9,
@@ -1681,7 +1666,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "A memory-foam lumbar pillow for office or home chairs. Position it at the curve of your lower back — too high and it is useless. It is not a medical device and will not fix every chair.",
     category: "desk",
-    priceUsd: 28,
+    priceUsd: 32,
     cogsUsd: 3.9,
     shippingCostUsd: 4.8,
     fulfillmentFeeUsd: 2.7,
@@ -1763,7 +1748,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "A pocket organizer that hangs over a door. It holds flats, sneakers, and small accessories better than boots. Same door-clearance and scratch cautions as the hook rail. Check your lease.",
     category: "renter",
-    priceUsd: 38,
+    priceUsd: 44,
     cogsUsd: 21.84,
     shippingCostUsd: 4.4,
     fulfillmentFeeUsd: 2.8,
@@ -1819,7 +1804,7 @@ export const PRODUCTS: Product[] = [
     solution:
       "A weighted freestanding coat tree for the entry or bedroom corner. It needs a stable base and a sensible load — it will tip if you hang everything on one side. No drilling. Not a clothing retail fixture.",
     category: "renter",
-    priceUsd: 79,
+    priceUsd: 89,
     compareAtUsd: 95,
     cogsUsd: 33.5,
     shippingCostUsd: 10.2,

@@ -88,6 +88,11 @@ function proposeOperations(input: { world: WorldModel }): Unscored[] {
   return items;
 }
 
+/**
+ * Honest incremental-unit estimates. Never invent a traffic windfall — fake
+ * "max(40, …)" landing lifts made discovery look more profitable than closing
+ * real visitors. Prefer purchase/checkout units when any demand exists.
+ */
 function estimateIncrementalUnits(
   metric: PrecursorMetric,
   expectedImpact: number,
@@ -99,22 +104,29 @@ function estimateIncrementalUnits(
   const checkouts = observation.funnel.checkouts;
   switch (metric) {
     case "landing_views":
-      return Math.max(40, landing * 0.3) * scale;
+      // Modest lift from current baseline; do not fabricate dozens of visitors.
+      return Math.max(2, Math.min(landing > 0 ? landing * 0.12 : 8, 20)) * scale;
     case "product_started":
-      return (landing > 0 ? landing : 200) * 0.02 * scale;
+      return Math.max(1, landing > 0 ? landing * 0.03 : 3) * scale;
     case "checkout_started":
-      return Math.max(1, checkouts > 0 ? checkouts : landing * 0.05 || 10) * 0.15 * scale;
+      return (
+        Math.max(0.5, checkouts > 0 ? checkouts * 0.2 : Math.max(1, landing * 0.02)) *
+        scale
+      );
     case "purchases":
-      return Math.max(0.5, purchases > 0 ? purchases : 4) * 0.15 * scale;
+      // Closing sales is the prize — keep purchase units competitive vs traffic.
+      return Math.max(0.75, purchases > 0 ? purchases * 0.25 : 1.5) * scale;
     case "repeat_rate":
       return Math.max(0.5, purchases) * 0.1 * scale;
     case "average_order_value":
-      return Math.max(0.5, purchases) * 0.05 * scale;
+      return Math.max(0.5, purchases > 0 ? purchases : 1) * 0.08 * scale;
     case "fulfillment_reliability":
-      // Effort/impact-weighted reliability point; value scales with purchases.
       return scale;
     case "margin":
       return Math.max(1, observation.money.revenueUsd) * 0.02 * scale;
+    case "contribution_profit":
+    case "revenue":
+      return Math.max(1, purchases > 0 ? purchases : 1) * scale;
     default:
       return scale;
   }
@@ -225,15 +237,25 @@ export function prioritize(input: {
     const bandit = input.banditStats
       ? banditMultiplier(opportunity.patternKey ?? opportunity.category, input.banditStats)
       : 1;
-    // Never stall on owner-gated asks: executable levers get a hunt boost so the
-    // machine keeps making money while marketplace/signup work is pending.
-    const executableBoost = opportunity.safeActionType ? 1.6 : 0.92;
+    // Executable levers print now — but never outrank a higher-$ close path
+    // just because they are clickable. Soft boost only when EV is real.
+    const executableBoost =
+      opportunity.safeActionType && predicted.expectedProfitUsd > 0
+        ? 1.25
+        : opportunity.safeActionType
+          ? 1.05
+          : 0.95;
+    // Prefer dollars/day over vague precursor points.
+    const dollarsPerDay =
+      predicted.expectedProfitUsd / Math.max(predicted.timeToSignalDays, 1);
+    const moneySpeedBoost = 1 + Math.min(1.2, dollarsPerDay / 40);
     let score =
       (predicted.expectedProfitUsd *
         weight *
         calFactor *
         bandit *
-        executableBoost) /
+        executableBoost *
+        moneySpeedBoost) /
       Math.sqrt(Math.max(opportunity.effort, 1));
     if (suppressed) score *= 0.1;
     return {

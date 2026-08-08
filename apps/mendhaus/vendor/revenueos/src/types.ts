@@ -84,6 +84,170 @@ export type Opportunity = {
   patternKey?: string;
 };
 
+/** A bounded external-planner recommendation. It may only select existing opportunities. */
+export type PlannerDecision = {
+  source: "ai" | "deterministic";
+  rationale: string;
+  evidence: string[];
+  selectedOpportunityIds: string[];
+  rejectedOpportunityIds: string[];
+  falsifier: string;
+  fallbackReason?: string;
+  usage?: { inputTokens?: number; outputTokens?: number; estimatedCostUsd?: number };
+};
+
+/** Durable audit of one planner invocation within a cycle. */
+export type PlannerRunRecord = {
+  id: string;
+  siteId: string;
+  createdAt: string;
+  source: "ai" | "deterministic";
+  decision: PlannerDecision;
+  inputFingerprint: string;
+  policyRejected: boolean;
+  policyReason?: string;
+  linkedExperimentIds?: string[];
+  linkedActionTypes?: string[];
+};
+
+/** Persisted cycle report for owner dashboards and email linkage. */
+export type CycleReportRecord = {
+  id: string;
+  siteId: string;
+  createdAt: string;
+  observedAt: string;
+  reportText: string;
+  plannerSource?: "ai" | "deterministic";
+  executedCount: number;
+  emailDelivery?: {
+    status: "pending" | "sent" | "failed" | "skipped";
+    providerId?: string;
+    skipReason?: string;
+  };
+};
+
+/** Versioned site intervention for cohort attribution. */
+export type ExposureRecord = {
+  id: string;
+  siteId: string;
+  experimentId?: string;
+  actionType: string;
+  exposureKey: string;
+  version: string;
+  startedAt: string;
+  endedAt?: string;
+  metadata?: Record<string, string | number | boolean>;
+};
+
+/** Registry metadata for executable safe actions. */
+export type ActionRegistryEntry = {
+  type: string;
+  exposureKey: string;
+  cooldownMinutes?: number;
+  rollbackActionType?: string;
+  requiresCapability?: string;
+};
+
+/** Lifecycle of a published intent / discovery door. */
+export type DiscoveryDoorStatus =
+  | "active"
+  | "expanding"
+  | "holding"
+  | "killed"
+  | "graduated";
+
+/** Furthest stage proven with available metrics (proxy-first until GSC). */
+export type DiscoveryDoorStage =
+  | "submitted"
+  | "visited"
+  | "product"
+  | "cart"
+  | "purchase"
+  | "revenue"
+  | "dead_on_arrival";
+
+export type DiscoveryDoorVerdict = "expand" | "hold" | "kill" | "investigate";
+
+/** On-site + optional search metrics for one door. */
+export type DiscoveryDoorMetrics = {
+  /** Weak signal: IndexNow/sitemap accepted (not true crawl proof). */
+  submitted: boolean;
+  topicViews: number;
+  productViews: number;
+  addToCarts: number;
+  checkouts: number;
+  purchases: number;
+  revenueUsd: number;
+  /** Real SERP metrics — null until search_console_analytics capability exists. */
+  indexed?: boolean | null;
+  impressions?: number | null;
+  clicks?: number | null;
+};
+
+export type DiscoveryDoorScore = {
+  scoredAt: string;
+  windowDays: number;
+  metrics: DiscoveryDoorMetrics;
+  stage: DiscoveryDoorStage;
+  verdict: DiscoveryDoorVerdict;
+  reason: string;
+};
+
+/** A published discoverable page/cluster under governor control. */
+export type DiscoveryDoor = {
+  id: string;
+  siteId: string;
+  slug: string;
+  url: string;
+  query: string;
+  clusterKey: string;
+  publishedAt: string;
+  status: DiscoveryDoorStatus;
+  exposureKey?: string;
+  experimentId?: string;
+  investigateCount?: number;
+  lastScore?: DiscoveryDoorScore;
+  killedAt?: string;
+  killReason?: string;
+};
+
+export type GovernorDecision = {
+  doorId: string;
+  clusterKey: string;
+  verdict: DiscoveryDoorVerdict;
+  stage: DiscoveryDoorStage;
+  reason: string;
+  suppressPublish: boolean;
+};
+
+export type CapabilityImportance = "low" | "medium" | "high" | "critical";
+
+/** High-EV action the brain wants but cannot execute. */
+export type CapabilityGap = {
+  id: string;
+  siteId: string;
+  desiredAction: string;
+  reason: string;
+  expectedValueUsd: number;
+  missingCapability: string;
+  timesBlocked: number;
+  businessesAffected: string[];
+  importance: CapabilityImportance;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  patternKey?: string;
+};
+
+export type CapabilityGapSummary = {
+  missingCapability: string;
+  timesBlocked: number;
+  expectedValueUsd: number;
+  importance: CapabilityImportance;
+  businessesAffected: string[];
+  desiredActions: string[];
+  recommendation: string;
+};
+
 export type ProductOffer = {
   id: string;
   name: string;
@@ -331,12 +495,17 @@ export type SafeAction = {
   risk: ActionRisk;
   description: string;
   payload?: Record<string, string | number | boolean | string[]>;
+  /** Stable key for exposure cohorts when this action mutates live site state. */
+  exposureKey?: string;
 };
 
 export type ActionResult = {
   ok: boolean;
   detail: string;
   costUsd?: number;
+  /** Exposure key written when the action changed live site state. */
+  exposureKey?: string;
+  exposureVersion?: string;
 };
 
 /** Plan describing how an experiment will be measured and when. */
@@ -385,6 +554,8 @@ export type Lesson = {
   rankingWeight?: number;
   /** Do not retry the matching pattern until this ISO timestamp. */
   cooldownUntil?: string;
+  /** Sites that contributed evidence (portable industry/global lessons). */
+  originSiteIds?: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -661,5 +832,36 @@ export type CycleResult = {
   metaPolicy: MetaPolicy;
   curriculum: Curriculum;
   hourPlan: HourPlan;
+  /** Cycle order: money made for the customer is the only success. */
+  profitMandate?: {
+    northStarDailyProfitUsd: number;
+    currentProfitUsd: number;
+    shortfallUsd: number;
+    pctOfNorthStar: number;
+    focus: string;
+    ordersNeeded: number;
+    visitorsNeeded: number;
+    contributionMarginUsd: number;
+    order: string;
+    why: string;
+    falsifier: string;
+    heartbeatActionTypes: string[];
+    successDeclaration: string;
+    failurePressure: number;
+  };
+  /** Organic mastery era — ads locked until leads→sales is a weapon. */
+  organicMastery?: {
+    level: string;
+    score: number;
+    mission: string;
+    adsReadiness: string;
+    drills: string[];
+    gaps: string[];
+    verdict: string;
+  };
+  plannerDecision?: PlannerDecision;
+  governorDecisions?: GovernorDecision[];
+  capabilityGaps?: CapabilityGap[];
+  publishAllowed?: boolean;
   reportText: string;
 };

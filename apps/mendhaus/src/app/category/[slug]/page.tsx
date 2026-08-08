@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CATEGORIES, listByCategory, type ProductCategory } from "@/catalog/products";
 import { ProductCard } from "@/components/ProductCard";
+import { effectiveCompareAt, effectiveUnitPrice, loadMerchState } from "@/lib/merch";
+
+export const revalidate = 30;
 
 const COPY: Record<ProductCategory, { title: string; body: string }> = {
   kitchen: {
@@ -57,6 +60,7 @@ export default async function CategoryPage({ params }: Props) {
   const category = slug as ProductCategory;
   const products = listByCategory(category);
   const copy = COPY[category];
+  const merch = await loadMerchState();
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-12">
@@ -64,7 +68,12 @@ export default async function CategoryPage({ params }: Props) {
       <p className="mt-3 max-w-2xl text-ink/70">{copy.body}</p>
       <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {products.map((product) => (
-          <ProductCard key={product.id} product={product} />
+          <ProductCard
+            key={product.id}
+            product={product}
+            priceUsd={effectiveUnitPrice(product, merch.promo)}
+            compareAtUsd={effectiveCompareAt(product, merch.promo)}
+          />
         ))}
       </div>
     </div>

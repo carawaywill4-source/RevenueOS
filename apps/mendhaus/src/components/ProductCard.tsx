@@ -2,7 +2,18 @@ import Link from "next/link";
 import type { Product } from "@/catalog/products";
 import { ProductMedia } from "@/components/ProductMedia";
 
-export function ProductCard({ product }: { product: Product }) {
+type Props = {
+  product: Product;
+  /** Live sale unit price from merch state. */
+  priceUsd?: number;
+  compareAtUsd?: number;
+};
+
+export function ProductCard({ product, priceUsd, compareAtUsd }: Props) {
+  const price = priceUsd ?? product.priceUsd;
+  const compare = compareAtUsd ?? product.compareAtUsd;
+  const onSale = compare != null && compare > price;
+
   return (
     <Link
       href={`/product/${product.slug}`}
@@ -16,7 +27,14 @@ export function ProductCard({ product }: { product: Product }) {
         </h3>
         <p className="line-clamp-2 text-sm text-ink/70">{product.tagline}</p>
         <div className="flex items-baseline justify-between pt-1">
-          <p className="text-sm font-medium text-ink">${product.priceUsd.toFixed(2)}</p>
+          <p className="text-sm font-medium text-ink">
+            ${price.toFixed(2)}
+            {onSale ? (
+              <span className="ml-2 text-xs font-normal text-ink/40 line-through">
+                ${compare.toFixed(2)}
+              </span>
+            ) : null}
+          </p>
           <p className="text-xs text-ink/45">
             {product.supplier.etaDaysMin}–{product.supplier.etaDaysMax} day ship
           </p>

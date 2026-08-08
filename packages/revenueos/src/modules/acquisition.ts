@@ -30,15 +30,19 @@ export function proposeAcquisition(input: {
     });
   }
 
-  // Discovery is weak when there is little traffic or thin coverage. In that
-  // state, discovery plays are premium; under a lost $10k day they stay hot.
+  // Discovery is urgent only when strangers are the binding constraint.
+  // Being under $10k/day alone must NOT force topic spam if conversion is broken.
+  const landing = observation.funnel.landingViews;
+  const purchases = observation.money.purchases;
+  const cvr = landing > 0 ? purchases / landing : 0;
   const discoveryUrgent =
     observation.bottleneck.level === 4 ||
     world.market.discoveryCoverage === "none" ||
     world.market.discoveryCoverage === "thin" ||
-    observation.money.estimatedProfitUsd < 10_000;
+    (landing < 40 && purchases === 0) ||
+    (world.shopper.primaryFriction === "discovery" && cvr >= 0.02);
 
-  // The executable, account-free discovery lever always stays available.
+  // Executable, account-free discovery levers — always available, hotter when empty.
   items.push({
     id: "index-known-urls",
     title: "Get public URLs discovered and indexed",
@@ -53,6 +57,51 @@ export function proposeAcquisition(input: {
     safeActionType: "indexnow_submit",
     patternKey: "indexnow-discovery",
   });
+  items.push({
+    id: "internet-market-research",
+    title: "Learn from the live internet who is buying now",
+    metric: "qualified visits",
+    category: "acquisition",
+    precursorMetric: "landing_views",
+    expectedImpact: Number(((discoveryUrgent ? 9.5 : 6) * resolve).toFixed(2)),
+    confidence: 0.6,
+    effort: 1,
+    action:
+      "Search the public web for people ready to buy what we sell at contribution profit. Persist only sellable attacks — never vanity queries.",
+    safeActionType: "market_research",
+    patternKey: "internet-market-research",
+  });
+  // Full discovery attack / publish only when traffic is the bottleneck.
+  if (discoveryUrgent) {
+    items.push({
+      id: "discovery-attack-compound",
+      title: "Compound discovery attack for sales: research → publish → index",
+      metric: "purchases via new demand",
+      category: "acquisition",
+      precursorMetric: "landing_views",
+      expectedImpact: Number((9.5 * resolve).toFixed(2)),
+      confidence: 0.62,
+      effort: 2,
+      action:
+        "Open one buyable door. Success = purchases, not page count. Kill clusters that do not convert.",
+      safeActionType: "discovery_attack",
+      patternKey: "discovery-attack",
+    });
+    items.push({
+      id: "publish-intent-from-research",
+      title: "Publish a buyable intent door from research",
+      metric: "organic purchases",
+      category: "acquisition",
+      precursorMetric: "landing_views",
+      expectedImpact: Number((8.5 * resolve).toFixed(2)),
+      confidence: 0.55,
+      effort: 2,
+      action:
+        "Publish only if the query maps to catalog products someone can buy today, then index it.",
+      safeActionType: "publish_intent_page",
+      patternKey: "publish-intent-page",
+    });
+  }
 
   // Turn every persona × channel play into a concrete acquisition opportunity.
   for (const play of world.audience.channelPlan) {
@@ -77,6 +126,17 @@ function playToOpportunity(
   const expectedImpact = Number(
     ((baseImpact + discoveryBonus) * (0.6 + play.fit * 0.4) * resolve).toFixed(2),
   );
+  // Map open organic channels to executable discovery actions so the brain
+  // does not mint blocked "advice-only" bets while strangers never arrive.
+  const safeActionType =
+    play.channel === "organic_search" || play.channel === "content_seo"
+      ? "publish_intent_page"
+      : play.channel === "directories"
+        ? "sitemap_ping"
+        : play.channel === "referral"
+          ? "discovery_attack"
+          : undefined;
+
   return {
     id: `acq-${play.channel}-${play.persona}`,
     title: `Win ${play.persona} via ${label}`,
@@ -88,6 +148,7 @@ function playToOpportunity(
     effort: play.effort,
     action: `${play.angle}. ${play.rationale}`,
     patternKey: play.patternKey,
+    safeActionType,
   };
 }
 

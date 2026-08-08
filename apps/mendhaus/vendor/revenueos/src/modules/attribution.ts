@@ -1,4 +1,6 @@
 import { newId } from "../ledger/store";
+import { toPortableLesson } from "../memory/portable";
+import { isMoneySuccessMetric } from "./success";
 import type {
   Attribution,
   Experiment,
@@ -10,9 +12,12 @@ export function dueForAttribution(
   experiment: Experiment,
   now = Date.now(),
 ): boolean {
-  if (experiment.status !== "running" && experiment.status !== "proposed") {
+  if (experiment.status !== "running") {
     return false;
   }
+  // A metric moving after an adapter failed or skipped an action is not
+  // evidence for the proposed hypothesis.
+  if (!experiment.actions.some((action) => action.result?.ok)) return false;
   if (!experiment.measurement) return false;
   return Date.parse(experiment.measurement.scheduledCheckAt) <= now;
 }
@@ -97,31 +102,47 @@ export function lessonFromAttribution(input: {
     experiment.category ??
     experiment.hypothesis.id;
   const won = attribution.verdict === "won";
+  const moneyWin = won && isMoneySuccessMetric(attribution.metric);
+  const toolWin = won && !moneyWin;
   const cooldownDays = attribution.verdict === "lost" ? 21 : 0;
   const cooldownUntil =
     cooldownDays > 0
       ? new Date(now.getTime() + cooldownDays * 86_400_000).toISOString()
       : undefined;
 
-  return {
-    id: newId("lesson"),
-    scope: "site",
+  const summary = moneyWin
+    ? `SUCCESS (money): "${experiment.hypothesis.title}" moved ${attribution.metric} by ${attribution.delta}. Prefer this lever — it printed toward customer revenue.`
+    : toolWin
+      ? `TOOL ONLY (not success): "${experiment.hypothesis.title}" moved ${attribution.metric} by ${attribution.delta}. Useful instrument — still failing until purchases/profit move. Do not celebrate vanity.`
+      : attribution.verdict === "lost"
+        ? `FAILURE: "${experiment.hypothesis.title}" moved ${attribution.metric} by ${attribution.delta}. Downrank and cool down. Money made is the only success — try a different approach.`
+        : `Inconclusive: "${experiment.hypothesis.title}" on ${attribution.metric} (${attribution.delta}). No clear money. Cleaner test required.`;
+
+  // Money wins/losses and clear tool failures travel to the next business.
+  // Pure vanity tool-wins stay site-local so we do not teach traffic theater.
+  const transferable = moneyWin || attribution.verdict === "lost";
+  return toPortableLesson({
     siteId: experiment.siteId,
     industry: input.industry,
-    patternKey,
-    summary:
-      `${won ? "Won" : attribution.verdict === "lost" ? "Lost" : "Inconclusive"}: "${experiment.hypothesis.title}" moved ${attribution.metric} by ${attribution.delta}. ` +
-      (won
-        ? "Prefer this lever again."
-        : attribution.verdict === "lost"
-          ? "Downrank and cool down; try a different approach."
-          : "Signal weak; needs a cleaner test."),
-    evidenceCount: 1,
-    transferable: won,
-    sentiment: won ? "positive" : attribution.verdict === "lost" ? "negative" : "neutral",
-    rankingWeight: won ? 1.4 : attribution.verdict === "lost" ? 0.5 : 1,
-    cooldownUntil,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-  };
+    now,
+    lesson: {
+      patternKey,
+      summary,
+      evidenceCount: 1,
+      transferable,
+      sentiment: moneyWin
+        ? "positive"
+        : attribution.verdict === "lost" || toolWin
+          ? "negative"
+          : "neutral",
+      rankingWeight: moneyWin
+        ? 1.55
+        : toolWin
+          ? 1.1
+          : attribution.verdict === "lost"
+            ? 0.45
+            : 1,
+      cooldownUntil,
+    },
+  });
 }

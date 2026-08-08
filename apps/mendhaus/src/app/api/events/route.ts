@@ -3,11 +3,22 @@ import { z } from "zod";
 import { MH_EVENTS, recordEvent, recordEvents, type EventInput } from "@/lib/events";
 
 const EventSchema = z.object({
+  eventId: z.string().uuid(),
   name: z.enum(MH_EVENTS),
   sessionId: z.string().uuid(),
   productId: z.string().max(80).optional(),
-  attribution: z.unknown().optional(),
-  metadata: z.record(z.string(), z.any()).optional(),
+  attribution: z
+    .object({
+      channel: z.string().max(40).optional(),
+      persona: z.string().max(80).optional(),
+      angleIndex: z.number().int().min(0).max(20).optional(),
+      landingPath: z.string().max(180).optional(),
+      patternKey: z.string().max(160).optional(),
+    })
+    .optional(),
+  metadata: z
+    .record(z.string().max(50), z.union([z.string().max(240), z.number(), z.boolean()]))
+    .optional(),
 });
 
 const Body = z.union([
@@ -32,6 +43,7 @@ export async function POST(request: Request) {
   const items: EventInput[] =
     "events" in parsed.data
       ? parsed.data.events.map((e) => ({
+          eventId: e.eventId,
           name: e.name,
           sessionId: e.sessionId,
           productId: e.productId,
@@ -40,6 +52,7 @@ export async function POST(request: Request) {
         }))
       : [
           {
+            eventId: parsed.data.eventId,
             name: parsed.data.name,
             sessionId: parsed.data.sessionId,
             productId: parsed.data.productId,
@@ -48,10 +61,17 @@ export async function POST(request: Request) {
           },
         ];
 
-  if (items.length === 1) {
-    await recordEvent(items[0]);
-  } else {
-    await recordEvents(items);
+  try {
+    if (items.length === 1) {
+      await recordEvent(items[0]);
+    } else {
+      await recordEvents(items);
+    }
+  } catch (error) {
+    return NextResponse.json(
+      { error: `Event capture unavailable: ${(error as Error).message}` },
+      { status: 503 },
+    );
   }
 
   return NextResponse.json({ ok: true, accepted: items.length });
