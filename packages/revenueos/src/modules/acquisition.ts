@@ -126,16 +126,14 @@ function playToOpportunity(
   const expectedImpact = Number(
     ((baseImpact + discoveryBonus) * (0.6 + play.fit * 0.4) * resolve).toFixed(2),
   );
-  // Map open organic channels to executable discovery actions so the brain
-  // does not mint blocked "advice-only" bets while strangers never arrive.
+  // Only stamp safeActionType when the mapping is honest. Directories ≠
+  // sitemap_ping and referral ≠ discovery_attack — false executors corrupt
+  // attribution. Organic/content map to publish when the host implements it;
+  // executive demotes types the adapter does not list.
   const safeActionType =
     play.channel === "organic_search" || play.channel === "content_seo"
       ? "publish_intent_page"
-      : play.channel === "directories"
-        ? "sitemap_ping"
-        : play.channel === "referral"
-          ? "discovery_attack"
-          : undefined;
+      : undefined;
 
   return {
     id: `acq-${play.channel}-${play.persona}`,

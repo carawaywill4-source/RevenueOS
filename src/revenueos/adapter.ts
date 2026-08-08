@@ -7,6 +7,7 @@ import {
   estimateVariableCost,
   type ActionResult,
   type BusinessContext,
+  type DiscoveryDoor,
   type MarketSignals,
   type Observation,
   type PrecursorMetric,
@@ -14,7 +15,15 @@ import {
   type SeedLesson,
   type SiteAdapter,
 } from "@revenueos/core";
+import {
+  listCatalogDoors,
+  measureTributeDiscoveryDoor,
+  mergeDiscoveryDoors,
+  nextDoorToActivate,
+  pingTributeSitemap,
+} from "@/lib/discovery";
 import { getAggregateGrowthReport, getLastHourPulse } from "@/lib/growth";
+import { readSearchConsoleCoverage } from "@/lib/search-console";
 import { TRIBUTEREADY_SEED_LESSONS } from "@/revenueos/seeds";
 import { createDurableExperimentStore } from "@/revenueos/durable-store";
 import { planOpportunityDecision } from "@/revenueos/ai-planner";
@@ -238,17 +247,45 @@ export function createTributeReadyAdapter(): SiteAdapter {
           patternKey: "indexnow-discovery",
         },
         {
-          id: "high-intent-seo-pages",
-          title: "Strengthen high-intent organic pages",
-          metric: "qualified organic visits",
+          id: "activate-discovery-door",
+          title: "Put next high-intent page under discovery governor",
+          metric: "active discovery doors",
           category: "acquisition" as const,
           precursorMetric: "landing_views" as const,
           expectedImpact: 8,
           confidence: 0.55,
-          effort: 3,
+          effort: 1,
           action:
-            "Owner/editor: deepen funeral-program-maker, obituary-writer, cost, and examples pages with concrete answers buyers search before purchase. Truthful, useful — never thin doorway pages.",
+            "Activate the next static SEO page as a managed discovery door, IndexNow its URL, and start measuring landing_view.page attribution.",
+          safeActionType: "publish_intent_page",
           patternKey: "acq:organic_search:urgent-need:a0",
+        },
+        {
+          id: "discovery-attack-catalog",
+          title: "Run discovery attack across SEO catalog",
+          metric: "doors scored / landing views",
+          category: "acquisition" as const,
+          precursorMetric: "landing_views" as const,
+          expectedImpact: 7,
+          confidence: 0.5,
+          effort: 2,
+          action:
+            "Ensure catalog doors are registered, ping sitemap, and IndexNow the public URL set so the governor can kill/expand from real visits.",
+          safeActionType: "discovery_attack",
+          patternKey: "discovery-attack",
+        },
+        {
+          id: "sitemap-ping",
+          title: "Ping Google/Bing with sitemap.xml",
+          metric: "crawl freshness",
+          category: "acquisition" as const,
+          precursorMetric: "landing_views" as const,
+          expectedImpact: 5,
+          confidence: 0.45,
+          effort: 1,
+          action: "Notify Google and Bing sitemap endpoints (crawlability — not directory submission).",
+          safeActionType: "sitemap_ping",
+          patternKey: "sitemap-ping",
         },
         {
           id: "free-directories",
@@ -260,21 +297,8 @@ export function createTributeReadyAdapter(): SiteAdapter {
           confidence: 0.45,
           effort: 1,
           action:
-            "Pursue reputable free/structured listings and indexes that do not require new commercial accounts beyond what's already authorized. Discovery without waiting on Ever Loved.",
+            "Owner: pursue reputable free/structured listings. Advisory until outreach_executor exists — not a sitemap ping.",
           patternKey: "acq:directories:urgent-need:a0",
-        },
-        {
-          id: "content-seo-guides",
-          title: "Earn search via resource guides buyers already read",
-          metric: "guide → product starts",
-          category: "acquisition" as const,
-          precursorMetric: "landing_views" as const,
-          expectedImpact: 7,
-          confidence: 0.5,
-          effort: 3,
-          action:
-            "Keep resource guides the best honest answer in category; internal-link to the product with clear next steps. Quality over volume.",
-          patternKey: "acq:content_seo:researcher:a0",
         },
         {
           id: "gsc-bing-coverage",
@@ -286,7 +310,7 @@ export function createTributeReadyAdapter(): SiteAdapter {
           confidence: 0.5,
           effort: 2,
           action:
-            "Owner: verify tributeready.org in Google Search Console and Bing Webmaster, submit sitemap, fix coverage issues. Parallel to any marketplace work.",
+            "Owner: verify tributeready.org in Google Search Console and Bing Webmaster, submit sitemap, connect API credentials so Indexed/Impressions/Clicks stop being null.",
           patternKey: "search-console-coverage",
         },
         {
@@ -319,8 +343,14 @@ export function createTributeReadyAdapter(): SiteAdapter {
     },
 
     async getMarketSignals(): Promise<MarketSignals> {
+      const coverage = await readSearchConsoleCoverage();
       return {
-        indexCoverage: { knownUrls: PUBLIC_URLS.length },
+        indexCoverage: {
+          knownUrls: PUBLIC_URLS.length,
+          ...(coverage.indexedUrls != null
+            ? { indexedUrls: coverage.indexedUrls }
+            : {}),
+        },
         channels: [
           { channel: "organic", status: "open" },
           { channel: "directories", status: "open" },
@@ -348,12 +378,20 @@ export function createTributeReadyAdapter(): SiteAdapter {
           .orders ?? {};
       const byStatus = orders.byStatus ?? {};
       const purchases = count(byStatus, "fulfilled");
+      const revenueUsd = Number(orders.grossRevenueUsd ?? purchases * PRICE_USD);
+      const drafts = count(events, "draft_generated");
+      const variableCostUsd = estimateVariableCost({
+        purchases,
+        priceUsd: PRICE_USD,
+        draftCount: drafts,
+      });
       switch (metric) {
         case "purchases":
           return purchases;
         case "revenue":
+          return revenueUsd;
         case "contribution_profit":
-          return Number(orders.grossRevenueUsd ?? purchases * PRICE_USD);
+          return Number((revenueUsd - variableCostUsd).toFixed(2));
         case "checkout_started":
           return count(events, "checkout_started");
         case "product_started":
@@ -389,7 +427,66 @@ export function createTributeReadyAdapter(): SiteAdapter {
           risk: "safe",
           description: "Email the cycle report to care@",
         },
+        {
+          type: "sitemap_ping",
+          risk: "safe",
+          description: "Ping Google/Bing with sitemap.xml",
+        },
+        {
+          type: "publish_intent_page",
+          risk: "safe",
+          description:
+            "Activate next static SEO page as a managed discovery door under the governor",
+        },
+        {
+          type: "discovery_attack",
+          risk: "safe",
+          description: "Register catalog doors + sitemap ping + IndexNow",
+        },
+        {
+          type: "retire_discovery_door",
+          risk: "safe",
+          description: "Retire a killed discovery door from active investment",
+        },
       ];
+    },
+
+    async listDiscoveryDoors(): Promise<DiscoveryDoor[]> {
+      const ledger = store.listDiscoveryDoors
+        ? await store.listDiscoveryDoors("tributeready")
+        : [];
+      const merged = mergeDiscoveryDoors(ledger);
+      // Persist catalog doors once so governor scores compound.
+      if (store.saveDiscoveryDoor && ledger.length < merged.length) {
+        for (const door of merged) {
+          if (!ledger.some((d) => d.id === door.id)) {
+            await store.saveDiscoveryDoor(door);
+          }
+        }
+      }
+      return merged;
+    },
+
+    async measureDiscoveryDoor(door: DiscoveryDoor) {
+      return measureTributeDiscoveryDoor(door);
+    },
+
+    async retireDiscoveryDoor(doorId: string, reason: string) {
+      const doors = store.listDiscoveryDoors
+        ? await store.listDiscoveryDoors("tributeready")
+        : [];
+      const door = doors.find((d) => d.id === doorId);
+      if (!door) {
+        return { ok: false, detail: `Door ${doorId} not found` };
+      }
+      const retired: DiscoveryDoor = {
+        ...door,
+        status: "killed",
+        killedAt: new Date().toISOString(),
+        killReason: reason,
+      };
+      if (store.saveDiscoveryDoor) await store.saveDiscoveryDoor(retired);
+      return { ok: true, detail: `Retired ${door.slug}: ${reason}` };
     },
 
     async execute(action: SafeAction): Promise<ActionResult> {
@@ -398,40 +495,76 @@ export function createTributeReadyAdapter(): SiteAdapter {
       }
 
       if (action.type === "indexnow_submit") {
-        const since = Date.now() - lastIndexNowAt;
-        if (lastIndexNowAt > 0 && since < INDEXNOW_COOLDOWN_MS) {
-          return {
-            ok: true,
-            detail: `IndexNow on cooldown (${Math.ceil((INDEXNOW_COOLDOWN_MS - since) / 1000)}s left) — brain still hunting other levers`,
-          };
-        }
-        try {
-          const response = await fetch("https://api.indexnow.org/indexnow", {
-            method: "POST",
-            headers: { "Content-Type": "application/json; charset=utf-8" },
-            body: JSON.stringify({
-              host: "tributeready.org",
-              key: INDEXNOW_KEY,
-              keyLocation: `https://tributeready.org/${INDEXNOW_KEY}.txt`,
-              urlList: PUBLIC_URLS,
-            }),
-          });
-          lastIndexNowAt = Date.now();
-          return {
-            ok: response.ok || response.status === 202,
-            detail: `IndexNow HTTP ${response.status}`,
-          };
-        } catch (error) {
-          return {
-            ok: false,
-            detail: `IndexNow failed: ${(error as Error).message}`,
-          };
-        }
+        return submitIndexNow(
+          Array.isArray(action.payload?.urls)
+            ? (action.payload.urls as string[])
+            : PUBLIC_URLS,
+        );
       }
 
       if (action.type === "email_daily_review") {
-        // Email is sent by the cron route after runCycle returns report text.
         return { ok: true, detail: "Deferred to cron mailer" };
+      }
+
+      if (action.type === "sitemap_ping") {
+        return pingTributeSitemap();
+      }
+
+      if (action.type === "publish_intent_page") {
+        const existing = store.listDiscoveryDoors
+          ? await store.listDiscoveryDoors("tributeready")
+          : [];
+        const next = nextDoorToActivate(existing);
+        if (!next) {
+          return {
+            ok: true,
+            detail: "All catalog discovery doors already active or killed",
+          };
+        }
+        if (store.saveDiscoveryDoor) await store.saveDiscoveryDoor(next);
+        const index = await submitIndexNow([next.url]);
+        return {
+          ok: true,
+          detail: `Activated door ${next.slug}; ${index.detail}`,
+        };
+      }
+
+      if (action.type === "discovery_attack") {
+        const catalog = listCatalogDoors();
+        const existing = store.listDiscoveryDoors
+          ? await store.listDiscoveryDoors("tributeready")
+          : [];
+        const existingIds = new Set(existing.map((d) => d.id));
+        if (store.saveDiscoveryDoor) {
+          for (const door of catalog) {
+            if (!existingIds.has(door.id)) await store.saveDiscoveryDoor(door);
+          }
+        }
+        const ping = await pingTributeSitemap();
+        const index = await submitIndexNow(PUBLIC_URLS);
+        return {
+          ok: ping.ok || index.ok,
+          detail: `Catalog doors ensured (${catalog.length}). ${ping.detail}. ${index.detail}`,
+        };
+      }
+
+      if (action.type === "retire_discovery_door") {
+        const doorId = String(action.payload?.doorId ?? "");
+        const reason = String(action.payload?.reason ?? "governor retire");
+        if (!doorId) return { ok: false, detail: "Missing doorId" };
+        const doors = store.listDiscoveryDoors
+          ? await store.listDiscoveryDoors("tributeready")
+          : [];
+        const door = doors.find((d) => d.id === doorId);
+        if (!door) return { ok: false, detail: `Door ${doorId} not found` };
+        const retired: DiscoveryDoor = {
+          ...door,
+          status: "killed",
+          killedAt: new Date().toISOString(),
+          killReason: reason,
+        };
+        if (store.saveDiscoveryDoor) await store.saveDiscoveryDoor(retired);
+        return { ok: true, detail: `Retired ${door.slug}: ${reason}` };
       }
 
       return { ok: false, detail: `Unsupported action ${action.type}` };
@@ -442,12 +575,7 @@ export function createTributeReadyAdapter(): SiteAdapter {
         {
           capability: "search_console_analytics",
           reason:
-            "No GSC/Bing Search Analytics API wired. Indexed/Impressions/Clicks cannot be measured yet.",
-        },
-        {
-          capability: "discovery_publish",
-          reason:
-            "TributeReady has no publish_intent_page limb; organic page publishing remains owner/content work.",
+            "GSC/Bing Search Analytics API not connected. Door Indexed/Impressions/Clicks stay null; governor uses landing_view.page proxies.",
         },
         {
           capability: "outreach_executor",
@@ -460,4 +588,36 @@ export function createTributeReadyAdapter(): SiteAdapter {
       return store;
     },
   };
+}
+
+async function submitIndexNow(urls: string[]): Promise<ActionResult> {
+  const since = Date.now() - lastIndexNowAt;
+  if (lastIndexNowAt > 0 && since < INDEXNOW_COOLDOWN_MS) {
+    return {
+      ok: true,
+      detail: `IndexNow on cooldown (${Math.ceil((INDEXNOW_COOLDOWN_MS - since) / 1000)}s left) — brain still hunting other levers`,
+    };
+  }
+  try {
+    const response = await fetch("https://api.indexnow.org/indexnow", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        host: "tributeready.org",
+        key: INDEXNOW_KEY,
+        keyLocation: `https://tributeready.org/${INDEXNOW_KEY}.txt`,
+        urlList: urls,
+      }),
+    });
+    lastIndexNowAt = Date.now();
+    return {
+      ok: response.ok || response.status === 202,
+      detail: `IndexNow HTTP ${response.status} (${urls.length} urls)`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      detail: `IndexNow failed: ${(error as Error).message}`,
+    };
+  }
 }

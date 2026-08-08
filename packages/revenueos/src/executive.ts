@@ -56,7 +56,10 @@ import {
   lessonFromGovernorDecision,
   scoreDiscoveryDoor,
 } from "./modules/discovery-governor";
-import { recordGapsFromOpportunities } from "./modules/capability-gaps";
+import {
+  demoteUnavailableSafeActions,
+  recordGapsFromOpportunities,
+} from "./modules/capability-gaps";
 import {
   applyProfitPressure,
   buildProfitMandate,
@@ -383,6 +386,16 @@ export async function runCycle(adapter: SiteAdapter) {
     observation,
   });
 
+  const availableActions = filterAutonomousActions(await adapter.listSafeActions());
+  const availableActionTypes = new Set(availableActions.map((action) => action.type));
+  // Demote before money/planner/hunting so missing limbs are advisory, not
+  // falsely executable. Gaps are still recorded from the pre-demotion set.
+  const opportunitiesBeforeDemote = opportunities;
+  opportunities = demoteUnavailableSafeActions(
+    opportunities,
+    availableActionTypes,
+  );
+
   const moneyPlan = buildMoneyPlan({
     opportunities,
     world,
@@ -394,7 +407,6 @@ export async function runCycle(adapter: SiteAdapter) {
     shortfall,
   });
 
-  const availableActions = filterAutonomousActions(await adapter.listSafeActions());
   let plannerDecision;
   let plannerPolicyRejected = false;
   let plannerPolicyReason: string | undefined;
@@ -489,7 +501,8 @@ export async function runCycle(adapter: SiteAdapter) {
   }
   const capabilityGapsTouched = recordGapsFromOpportunities({
     siteId: context.siteId,
-    opportunities,
+    // Use pre-demotion opportunities so missing limbs still upsert as gaps.
+    opportunities: opportunitiesBeforeDemote,
     safeActions: availableActions,
     existingGaps,
     declaredUnavailable,
