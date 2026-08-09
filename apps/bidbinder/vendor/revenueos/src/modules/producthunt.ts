@@ -324,6 +324,10 @@ async function draftProductComment(input: {
 }
 
 function dataDir(rootDir: string): string {
+  if (process.env.VERCEL || process.env.REVENUEOS_DATA_DIR) {
+    const base = process.env.REVENUEOS_DATA_DIR || "/tmp/revenueos";
+    return path.join(base, "producthunt");
+  }
   return path.join(rootDir, ".data", "producthunt");
 }
 

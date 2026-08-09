@@ -40,7 +40,11 @@ export type StripeOrderBumpConfig = {
 const CONFIG_VERSION = "1.0.0";
 
 function configFile(rootDir: string, siteId: string): string {
-  return path.join(rootDir, ".data", "stripe-order-bumps", `${siteId}.json`);
+  const base =
+    process.env.VERCEL || process.env.REVENUEOS_DATA_DIR
+      ? process.env.REVENUEOS_DATA_DIR || "/tmp/revenueos"
+      : path.join(rootDir, ".data");
+  return path.join(base, "stripe-order-bumps", `${siteId}.json`);
 }
 
 async function readJson<T>(p: string, fallback: T): Promise<T> {
