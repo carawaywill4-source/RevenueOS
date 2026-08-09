@@ -107,6 +107,12 @@ export function classifyMechanism(input: {
   const key = (input.patternKey ?? "").toLowerCase();
   const type = (input.actionType ?? "").toLowerCase();
 
+  if (type.startsWith("reddit_") || key.includes("reddit")) {
+    return "community_participation";
+  }
+  if (type === "email_cold_outreach" || type === "public_form_outreach") {
+    return "direct_outreach";
+  }
   if (DISTRIBUTION_ACTIONS.has(input.actionType ?? "")) {
     return "owned_distribution";
   }

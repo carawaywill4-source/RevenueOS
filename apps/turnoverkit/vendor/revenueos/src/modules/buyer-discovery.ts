@@ -18,7 +18,8 @@ export type BuyerReachMethod =
   | "public_form"
   | "blog_comment"
   | "newsletter_submit"
-  | "directory_submit";
+  | "directory_submit"
+  | "email";
 
 export type DurableBuyerLead = {
   url: string;
@@ -27,6 +28,12 @@ export type DurableBuyerLead = {
   whyMatch: string;
   reachMethod: BuyerReachMethod;
   score: number;
+  /** Optional public email address (for `email` reach method) */
+  email?: string;
+  /** Optional recipient name for personalized outreach */
+  name?: string;
+  /** Optional specific reason to reach THIS recipient */
+  reasonToReach?: string;
 };
 
 const LEAD_SCHEMA = {
@@ -61,9 +68,13 @@ const LEAD_SCHEMA = {
               "blog_comment",
               "newsletter_submit",
               "directory_submit",
+              "email",
             ],
           },
           score: { type: "number", minimum: 0, maximum: 100 },
+          email: { type: "string" },
+          name: { type: "string" },
+          reasonToReach: { type: "string" },
         },
       },
     },

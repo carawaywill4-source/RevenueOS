@@ -244,4 +244,4 @@ function normal(rand: () => number): number {
   return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
 }
 
-export const __internal = { PROMPT_OUTCOME_KIND };
+export const __promptInternal = { PROMPT_OUTCOME_KIND };

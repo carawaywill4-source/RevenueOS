@@ -58,7 +58,12 @@ const EFFORT_USD_PER_UNIT: Record<MechanismClass, number> = {
   unknown: 30,
 };
 
-export type PortfolioSignal = {
+/**
+ * Local commercial-signal hint (renamed from PortfolioSignal to avoid a name
+ * clash with revenue-priority.PortfolioSignal, which is the primary one
+ * consumed by the planner).
+ */
+export type LtvCacCommercialSignal = {
   /** Optional attributed commercial outcomes by patternKey. */
   commercialOutcomesByPattern?: Record<string, number>;
 };
@@ -97,7 +102,7 @@ function bucketByMechanism(posteriors: PatternPosteriorMap): Map<
  */
 export function mechanismProfitabilityRanking(input: {
   posteriors: PatternPosteriorMap;
-  portfolioSignal?: PortfolioSignal;
+  portfolioSignal?: LtvCacCommercialSignal;
   context?: BusinessContext;
 }): MechanismProfitability[] {
   const { price, margin } = averagePrice(input.context);

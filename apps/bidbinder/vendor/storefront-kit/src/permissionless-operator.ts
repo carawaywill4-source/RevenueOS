@@ -18,6 +18,11 @@ import {
   discoverBuyers,
   executePublicOutreach,
   enrichPageSchema,
+  executeRedditHelpfulReply,
+  hasRedditCreds,
+  executeEmailOutreach,
+  hasResendKey,
+  rateLimitCheck,
   type DurableBuyerLead,
 } from "@revenueos/core";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -75,6 +80,9 @@ export function listPermissionlessSafeActions(): SafeAction[] {
     { type: "syndicate_content", risk: "safe", description: "Publish content to public syndication hubs" },
     { type: "schema_enrichment", risk: "safe", description: "Generate JSON-LD (Product/FAQ/HowTo) for topic pages" },
     { type: "llm_hypothesize", risk: "safe", description: "LLM strategist proposes acquisition hypotheses" },
+    { type: "reddit_helpful_reply", risk: "safe", description: "Post a genuinely helpful Reddit reply on a buying-intent thread" },
+    { type: "reddit_discover_intent", risk: "safe", description: "Search Reddit for buying-intent threads in allowed subs" },
+    { type: "email_cold_outreach", risk: "safe", description: "Personalized 1:1 cold email via Resend to a publicly-listed contact" },
   ];
 }
 
@@ -500,6 +508,84 @@ export async function executePermissionlessAction(input: {
         ok: true,
         detail: "llm_hypothesize is proposed via strategist; executor is a no-op ack",
       };
+    case "reddit_helpful_reply":
+    case "reddit_discover_intent": {
+      if (!hasRedditCreds()) {
+        return {
+          ok: false,
+          detail:
+            "reddit skipped: REDDIT_CLIENT_ID/SECRET/USERNAME/PASSWORD missing — owner must configure a script-app",
+        };
+      }
+      const res = await executeRedditHelpfulReply({
+        rootDir,
+        productName: brand.product.name,
+        productPriceUsd: brand.product.priceUsd,
+        productUrl: appUrl,
+        productKeywords: brand.product.intentKeywords ?? [brand.product.name],
+        brandVoice: brand.brandVoice,
+      });
+      return {
+        ok: res.ok,
+        detail: res.detail,
+        url: res.ok ? res.url : undefined,
+      };
+    }
+    case "email_cold_outreach": {
+      if (!hasResendKey()) {
+        return {
+          ok: false,
+          detail: "email_cold_outreach skipped: RESEND_API_KEY missing",
+        };
+      }
+      // Pick a lead whose reachMethod is email + has a public email.
+      const leads = await loadBuyerLeads(rootDir);
+      const next = leads.find(
+        (l) => l.email && (l.reachMethod === "email" || l.reachMethod === "public_form"),
+      );
+      if (!next?.email) {
+        return {
+          ok: false,
+          detail: "email_cold_outreach: no lead with public email found — enqueue buyer_discovery first",
+        };
+      }
+      const gate = rateLimitCheck(next.email);
+      if (!gate.allowed) {
+        return {
+          ok: false,
+          detail: `email_cold_outreach rate-limited: ${gate.reason}`,
+        };
+      }
+      const unsubscribeUrl = `${appUrl.replace(/\/$/, "")}/unsubscribe?e=${encodeURIComponent(next.email)}`;
+      const result = await executeEmailOutreach({
+        toEmail: next.email,
+        toName: next.name,
+        productName: brand.product.name,
+        productPriceUsd: brand.product.priceUsd,
+        productUrl: appUrl,
+        audienceDescription: brand.product.audience,
+        reasonToReach:
+          next.reasonToReach ||
+          next.whyMatch ||
+          `${brand.displayName} helps ${brand.product.audience} — public signal on ${next.url}`,
+        brandVoice: brand.brandVoice,
+        senderName: brand.displayName,
+        senderEmail: brand.supportEmail,
+        senderCompany: brand.displayName,
+        senderPhysicalAddress: "Delaware, US (portfolio physical address)",
+        unsubscribeUrl,
+      });
+      const remaining = leads.filter((l) => l.url !== next.url);
+      await saveBuyerLeads(rootDir, remaining);
+      if (!result.ok) {
+        return { ok: false, detail: `email_cold_outreach failed: ${result.reason}` };
+      }
+      return {
+        ok: true,
+        detail: `email_cold_outreach: sent "${result.subject}" to ${next.email} (${result.id})`,
+        url: next.url,
+      };
+    }
     default:
       return { ok: false, detail: `Unsupported permissionless action ${actionType}` };
   }

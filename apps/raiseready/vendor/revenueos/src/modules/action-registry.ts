@@ -99,6 +99,21 @@ export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
     type: "feature_product",
     exposureKey: "homepage-focus",
   },
+  reddit_helpful_reply: {
+    type: "reddit_helpful_reply",
+    exposureKey: "reddit-reply",
+    cooldownMinutes: 25,
+  },
+  reddit_discover_intent: {
+    type: "reddit_discover_intent",
+    exposureKey: "reddit-discover",
+    cooldownMinutes: 60,
+  },
+  email_cold_outreach: {
+    type: "email_cold_outreach",
+    exposureKey: "email-outreach",
+    cooldownMinutes: 30,
+  },
 };
 
 export function getRegistryEntry(type: string): ActionRegistryEntry | undefined {

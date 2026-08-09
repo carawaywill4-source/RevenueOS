@@ -13,7 +13,8 @@
  */
 
 import { newId } from "../ledger/store";
-import type { ExperimentStore, PursuitEvent } from "../types";
+import type { PursuitEvent } from "../types";
+import type { ExperimentStore } from "../ledger/store";
 import {
   discoverOutreachTargets,
   draftOutreachMessage,

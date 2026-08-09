@@ -90,3 +90,5 @@ export * from "./modules/buyer-discovery";
 export * from "./modules/public-outreach";
 export * from "./modules/schema-enrichment";
 export * from "./modules/revenue-hunter";
+export * from "./modules/reddit-executor";
+export * from "./modules/email-outreach";

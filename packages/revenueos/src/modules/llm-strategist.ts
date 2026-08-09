@@ -43,6 +43,9 @@ export const LLM_PROPOSABLE_ACTIONS = [
   "change_default_cta",
   "feature_product",
   "publish_bundle",
+  "reddit_helpful_reply",
+  "reddit_discover_intent",
+  "email_cold_outreach",
 ] as const;
 
 export type LlmProposableAction = (typeof LLM_PROPOSABLE_ACTIONS)[number];
@@ -183,7 +186,7 @@ export async function proposeLlmStrategies(
       products: input.context.products.map((p) => ({
         name: p.name,
         priceUsd: p.priceUsd,
-        offer: p.description ?? "",
+        offer: "",
       })),
     },
     reality: {
