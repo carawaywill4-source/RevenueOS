@@ -104,3 +104,5 @@ export * from "./modules/gumroad";
 export * from "./modules/channel-catalog";
 export * from "./modules/channel-discovery";
 export * from "./modules/channel-registry";
+export * from "./modules/operator-adapter";
+export * from "./modules/operator-loop";
