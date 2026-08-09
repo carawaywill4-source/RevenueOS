@@ -113,16 +113,22 @@ export async function runOperatorTick(input: {
   tickBudgetMs?: number;
   maxJobsPerTick?: number;
   maxEnqueuePerTick?: number;
+  /** Observe only — do not enqueue or drain durable pursuits. */
+  skipEnqueue?: boolean;
   logger?: OperatorLoopLogger;
 }): Promise<OperatorTickResult> {
   const log = input.logger ?? defaultLogger;
   const startedAt = new Date();
   try {
-    log("info", "operator.tick.start", { businessId: input.businessId });
+    log("info", "operator.tick.start", {
+      businessId: input.businessId,
+      skipEnqueue: input.skipEnqueue === true,
+    });
     const { plan, drain } = await runPursuitTick(input.adapter, {
       budgetMs: input.tickBudgetMs ?? 180_000,
-      maxJobs: input.maxJobsPerTick ?? 24,
+      maxJobs: input.skipEnqueue ? 0 : (input.maxJobsPerTick ?? 24),
       maxEnqueue: input.maxEnqueuePerTick,
+      skipEnqueue: input.skipEnqueue,
       portfolioSignal: input.portfolioSignal,
       now: startedAt,
     });

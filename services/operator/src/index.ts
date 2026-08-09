@@ -33,7 +33,10 @@ import {
   executeThroughSidecar,
   isSidecarAction,
 } from "./lib/sidecar-executor.js";
-import { listOperatorSafeActions } from "./lib/safe-actions.js";
+import {
+  executeOperatorCommercialAction,
+  listCutoverSafeActions,
+} from "./lib/agent-executor.js";
 import { PortfolioScheduler } from "./lib/scheduler.js";
 import { createHealthServer } from "./lib/health-server.js";
 
@@ -112,7 +115,7 @@ async function main() {
       createOperatorAdapter({
         manifest: business,
         store,
-        safeActionSource: listOperatorSafeActions,
+        safeActionSource: listCutoverSafeActions,
         executor: async (action) => {
           if (shadow) {
             return {
@@ -120,26 +123,26 @@ async function main() {
               detail: `shadow_mode: would execute ${action.type}`,
             };
           }
-          if (!env.SIDECAR_URL || !env.SIDECAR_TOKEN) {
-            return {
-              ok: false,
-              detail: `sidecar not configured — cannot execute ${action.type}`,
-            };
-          }
-          if (!isSidecarAction(action)) {
-            return {
-              ok: false,
-              detail: `operator has no local executor for ${action.type}`,
-            };
-          }
-          return executeThroughSidecar({
+          const cronSecret =
+            process.env.CRON_SECRET || process.env.PORTFOLIO_PULSE_TOKEN;
+          const commercial = await executeOperatorCommercialAction({
             action,
-            config: {
-              baseUrl: env.SIDECAR_URL,
-              token: env.SIDECAR_TOKEN,
-              dryRun: env.SIDECAR_DRY_RUN === true,
-            },
+            manifest: business,
+            store,
+            cronSecret,
           });
+          if (commercial.ok) return commercial;
+          if (env.SIDECAR_URL && env.SIDECAR_TOKEN && isSidecarAction(action)) {
+            return executeThroughSidecar({
+              action,
+              config: {
+                baseUrl: env.SIDECAR_URL,
+                token: env.SIDECAR_TOKEN,
+                dryRun: env.SIDECAR_DRY_RUN === true,
+              },
+            });
+          }
+          return commercial;
         },
       }),
     createClaim: async (business) => {

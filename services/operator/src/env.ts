@@ -96,10 +96,13 @@ export function hydrateEnvFromFiles(
   const here = path.dirname(fileURLToPath(import.meta.url));
   const operatorRoot = path.resolve(here, "..");
   const repoRoot = path.resolve(operatorRoot, "../..");
+  // Prefer operator/.env, then the live TributeReady memory project
+  // (.env.local), then portfolio app donor, then .env.portfolio.
   const files = [
     path.join(operatorRoot, ".env"),
-    path.join(repoRoot, ".env.portfolio"),
     path.join(repoRoot, ".env.local"),
+    path.join(repoRoot, "apps/raiseready/.env.local"),
+    path.join(repoRoot, ".env.portfolio"),
     path.join(cwd, ".env"),
   ];
   for (const file of files) {

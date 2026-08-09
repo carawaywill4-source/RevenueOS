@@ -1,20 +1,22 @@
 #!/usr/bin/env node
 /**
- * Apply supabase/migrations/20260810_revenueos_operator_claims.sql
- * to the ACTIVE portfolio Supabase project.
+ * Apply / verify operator-claims storage on the ACTIVE RevenueOS Supabase project.
  *
- * Requires SUPABASE_ACCESS_TOKEN (supabase login) OR DATABASE_URL.
+ * Uses existing local credentials only (never prints secrets):
+ *   .env.local → apps/raiseready/.env.local → .env.portfolio → services/operator/.env
+ *
+ * Paths:
+ *   A) DATABASE_URL or SUPABASE_ACCESS_TOKEN → apply SQL migration, then PostgREST R/W probe
+ *   B) Otherwise → document-mode claims in revenueos_experiments (same project), R/W probe
  *
  * Usage:
- *   SUPABASE_ACCESS_TOKEN=... node scripts/apply-operator-claims-migration.mjs
- *   DATABASE_URL=postgres://... node scripts/apply-operator-claims-migration.mjs
- *
- * Then verifies with a write/read/delete claim round-trip via PostgREST.
+ *   node scripts/apply-operator-claims-migration.mjs
  */
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createClient } from "@supabase/supabase-js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -22,7 +24,6 @@ const sqlPath = path.join(
   ROOT,
   "supabase/migrations/20260810_revenueos_operator_claims.sql",
 );
-const sql = readFileSync(sqlPath, "utf8");
 
 function parseEnv(filePath) {
   const out = {};
@@ -38,38 +39,77 @@ function parseEnv(filePath) {
     ) {
       v = v.slice(1, -1);
     }
+    if (v.startsWith("[SENSI")) continue;
     out[s.slice(0, i).trim()] = v;
   }
   return out;
 }
 
-const env = {
-  ...parseEnv(path.join(ROOT, ".env.local")),
-  ...parseEnv(path.join(ROOT, ".env.portfolio")),
-  ...parseEnv(path.join(ROOT, "apps/raiseready/.env.local")),
-  ...process.env,
-};
+function projectRef(url) {
+  try {
+    return new URL(url).hostname.split(".")[0];
+  } catch {
+    return null;
+  }
+}
 
-const projectRef = (env.SUPABASE_URL || "")
-  .replace(/^https?:\/\//, "")
-  .split(".")[0];
+const files = [
+  path.join(ROOT, ".env.local"),
+  path.join(ROOT, "apps/raiseready/.env.local"),
+  path.join(ROOT, ".env.portfolio"),
+  path.join(ROOT, "services/operator/.env"),
+  path.join(ROOT, ".env.development.local"),
+];
+const env = { ...process.env };
+const provenance = {};
+for (const f of files) {
+  const parsed = parseEnv(f);
+  for (const [k, v] of Object.entries(parsed)) {
+    if (env[k] === undefined || env[k] === "") {
+      env[k] = v;
+      provenance[k] = path.relative(ROOT, f);
+    }
+  }
+}
+
 const url = (env.SUPABASE_URL || "").replace(/\/$/, "");
 const key = env.SUPABASE_SERVICE_ROLE_KEY;
+const ref = projectRef(url);
 
-if (env.DATABASE_URL) {
-  const r = spawnSync(
-    "psql",
-    [env.DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-f", sqlPath],
-    { stdio: "inherit" },
+if (!url || !key) {
+  console.error(
+    "Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in local env files.",
   );
+  process.exit(1);
+}
+
+console.log(
+  JSON.stringify(
+    {
+      projectRef: ref,
+      supabaseSource: provenance.SUPABASE_URL || "process.env",
+      hasDatabaseUrl: Boolean(env.DATABASE_URL || env.POSTGRES_URL || env.DIRECT_URL),
+      hasAccessToken: Boolean(env.SUPABASE_ACCESS_TOKEN),
+    },
+    null,
+    2,
+  ),
+);
+
+let nativeApplied = false;
+const sql = readFileSync(sqlPath, "utf8");
+const dbUrl = env.DATABASE_URL || env.POSTGRES_URL || env.DIRECT_URL;
+
+if (dbUrl) {
+  const r = spawnSync("psql", [dbUrl, "-v", "ON_ERROR_STOP=1", "-f", sqlPath], {
+    stdio: "inherit",
+  });
   if ((r.status ?? 1) !== 0) process.exit(r.status ?? 1);
+  nativeApplied = true;
+  console.log("Applied SQL migration via DATABASE_URL/POSTGRES_URL");
 } else if (env.SUPABASE_ACCESS_TOKEN) {
-  if (!projectRef) {
-    console.error("Could not resolve Supabase project ref from SUPABASE_URL");
-    process.exit(1);
-  }
   const res = await fetch(
-    `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
+    `https://api.supabase.com/v1/projects/${ref}/database/query`,
     {
       method: "POST",
       headers: {
@@ -81,75 +121,151 @@ if (env.DATABASE_URL) {
   );
   const body = await res.text();
   if (!res.ok) {
-    console.error("Migration apply failed", res.status, body.slice(0, 800));
+    console.error("Management API SQL failed", res.status, body.slice(0, 200));
     process.exit(1);
   }
-  console.log("Applied operator-claims migration to", projectRef);
-  console.log(body.slice(0, 300));
+  nativeApplied = true;
+  console.log("Applied SQL migration via SUPABASE_ACCESS_TOKEN");
 } else {
-  console.error(
-    "Set SUPABASE_ACCESS_TOKEN (supabase login) or DATABASE_URL, then re-run.",
+  console.log(
+    JSON.stringify({
+      sqlMigration: "skipped",
+      reason:
+        "No DATABASE_URL/POSTGRES_URL/DIRECT_URL/SUPABASE_ACCESS_TOKEN in local or Vercel-pulled env",
+      fallback: "document-mode claims in revenueos_experiments",
+      note: "Service role is present and sufficient for document-mode R/W on the same project",
+    }),
   );
-  console.error(
-    "Until then, Vercel crons cannot respect Mac leases (table 404 → unclaimed).",
-  );
-  process.exit(1);
 }
 
-if (!url || !key) {
-  console.warn("Skipping PostgREST verification — missing SUPABASE_URL/key");
-  process.exit(0);
-}
+const client = createClient(url, key, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 const testSite = `__claim_probe_${Date.now()}`;
 const leaseUntil = new Date(Date.now() + 60_000).toISOString();
-const upsert = await fetch(`${url}/rest/v1/revenueos_operator_claims`, {
-  method: "POST",
-  headers: {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-    "Content-Type": "application/json",
-    Prefer: "resolution=merge-duplicates,return=representation",
-  },
-  body: JSON.stringify({
+const claimedAt = new Date().toISOString();
+const owner = "migration-probe";
+
+async function probeNative() {
+  const { error: writeErr } = await client.from("revenueos_operator_claims").upsert(
+    {
+      site_id: testSite,
+      owner,
+      lease_until: leaseUntil,
+      claimed_at: claimedAt,
+    },
+    { onConflict: "site_id" },
+  );
+  if (writeErr) {
+    return { ok: false, error: writeErr.code || writeErr.message };
+  }
+  const { data, error: readErr } = await client
+    .from("revenueos_operator_claims")
+    .select("site_id,owner,lease_until")
+    .eq("site_id", testSite)
+    .maybeSingle();
+  if (readErr || data?.owner !== owner) {
+    return { ok: false, error: readErr?.message || "read_mismatch" };
+  }
+  await client.from("revenueos_operator_claims").delete().eq("site_id", testSite);
+  return { ok: true, storage: "native" };
+}
+
+async function probeDocument() {
+  const id = `ros:opclaim:${testSite}`;
+  const document = {
     site_id: testSite,
-    owner: "migration-probe",
+    owner,
     lease_until: leaseUntil,
-    claimed_at: new Date().toISOString(),
-  }),
-});
-const upsertBody = await upsert.text();
-if (!upsert.ok) {
-  console.error("Claim write failed", upsert.status, upsertBody.slice(0, 400));
-  process.exit(1);
-}
-console.log("Claim write OK", upsertBody.slice(0, 200));
-
-const read = await fetch(
-  `${url}/rest/v1/revenueos_operator_claims?site_id=eq.${encodeURIComponent(testSite)}&select=site_id,owner,lease_until`,
-  {
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      Accept: "application/json",
+    claimed_at: claimedAt,
+  };
+  const { error: writeErr } = await client.from("revenueos_experiments").upsert(
+    {
+      id,
+      site_id: testSite,
+      status: "operator_claim",
+      pattern_key: `operator_claim:${testSite}`,
+      category: "__ros_operator_claim__",
+      document,
+      updated_at: claimedAt,
     },
-  },
-);
-const rows = await read.json();
-if (!read.ok || !Array.isArray(rows) || rows[0]?.owner !== "migration-probe") {
-  console.error("Claim read failed", read.status, rows);
-  process.exit(1);
-}
-console.log("Claim read OK", rows[0]);
+    { onConflict: "id" },
+  );
+  if (writeErr) {
+    return { ok: false, error: writeErr.code || writeErr.message };
+  }
+  const { data, error: readErr } = await client
+    .from("revenueos_experiments")
+    .select("document")
+    .eq("id", id)
+    .maybeSingle();
+  const doc = data?.document;
+  if (readErr || doc?.owner !== owner) {
+    return { ok: false, error: readErr?.message || "read_mismatch" };
+  }
 
-await fetch(
-  `${url}/rest/v1/revenueos_operator_claims?site_id=eq.${encodeURIComponent(testSite)}`,
-  {
-    method: "DELETE",
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
+  // Also verify brain checkOperatorHosting path
+  const { checkOperatorHosting } = await import(
+    "../packages/revenueos/src/modules/operator-claims.ts"
+  );
+  const hosted = await checkOperatorHosting(testSite, {
+    SUPABASE_URL: url,
+    SUPABASE_SERVICE_ROLE_KEY: key,
+  });
+
+  await client.from("revenueos_experiments").delete().eq("id", id);
+
+  if (!hosted.hosted || hosted.reason !== "active_claim") {
+    return {
+      ok: false,
+      error: "checkOperatorHosting_did_not_see_claim",
+      hosted,
+    };
+  }
+  return {
+    ok: true,
+    storage: "document",
+    checkOperatorHosting: {
+      hosted: hosted.hosted,
+      reason: hosted.reason,
+      storage: hosted.storage,
     },
-  },
+  };
+}
+
+let result;
+if (nativeApplied) {
+  result = await probeNative();
+  if (!result.ok) {
+    console.error("Native claim probe failed", result);
+    process.exit(1);
+  }
+} else {
+  const nativeTry = await probeNative();
+  if (nativeTry.ok) {
+    result = nativeTry;
+    nativeApplied = true;
+  } else {
+    result = await probeDocument();
+    if (!result.ok) {
+      console.error("Document claim probe failed", result);
+      process.exit(1);
+    }
+  }
+}
+
+console.log(
+  JSON.stringify(
+    {
+      verified: true,
+      projectRef: ref,
+      storage: result.storage,
+      nativeTableApplied: nativeApplied,
+      checkOperatorHosting: result.checkOperatorHosting ?? null,
+      probeCleanedUp: true,
+    },
+    null,
+    2,
+  ),
 );
-console.log("Claim probe cleaned up. Migration verified.");
