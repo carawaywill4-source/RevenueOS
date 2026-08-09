@@ -197,6 +197,27 @@ create table if not exists public.revenueos_captured_emails (
 create index if not exists revenueos_captured_emails_site_idx
   on public.revenueos_captured_emails (site_id, captured_at desc);
 
+-- Channel Registry: durable acquisition surfaces + commercial posteriors.
+create table if not exists public.revenueos_channels (
+  id text primary key,
+  site_id text not null,
+  platform text not null,
+  account text not null default 'default',
+  capability_id text not null default '',
+  revenue_per_action numeric not null default 0,
+  confidence numeric not null default 0,
+  status text not null default 'active',
+  document jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (site_id, platform, account, capability_id)
+);
+
+create index if not exists revenueos_channels_site_idx
+  on public.revenueos_channels (site_id, revenue_per_action desc);
+create index if not exists revenueos_channels_platform_idx
+  on public.revenueos_channels (platform, status);
+
 alter table public.revenueos_experiments enable row level security;
 alter table public.revenueos_lessons enable row level security;
 alter table public.revenueos_scorecards enable row level security;
@@ -210,3 +231,4 @@ alter table public.revenueos_pursuits enable row level security;
 alter table public.revenueos_pursuit_events enable row level security;
 alter table public.revenueos_leases enable row level security;
 alter table public.revenueos_captured_emails enable row level security;
+alter table public.revenueos_channels enable row level security;

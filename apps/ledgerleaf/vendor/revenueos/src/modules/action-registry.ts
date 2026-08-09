@@ -75,6 +75,21 @@ export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
     exposureKey: "template-landing",
     cooldownMinutes: 15,
   },
+  publish_intent_tool: {
+    type: "publish_intent_tool",
+    exposureKey: "intent-tool",
+    cooldownMinutes: 20,
+  },
+  publish_calculator: {
+    type: "publish_calculator",
+    exposureKey: "calculator",
+    cooldownMinutes: 20,
+  },
+  channel_discover: {
+    type: "channel_discover",
+    exposureKey: "channel-discover",
+    cooldownMinutes: 360,
+  },
   distribute_owned_urls: {
     type: "distribute_owned_urls",
     exposureKey: "distribute-owned",
@@ -168,6 +183,16 @@ export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
     type: "order_bump_deploy",
     exposureKey: "order-bump",
     cooldownMinutes: 10_080,
+  },
+  gumroad_product_sync: {
+    type: "gumroad_product_sync",
+    exposureKey: "gumroad-product",
+    cooldownMinutes: 10_080,
+  },
+  gumroad_sales_import: {
+    type: "gumroad_sales_import",
+    exposureKey: "gumroad-sales",
+    cooldownMinutes: 360,
   },
 };
 

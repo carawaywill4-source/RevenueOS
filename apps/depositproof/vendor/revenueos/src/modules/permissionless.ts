@@ -64,6 +64,8 @@ export const PERMISSIONLESS_ORGANIC_TYPES = new Set([
   "publish_howto_cluster",
   "publish_comparison_page",
   "publish_template_landing",
+  "publish_intent_tool",
+  "publish_calculator",
   "publish_llms_txt",
   "publish_rss_feed",
   "distribute_owned_urls",
@@ -73,6 +75,7 @@ export const PERMISSIONLESS_ORGANIC_TYPES = new Set([
   // Agent-tier permissionless actions (LLM + internet powered):
   "web_research",
   "buyer_discovery",
+  "channel_discover",
   "public_form_outreach",
   "directory_submit",
   "syndicate_content",
@@ -103,6 +106,9 @@ export const PERMISSIONLESS_ORGANIC_TYPES = new Set([
   // Owned-property production features:
   "exit_intent_deploy",
   "order_bump_deploy",
+  // Gumroad marketplace (access-token writes + sales import):
+  "gumroad_product_sync",
+  "gumroad_sales_import",
 ]);
 
 export function isPermissionlessOrganic(type: string): boolean {

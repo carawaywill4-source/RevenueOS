@@ -78,6 +78,15 @@ import {
 } from "./business-suspension";
 import { filterTransferableLessons } from "../memory/similarity";
 import { newId } from "../ledger/store";
+import {
+  discoverChannels,
+  shouldRunChannelDiscovery,
+} from "./channel-discovery";
+import {
+  loadChannels,
+  runChannelRegistryTick,
+  type ChannelArm,
+} from "./channel-registry";
 import type {
   FirstCustomerMode,
   Lesson,
@@ -138,6 +147,12 @@ export type PlanAndEnqueueResult = {
   unlockProposals?: ReturnType<typeof proposeUnlocksForBannedMechanisms>;
   /** Portfolio insight sentence returned by the LLM strategist this cycle. */
   llmInsight?: string;
+  /** Channel Registry allocation for this cycle. */
+  channelAllocation?: {
+    channelCount: number;
+    discovered: number;
+    ranking: Array<{ platform: string; score: number; revenuePerAction: number }>;
+  };
 };
 
 /**
@@ -336,6 +351,91 @@ export async function planAndEnqueuePursuits(
     now,
   });
   const patternGate = computePatternGate(patternPosteriors);
+
+  // Channel Discovery + Registry — the acquisition decision layer.
+  // discover/update → score by revenue_per_action → pick next_action.
+  // Hardcoded "post every business to Reddit every hour" is forbidden;
+  // Thompson sampling allocates effort by attributable profit per hour.
+  let channelAllocation: PlanAndEnqueueResult["channelAllocation"];
+  let channelArms: ChannelArm[] = [];
+  try {
+    const existingChannels = await loadChannels(store, context.siteId);
+    const pausedRatio =
+      existingChannels.length === 0
+        ? 0
+        : existingChannels.filter((c) => c.status === "paused").length /
+          existingChannels.length;
+    const lastDiscoveryAt = existingChannels
+      .map((c) => c.updatedAt)
+      .sort()
+      .at(-1);
+    let candidates: Awaited<ReturnType<typeof discoverChannels>>["candidates"] =
+      [];
+    let discovered = 0;
+    if (
+      shouldRunChannelDiscovery({
+        channelCount: existingChannels.length,
+        lastDiscoveryAt,
+        pausedRatio,
+        now,
+      })
+    ) {
+      const discovery = await discoverChannels({
+        context,
+        maxCandidates: 8,
+      });
+      candidates = discovery.candidates;
+      discovered = candidates.length;
+    }
+    const registry = await runChannelRegistryTick({
+      store,
+      context,
+      candidates,
+      events: recentEvents.map((e) => ({
+        eventType: e.eventType,
+        detail: e.detail,
+        createdAt: e.createdAt,
+      })),
+      portfolioSignal: opts.portfolioSignal,
+      persist: true,
+    });
+    channelArms = registry.arms;
+    if (registry.opportunities.length > 0) {
+      opportunities = [...opportunities, ...registry.opportunities].sort(
+        (a, b) => b.score - a.score,
+      );
+    }
+    channelAllocation = {
+      channelCount: registry.channels.length,
+      discovered,
+      ranking: channelArms.slice(0, 6).map((a) => ({
+        platform: a.channel.platform,
+        score: a.score,
+        revenuePerAction: a.channel.revenuePerAction,
+      })),
+    };
+    // Stagnation across a channel family: paused channels already dropped from
+    // next_action; force discovery opportunity when most arms are dry.
+    if (pausedRatio >= 0.5 || (channelArms.length > 0 && channelArms.every((a) => a.channel.revenuePerAction <= 0 && a.channel.experimentsRun >= 3))) {
+      opportunities.unshift({
+        id: `channel-discover-${context.siteId}-${dayKey}`,
+        title: "Channel discovery: find higher-yield surfaces",
+        metric: "landing_views",
+        category: "acquisition",
+        action:
+          "Prior channel families produced no commercial signal — discover alternative zero-cost surfaces specific to this business (no spam repeats).",
+        expectedImpact: 8,
+        confidence: 0.55,
+        effort: 2,
+        score: 95,
+        safeActionType: "channel_discover",
+        patternKey: `channel:discover:${context.siteId}`,
+        precursorMetric: "landing_views",
+      });
+    }
+  } catch {
+    // Registry path is best-effort; static + LLM paths still run.
+  }
 
   // LLM strategist — propose new acquisition hypotheses grounded in the
   // current state, pattern posteriors, and pattern gate. Guarded so a network
@@ -607,6 +707,7 @@ export async function planAndEnqueuePursuits(
     },
     unlockProposals,
     llmInsight,
+    channelAllocation,
   };
 }
 

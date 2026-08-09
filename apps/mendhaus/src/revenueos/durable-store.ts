@@ -2,6 +2,7 @@ import {
   createFileExperimentStore,
   type Attribution,
   type CapabilityGap,
+  type ChannelRecord,
   type CycleReportRecord,
   type DiscoveryDoor,
   type Experiment,
@@ -369,6 +370,44 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
       if (error) {
         if (process.env.VERCEL) throw new Error(`Ledger capability gap save failed: ${error.message}`);
         return fallback.saveCapabilityGap!(gap);
+      }
+    },
+
+    async listChannels(siteId: string) {
+      if (!(await supabaseAvailable())) return fallback.listChannels!(siteId);
+      const { data, error } = await sb()
+        .from("revenueos_channels")
+        .select("document")
+        .eq("site_id", siteId)
+        .order("revenue_per_action", { ascending: false });
+      if (error) {
+        if (process.env.VERCEL) throw new Error(`Ledger channels read failed: ${error.message}`);
+        return fallback.listChannels!(siteId);
+      }
+      return (data ?? []).map((row) => row.document as ChannelRecord);
+    },
+
+    async saveChannel(channel: ChannelRecord) {
+      if (!(await supabaseAvailable())) return fallback.saveChannel!(channel);
+      const { error } = await sb().from("revenueos_channels").upsert(
+        {
+          id: channel.id,
+          site_id: channel.siteId,
+          platform: channel.platform,
+          account: channel.account,
+          capability_id: channel.capabilityId ?? "",
+          revenue_per_action: channel.revenuePerAction,
+          confidence: channel.confidence,
+          status: channel.status,
+          document: channel,
+          created_at: channel.createdAt,
+          updated_at: channel.updatedAt,
+        },
+        { onConflict: "id" },
+      );
+      if (error) {
+        if (process.env.VERCEL) throw new Error(`Ledger channel save failed: ${error.message}`);
+        return fallback.saveChannel!(channel);
       }
     },
 

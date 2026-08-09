@@ -3,6 +3,7 @@ import path from "node:path";
 import type {
   Attribution,
   CapabilityGap,
+  ChannelRecord,
   CycleReportRecord,
   DiscoveryDoor,
   Experiment,
@@ -36,6 +37,7 @@ type FileLedger = {
   exposures: ExposureRecord[];
   discoveryDoors: DiscoveryDoor[];
   capabilityGaps: CapabilityGap[];
+  channels: ChannelRecord[];
   pursuits: PursuitJob[];
   pursuitEvents: PursuitEvent[];
   leases: PursuitLease[];
@@ -51,6 +53,7 @@ const EMPTY: FileLedger = {
   exposures: [],
   discoveryDoors: [],
   capabilityGaps: [],
+  channels: [],
   pursuits: [],
   pursuitEvents: [],
   leases: [],
@@ -223,6 +226,28 @@ export function createFileExperimentStore(
       );
       if (index >= 0) data.capabilityGaps[index] = gap;
       else data.capabilityGaps.push(gap);
+      await save(data);
+    },
+    async listChannels(siteId) {
+      const data = await load();
+      return (data.channels ?? []).filter((item) => item.siteId === siteId);
+    },
+    async saveChannel(channel) {
+      const data = await load();
+      if (!data.channels) data.channels = [];
+      const index = data.channels.findIndex((item) => item.id === channel.id);
+      if (index >= 0) data.channels[index] = channel;
+      else {
+        const byKey = data.channels.findIndex(
+          (item) =>
+            item.siteId === channel.siteId &&
+            item.platform === channel.platform &&
+            item.account === channel.account &&
+            (item.capabilityId ?? "") === (channel.capabilityId ?? ""),
+        );
+        if (byKey >= 0) data.channels[byKey] = { ...channel, id: data.channels[byKey]!.id };
+        else data.channels.push(channel);
+      }
       await save(data);
     },
     async listPursuits(siteId, opts) {

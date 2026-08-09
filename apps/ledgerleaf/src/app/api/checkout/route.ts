@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { BRAND } from "@/lib/brand";
 import { checkoutAllowed } from "@/lib/readiness";
 import { getStripe } from "@/lib/stripe";
+import {
+  loadStripeOrderBumpConfig,
+  withStripeOrderBump,
+} from "@revenueos/core";
 
 export async function POST() {
   if (!checkoutAllowed()) {
@@ -10,14 +14,14 @@ export async function POST() {
       { status: 503 },
     );
   }
-  const origin = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3012";
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const stripe = getStripe();
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    success_url: `${origin}/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/?cancelled=1`,
-    customer_email: undefined,
-    line_items: [
+  const bump = await loadStripeOrderBumpConfig({
+    rootDir: process.cwd(),
+    siteId: BRAND.siteId,
+  });
+  const lineItems = withStripeOrderBump({
+    lineItems: [
       {
         quantity: 1,
         price_data: {
@@ -30,9 +34,18 @@ export async function POST() {
         },
       },
     ],
+    config: bump,
+  });
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    success_url: `${origin}/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${origin}/?cancelled=1`,
+    customer_email: undefined,
+    line_items: lineItems as never,
     metadata: {
       siteId: BRAND.siteId,
       productId: BRAND.product.id,
+      orderBump: bump?.enabled ? "1" : "0",
     },
   });
   return NextResponse.json({ url: session.url });

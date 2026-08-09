@@ -39,6 +39,9 @@ export const LLM_PROPOSABLE_ACTIONS = [
   "publish_howto_cluster",
   "publish_comparison_page",
   "publish_intent_page",
+  "publish_intent_tool",
+  "publish_calculator",
+  "channel_discover",
   "rewrite_page_copy",
   "change_default_cta",
   "feature_product",
@@ -57,6 +60,8 @@ export const LLM_PROPOSABLE_ACTIONS = [
   "youtube_community_reply_draft",
   "exit_intent_deploy",
   "order_bump_deploy",
+  "gumroad_product_sync",
+  "gumroad_sales_import",
 ] as const;
 
 export type LlmProposableAction = (typeof LLM_PROPOSABLE_ACTIONS)[number];

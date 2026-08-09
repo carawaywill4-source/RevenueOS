@@ -83,10 +83,11 @@ export const MECHANISM_UNLOCKS: Record<Exclude<MechanismClass, "unknown">, Mecha
         actionOnceEnabled: "Coordinated launch to Product Hunt audience",
       },
       {
-        name: "Gumroad Discover",
+        name: "Gumroad access token (GUMROAD_ACCESS_TOKEN)",
         costPerMonthUsd: 0,
-        setupTime: "1 hour",
-        actionOnceEnabled: "List digital product to Gumroad's built-in buyer discovery",
+        setupTime: "5 minutes (Settings → Advanced → Application → create token)",
+        actionOnceEnabled:
+          "RevenueOS runs gumroad_product_sync + gumroad_sales_import so each portfolio product is listed and sales feed attribution",
       },
     ],
   },

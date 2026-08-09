@@ -5,7 +5,14 @@ export type IntentDoor = {
   title: string;
   intentQuery: string;
   body: string;
-  kind: "static" | "programmatic" | "free_resource" | "comparison" | "howto";
+  kind:
+    | "static"
+    | "programmatic"
+    | "free_resource"
+    | "comparison"
+    | "howto"
+    | "tool"
+    | "calculator";
 };
 
 function slugify(input: string) {
@@ -69,6 +76,28 @@ export function expandPermissionlessDoors(brand: BrandConfig): IntentDoor[] {
       intentQuery: `how to ${brand.product.intentKeywords[0] ?? brand.product.slug}`,
       body: `Step-by-step: open the kit, pick the script that matches your situation, fill the blanks, send. Designed for ${audience}.`,
       kind: "howto",
+    });
+  }
+
+  const calcSlug = slugify(`${brand.product.slug}-calculator`);
+  if (!doors.some((d) => d.slug === calcSlug)) {
+    doors.push({
+      slug: calcSlug,
+      title: `${product} calculator`,
+      intentQuery: `${brand.product.intentKeywords[0] ?? brand.product.slug} calculator`,
+      body: `A free calculator for ${audience}. Estimate the cost of doing this yourself vs using ${product} ($${price}) — then grab the kit when you're ready.`,
+      kind: "calculator",
+    });
+  }
+
+  const toolSlug = slugify(`${brand.product.slug}-generator`);
+  if (!doors.some((d) => d.slug === toolSlug)) {
+    doors.push({
+      slug: toolSlug,
+      title: `Free ${product} starter generator`,
+      intentQuery: `free ${brand.product.intentKeywords[0] ?? brand.product.slug} generator`,
+      body: `A shareable mini-tool for ${audience}. Generate a starter draft, then upgrade to ${product} ($${price}) for the full pack.`,
+      kind: "tool",
     });
   }
 

@@ -957,6 +957,53 @@ export type PursuitEvent = {
   createdAt: string;
 };
 
+/**
+ * Durable acquisition-channel record (Channel Registry).
+ * Tracks outcomes so effort allocation compounds by revenue_per_action.
+ */
+export type ChannelRecord = {
+  id: string;
+  siteId: string;
+  platform: string;
+  capabilityId?: string;
+  account: string;
+  business: string;
+  audience: string;
+  buyerIntent: "high" | "medium" | "low";
+  allowedActions: string[];
+  postingRules: string[];
+  rateLimits: {
+    cooldownMinutes: number;
+    maxActionsPerDay: number;
+  };
+  contentFormats: string[];
+  lastAction: string | null;
+  lastActionAt: string | null;
+  trafficGenerated: number;
+  qualifiedVisitors: number;
+  checkoutStarts: number;
+  purchases: number;
+  revenue: number;
+  conversionRate: number;
+  revenuePerAction: number;
+  alpha: number;
+  beta: number;
+  confidence: number;
+  experimentsRun: number;
+  winningAngles: string[];
+  losingAngles: string[];
+  nextAction: string | null;
+  mechanism: string;
+  actionTypes: string[];
+  evidenceUrls: string[];
+  intentScore: number;
+  effortEstimate: number;
+  untested: boolean;
+  status: "active" | "paused" | "banned";
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type PursuitLease = {
   id: string;
   siteId: string;

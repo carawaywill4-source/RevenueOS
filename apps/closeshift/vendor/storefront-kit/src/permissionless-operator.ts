@@ -16,6 +16,7 @@ import {
   queryWebForBuyingIntent,
   queryCompetitors,
   discoverBuyers,
+  discoverChannels,
   executePublicOutreach,
   enrichPageSchema,
   executeRedditHelpfulReply,
@@ -33,8 +34,12 @@ import {
   executeYouTubeCommunityReplyDraft,
   executeExitIntentDeploy,
   executeStripeOrderBumpDeploy,
+  executeGumroadProductSync,
+  executeGumroadSalesImport,
   hasYouTubeApiKey,
   hasGscCredentials,
+  hasGumroadCreds,
+  attachSignedUtm,
   type DurableBuyerLead,
 } from "@revenueos/core";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -80,6 +85,9 @@ export function listPermissionlessSafeActions(): SafeAction[] {
     { type: "publish_howto_cluster", risk: "safe", description: "How-to cluster page" },
     { type: "publish_comparison_page", risk: "safe", description: "Comparison SEO page" },
     { type: "publish_template_landing", risk: "safe", description: "Template landing" },
+    { type: "publish_intent_tool", risk: "safe", description: "Owned intent tool / generator / quiz" },
+    { type: "publish_calculator", risk: "safe", description: "Owned calculator traffic machine" },
+    { type: "channel_discover", risk: "safe", description: "Discover business-specific zero-cost acquisition channels" },
     { type: "distribute_owned_urls", risk: "safe", description: "Index all owned URLs" },
     { type: "publish_llms_txt", risk: "safe", description: "AI discovery file" },
     { type: "refresh_discovery_door", risk: "safe", description: "Re-distribute door" },
@@ -106,6 +114,8 @@ export function listPermissionlessSafeActions(): SafeAction[] {
     { type: "youtube_community_reply_draft", risk: "safe", description: "Draft (or post w/ oauth token) a helpful YouTube reply to a discovered intent comment" },
     { type: "exit_intent_deploy", risk: "safe", description: "Deploy the exit-intent email capture snippet for this site" },
     { type: "order_bump_deploy", risk: "safe", description: "Enable a Stripe checkout order bump for this site" },
+    { type: "gumroad_product_sync", risk: "safe", description: "Ensure product is listed on Gumroad (needs GUMROAD_ACCESS_TOKEN)" },
+    { type: "gumroad_sales_import", risk: "safe", description: "Import Gumroad sales into local attribution ledger" },
   ];
 }
 
@@ -191,6 +201,97 @@ export function permissionlessOpportunities(brand: BrandConfig) {
       effort: 2,
       safeActionType: "producthunt_helpful_reply",
       patternKey: "pursuit:producthunt-help",
+      precursorMetric: "landing_views",
+    },
+    {
+      id: "perm-ih-community",
+      title: "Indie Hackers community reply (draft/post)",
+      metric: "landing_views",
+      category: "acquisition",
+      action: "Helpful IH reply on buying-intent thread",
+      expectedImpact: 10,
+      confidence: 0.48,
+      effort: 2,
+      safeActionType: "indiehackers_community_post_draft",
+      patternKey: "pursuit:ih-community",
+      precursorMetric: "landing_views",
+    },
+    {
+      id: "perm-hn-intent",
+      title: "Hacker News buying-intent discovery",
+      metric: "landing_views",
+      category: "acquisition",
+      action: "Surface HN Ask/Show threads as leads",
+      expectedImpact: 10,
+      confidence: 0.5,
+      effort: 1,
+      safeActionType: "hackernews_intent_discovery",
+      patternKey: "pursuit:hn-intent",
+      precursorMetric: "landing_views",
+    },
+    {
+      id: "perm-yt-intent",
+      title: "YouTube buying-intent comment discovery",
+      metric: "landing_views",
+      category: "acquisition",
+      action: "Find YouTube comments expressing purchase intent",
+      expectedImpact: 10,
+      confidence: 0.48,
+      effort: 2,
+      safeActionType: "youtube_intent_discovery",
+      patternKey: "pursuit:yt-intent",
+      precursorMetric: "landing_views",
+    },
+    {
+      id: "perm-gsc-queries",
+      title: "Import commercial Search Console queries",
+      metric: "landing_views",
+      category: "acquisition",
+      action: "Pull GSC queries and enqueue commercial opportunities",
+      expectedImpact: 9,
+      confidence: 0.55,
+      effort: 1,
+      safeActionType: "gsc_query_import",
+      patternKey: "pursuit:gsc-queries",
+      precursorMetric: "landing_views",
+    },
+    {
+      id: "perm-exit-intent",
+      title: "Deploy exit-intent email capture",
+      metric: "email_captures",
+      category: "acquisition",
+      action: "Capture abandoning visitors before they leave",
+      expectedImpact: 12,
+      confidence: 0.6,
+      effort: 1,
+      safeActionType: "exit_intent_deploy",
+      patternKey: "pursuit:exit-intent",
+      precursorMetric: "landing_views",
+    },
+    {
+      id: "perm-order-bump",
+      title: "Enable Stripe checkout order bump",
+      metric: "revenue",
+      category: "acquisition",
+      action: "Add a related low-price bump to checkout",
+      expectedImpact: 11,
+      confidence: 0.55,
+      effort: 1,
+      safeActionType: "order_bump_deploy",
+      patternKey: "pursuit:order-bump",
+      precursorMetric: "landing_views",
+    },
+    {
+      id: "perm-gumroad-sync",
+      title: "Sync product listing to Gumroad",
+      metric: "landing_views",
+      category: "acquisition",
+      action: "Ensure Gumroad marketplace listing exists for this product",
+      expectedImpact: 10,
+      confidence: 0.5,
+      effort: 2,
+      safeActionType: "gumroad_product_sync",
+      patternKey: "pursuit:gumroad-sync",
       precursorMetric: "landing_views",
     },
     {
@@ -348,6 +449,13 @@ export async function executePermissionlessAction(input: {
   actionType: string;
 }): Promise<{ ok: boolean; detail: string; url?: string }> {
   const { brand, rootDir, appUrl, actionType } = input;
+  const signedProductUrl = await attachSignedUtm({
+    url: appUrl,
+    businessId: brand.siteId,
+    source: "revenueos",
+    medium: "organic",
+    campaign: actionType,
+  });
 
   switch (actionType) {
     case "scorecard_snapshot":
@@ -370,6 +478,53 @@ export async function executePermissionlessAction(input: {
       return publishDoorOfKind({ brand, rootDir, appUrl, kind: "howto" });
     case "publish_comparison_page":
       return publishDoorOfKind({ brand, rootDir, appUrl, kind: "comparison" });
+    case "publish_intent_tool":
+      return publishDoorOfKind({ brand, rootDir, appUrl, kind: "tool" });
+    case "publish_calculator":
+      return publishDoorOfKind({ brand, rootDir, appUrl, kind: "calculator" });
+    case "channel_discover": {
+      const discovery = await discoverChannels({
+        context: {
+          siteId: brand.siteId,
+          displayName: brand.displayName,
+          industry: brand.industry,
+          products: [
+            {
+              name: brand.product.name,
+              priceUsd: brand.product.priceUsd,
+              marginEstimate: 0.85,
+            },
+          ],
+          funnelSteps: ["landing", "checkout", "purchase"],
+          brandVoice: brand.product.audience,
+          allowedChannels: ["organic"],
+          autonomousDailyCapUsd: 0,
+          timezone: "UTC",
+          constraints: ["zero_ad_spend"],
+          audienceSegments: [{ label: brand.product.audience }],
+        },
+        maxCandidates: 8,
+      });
+      const outFile = path.join(dataRoot(rootDir), "channel-discovery-latest.json");
+      await mkdir(path.dirname(outFile), { recursive: true });
+      await writeFile(
+        outFile,
+        JSON.stringify(
+          {
+            at: new Date().toISOString(),
+            ok: discovery.ok,
+            reason: discovery.reason,
+            candidates: discovery.candidates,
+          },
+          null,
+          2,
+        ),
+      );
+      return {
+        ok: true,
+        detail: `channel_discover: ${discovery.candidates.length} candidates for ${brand.displayName} (catalogSeeds=${discovery.catalogSeedCount})`,
+      };
+    }
     case "refresh_discovery_door":
       return publishDoorOfKind({ brand, rootDir, appUrl });
     case "indexnow_submit": {
@@ -597,7 +752,7 @@ export async function executePermissionlessAction(input: {
         rootDir,
         productName: brand.product.name,
         productPriceUsd: brand.product.priceUsd,
-        productUrl: appUrl,
+        productUrl: signedProductUrl,
         productKeywords: brand.product.intentKeywords ?? [brand.product.name],
         brandVoice: brand.brandVoice,
       });
@@ -612,7 +767,7 @@ export async function executePermissionlessAction(input: {
         rootDir,
         productName: brand.product.name,
         productPriceUsd: brand.product.priceUsd,
-        productUrl: appUrl,
+        productUrl: signedProductUrl,
         productKeywords: brand.product.intentKeywords ?? [brand.product.name],
         brandVoice: brand.brandVoice,
       });
@@ -627,7 +782,7 @@ export async function executePermissionlessAction(input: {
         rootDir,
         productName: brand.product.name,
         productPriceUsd: brand.product.priceUsd,
-        productUrl: appUrl,
+        productUrl: signedProductUrl,
         productDescription: brand.product.description,
         audience: brand.product.audience,
         brandVoice: brand.brandVoice,
@@ -639,7 +794,7 @@ export async function executePermissionlessAction(input: {
         rootDir,
         productName: brand.product.name,
         productPriceUsd: brand.product.priceUsd,
-        productUrl: appUrl,
+        productUrl: signedProductUrl,
         productKeywords: brand.product.intentKeywords ?? [brand.product.name],
         brandVoice: brand.brandVoice,
       });
@@ -649,7 +804,7 @@ export async function executePermissionlessAction(input: {
       const res = await executeHackerNewsShowHnDraft({
         rootDir,
         productName: brand.product.name,
-        productUrl: appUrl,
+        productUrl: signedProductUrl,
         productDescription: brand.product.description,
         audience: brand.product.audience,
         brandVoice: brand.brandVoice,
@@ -662,7 +817,7 @@ export async function executePermissionlessAction(input: {
         productName: brand.product.name,
         productDescription: brand.product.description,
         productKeywords: brand.product.intentKeywords ?? [brand.product.name],
-        productUrl: appUrl,
+        productUrl: signedProductUrl,
       });
       if (res.ok && res.leads.length) {
         const existing = await loadBuyerLeads(rootDir);
@@ -686,9 +841,12 @@ export async function executePermissionlessAction(input: {
             "gsc_query_import skipped: GOOGLE_SERVICE_ACCOUNT_JSON missing — add a Search Console-owner service account and set the env",
         };
       }
+      const siteUrl =
+        process.env.GSC_SITE_URL ||
+        `${appUrl.replace(/\/$/, "")}/`;
       const res = await executeGscQueryImport({
         rootDir,
-        siteUrl: `sc-domain:${brand.domain}`,
+        siteUrl,
         productName: brand.product.name,
         productDescription: brand.product.description,
       });
@@ -707,7 +865,7 @@ export async function executePermissionlessAction(input: {
       const urls = [base, ...doors.slice(0, 12).map((d) => `${base}/topics/${d.slug}`)];
       const res = await executeGscIndexationCheck({
         rootDir,
-        siteUrl: `sc-domain:${brand.domain}`,
+        siteUrl: process.env.GSC_SITE_URL || `${base}/`,
         urls,
       });
       if (res.ok && res.notIndexed.length) {
@@ -730,7 +888,7 @@ export async function executePermissionlessAction(input: {
         productName: brand.product.name,
         productDescription: brand.product.description,
         productKeywords: brand.product.intentKeywords ?? [brand.product.name],
-        productUrl: appUrl,
+        productUrl: signedProductUrl,
       });
       if (res.ok && res.leads.length) {
         const existing = await loadBuyerLeads(rootDir);
@@ -767,7 +925,7 @@ export async function executePermissionlessAction(input: {
       const res = await executeYouTubeCommunityReplyDraft({
         rootDir,
         productName: brand.product.name,
-        productUrl: appUrl,
+        productUrl: signedProductUrl,
         brandVoice: brand.brandVoice,
         targetComment: {
           videoId: videoId!,
@@ -812,6 +970,43 @@ export async function executePermissionlessAction(input: {
       if (!res.ok) return { ok: false, detail: res.detail };
       return { ok: true, detail: res.detail, url: res.url };
     }
+    case "gumroad_product_sync": {
+      if (!hasGumroadCreds()) {
+        return {
+          ok: false,
+          detail: "gumroad_product_sync skipped: GUMROAD_ACCESS_TOKEN missing",
+        };
+      }
+      const productUrl = await attachSignedUtm({
+        url: appUrl,
+        businessId: brand.siteId,
+        source: "gumroad",
+        medium: "marketplace",
+        campaign: "product_sync",
+      });
+      const res = await executeGumroadProductSync({
+        rootDir,
+        siteId: brand.siteId,
+        productName: brand.product.name,
+        productDescription: brand.product.description,
+        productUrl,
+        priceUsd: brand.product.priceUsd,
+      });
+      return { ok: res.ok, detail: res.detail, url: res.url };
+    }
+    case "gumroad_sales_import": {
+      if (!hasGumroadCreds()) {
+        return {
+          ok: false,
+          detail: "gumroad_sales_import skipped: GUMROAD_ACCESS_TOKEN missing",
+        };
+      }
+      const res = await executeGumroadSalesImport({
+        rootDir,
+        siteId: brand.siteId,
+      });
+      return { ok: res.ok, detail: res.detail };
+    }
     case "email_cold_outreach": {
       if (!hasResendKey()) {
         return {
@@ -843,7 +1038,7 @@ export async function executePermissionlessAction(input: {
         toName: next.name,
         productName: brand.product.name,
         productPriceUsd: brand.product.priceUsd,
-        productUrl: appUrl,
+        productUrl: signedProductUrl,
         audienceDescription: brand.product.audience,
         reasonToReach:
           next.reasonToReach ||

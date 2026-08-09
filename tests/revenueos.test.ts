@@ -3605,3 +3605,741 @@ test("revenue-hunter falls back deterministically without an OpenAI key", async 
     if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
   }
 });
+
+test("producthunt gate returns false when developer token is absent", async () => {
+  const { hasProductHuntToken, executeProductHuntHelpfulReply } = await import(
+    "@revenueos/core"
+  );
+  const prev = process.env.PRODUCTHUNT_DEVELOPER_TOKEN;
+  delete process.env.PRODUCTHUNT_DEVELOPER_TOKEN;
+  try {
+    assert.equal(hasProductHuntToken(), false);
+    // Executor must fail soft (not throw) when the token is missing.
+    const res = await executeProductHuntHelpfulReply({
+      rootDir: "/tmp/revenueos-ph-test-no-token",
+      productName: "Test Product",
+      productPriceUsd: 0,
+      productUrl: "https://example.test",
+      productKeywords: ["test"],
+      brandVoice: "friendly",
+    });
+    assert.equal(res.ok, false);
+    if (!res.ok) {
+      assert.match(res.detail, /PRODUCTHUNT_DEVELOPER_TOKEN|token missing/);
+    }
+  } finally {
+    if (prev !== undefined) process.env.PRODUCTHUNT_DEVELOPER_TOKEN = prev;
+  }
+});
+
+test("indiehackers product listing skipped when OPENAI_API_KEY missing", async () => {
+  const { executeIndieHackersProductListing } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const dir = await mkdtemp(path.join(tmpdir(), "revenueos-ih-listing-"));
+    const res = await executeIndieHackersProductListing({
+      rootDir: dir,
+      productName: "Test",
+      productPriceUsd: 12,
+      productUrl: "https://example.test",
+      productDescription: "does a thing",
+      audience: "builders",
+      brandVoice: "friendly",
+    });
+    assert.equal(res.ok, false);
+    if (!res.ok) assert.match(res.detail, /OPENAI_API_KEY|skipped/);
+  } finally {
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+  }
+});
+
+test("indiehackers community post gate returns cleanly with no cookie + no openai key", async () => {
+  const { executeIndieHackersCommunityPost, hasIndieHackersCookie } =
+    await import("@revenueos/core");
+  const prevKey = process.env.OPENAI_API_KEY;
+  const prevCookie = process.env.INDIEHACKERS_SESSION_COOKIE;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.INDIEHACKERS_SESSION_COOKIE;
+  try {
+    assert.equal(hasIndieHackersCookie(), false);
+    const dir = await mkdtemp(path.join(tmpdir(), "revenueos-ih-post-"));
+    const res = await executeIndieHackersCommunityPost({
+      rootDir: dir,
+      productName: "Test",
+      productPriceUsd: 12,
+      productUrl: "https://example.test",
+      productKeywords: ["test"],
+      brandVoice: "friendly",
+    });
+    // Must not throw. May either fail to fetch firehose or short-circuit
+    // on missing OpenAI key — both acceptable, neither should throw.
+    assert.equal(typeof res.ok, "boolean");
+  } finally {
+    if (prevKey !== undefined) process.env.OPENAI_API_KEY = prevKey;
+    if (prevCookie !== undefined)
+      process.env.INDIEHACKERS_SESSION_COOKIE = prevCookie;
+  }
+});
+
+test("hackernews show hn draft skipped when OPENAI_API_KEY missing", async () => {
+  const { executeHackerNewsShowHnDraft, hasHackerNewsWriteCreds } =
+    await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    assert.equal(hasHackerNewsWriteCreds(), false);
+    const dir = await mkdtemp(path.join(tmpdir(), "revenueos-hn-show-"));
+    const res = await executeHackerNewsShowHnDraft({
+      rootDir: dir,
+      productName: "Test",
+      productUrl: "https://example.test",
+      productDescription: "does a thing",
+      audience: "builders",
+      brandVoice: "friendly",
+    });
+    assert.equal(res.ok, false);
+    if (!res.ok) assert.match(res.detail, /OPENAI_API_KEY|skipped/);
+  } finally {
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+  }
+});
+
+test("hackernews intent discovery never throws even when firebase is unreachable", async () => {
+  const { executeHackerNewsIntentDiscovery } = await import("@revenueos/core");
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-hn-intent-"));
+  const res = await executeHackerNewsIntentDiscovery({
+    rootDir: dir,
+    productName: "Test",
+    productDescription: "does a thing",
+    productKeywords: ["revenueos-nonexistent-keyword-x9y8"],
+    productUrl: "https://example.test",
+  });
+  // Whatever the outcome, the executor must not throw.
+  assert.equal(typeof res.ok, "boolean");
+});
+
+test("gsc actions gate cleanly when GOOGLE_SERVICE_ACCOUNT_JSON is missing", async () => {
+  const {
+    hasGscCredentials,
+    executeGscQueryImport,
+    executeGscIndexationCheck,
+  } = await import("@revenueos/core");
+  const prev = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  delete process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  try {
+    assert.equal(hasGscCredentials(), false);
+    const dir = await mkdtemp(path.join(tmpdir(), "revenueos-gsc-"));
+    const q = await executeGscQueryImport({
+      rootDir: dir,
+      siteUrl: "sc-domain:example.test",
+      productName: "Test",
+      productDescription: "does a thing",
+    });
+    assert.equal(q.ok, false);
+    if (!q.ok) assert.match(q.detail, /no_gsc_credentials|skipped/);
+    const idx = await executeGscIndexationCheck({
+      rootDir: dir,
+      siteUrl: "sc-domain:example.test",
+      urls: ["https://example.test/"],
+    });
+    assert.equal(idx.ok, false);
+    if (!idx.ok) assert.match(idx.detail, /no_gsc_credentials|skipped/);
+  } finally {
+    if (prev !== undefined) process.env.GOOGLE_SERVICE_ACCOUNT_JSON = prev;
+  }
+});
+
+test("youtube actions gate cleanly when YOUTUBE_API_KEY is missing", async () => {
+  const {
+    hasYouTubeApiKey,
+    hasYouTubeOauthToken,
+    executeYouTubeIntentDiscovery,
+    executeYouTubeCommunityReplyDraft,
+  } = await import("@revenueos/core");
+  const prev = process.env.YOUTUBE_API_KEY;
+  const prevOauth = process.env.YOUTUBE_OAUTH_TOKEN;
+  delete process.env.YOUTUBE_API_KEY;
+  delete process.env.YOUTUBE_OAUTH_TOKEN;
+  try {
+    assert.equal(hasYouTubeApiKey(), false);
+    assert.equal(hasYouTubeOauthToken(), false);
+    const dir = await mkdtemp(path.join(tmpdir(), "revenueos-yt-"));
+    const dsc = await executeYouTubeIntentDiscovery({
+      rootDir: dir,
+      productName: "Test",
+      productDescription: "does a thing",
+      productKeywords: ["test"],
+      productUrl: "https://example.test",
+    });
+    assert.equal(dsc.ok, false);
+    if (!dsc.ok) assert.match(dsc.detail, /YOUTUBE_API_KEY|skipped/);
+    const drf = await executeYouTubeCommunityReplyDraft({
+      rootDir: dir,
+      productName: "Test",
+      productUrl: "https://example.test",
+      brandVoice: "friendly",
+    });
+    assert.equal(drf.ok, false);
+    if (!drf.ok) assert.match(drf.detail, /YOUTUBE_API_KEY|target comment|skipped/);
+  } finally {
+    if (prev !== undefined) process.env.YOUTUBE_API_KEY = prev;
+    if (prevOauth !== undefined) process.env.YOUTUBE_OAUTH_TOKEN = prevOauth;
+  }
+});
+
+test("exit-intent deploy is idempotent and returns a working snippet", async () => {
+  const { executeExitIntentDeploy, buildExitIntentSnippet } = await import(
+    "@revenueos/core"
+  );
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-exit-"));
+  const first = await executeExitIntentDeploy({
+    rootDir: dir,
+    siteId: "test-site",
+    appUrl: "https://example.test",
+  });
+  assert.equal(first.ok, true);
+  assert.match(first.snippet.scriptBody, /revos-exit-modal/);
+  assert.match(first.snippet.beaconEndpoint, /api\/exit-intent-capture$/);
+  // Idempotent: rerunning should not change the version.
+  const second = await executeExitIntentDeploy({
+    rootDir: dir,
+    siteId: "test-site",
+    appUrl: "https://example.test",
+  });
+  assert.equal(second.deployment.version, first.deployment.version);
+  const raw = buildExitIntentSnippet({
+    siteId: "x",
+    appUrl: "https://example.test",
+  });
+  assert.match(raw.scriptTag, /<script/);
+});
+
+test("order-bump deploy writes idempotent config and augments line items", async () => {
+  const {
+    executeStripeOrderBumpDeploy,
+    withStripeOrderBump,
+    loadStripeOrderBumpConfig,
+  } = await import("@revenueos/core");
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-bump-"));
+  const first = await executeStripeOrderBumpDeploy({
+    rootDir: dir,
+    siteId: "test-bump-site",
+    bumpPriceUsd: 9,
+    bumpLabel: "Add coaching",
+  });
+  assert.equal(first.ok, true);
+  if (first.ok) assert.equal(first.changed, true);
+  const second = await executeStripeOrderBumpDeploy({
+    rootDir: dir,
+    siteId: "test-bump-site",
+    bumpPriceUsd: 9,
+    bumpLabel: "Add coaching",
+  });
+  if (second.ok) assert.equal(second.changed, false);
+  const cfg = await loadStripeOrderBumpConfig({
+    rootDir: dir,
+    siteId: "test-bump-site",
+  });
+  assert.ok(cfg);
+  const items = withStripeOrderBump({
+    lineItems: [{ price: "price_primary", quantity: 1 }],
+    config: cfg,
+  });
+  assert.equal(items.length, 2);
+});
+
+test("signed UTM: sign then verify round-trips, mismatched sig rejected", async () => {
+  const { signUtm, verifyUtm, attachSignedUtm, classifyIncomingAttribution } =
+    await import("@revenueos/core");
+  const prev = process.env.REVENUEOS_ATTRIBUTION_SECRET;
+  process.env.REVENUEOS_ATTRIBUTION_SECRET = "test-attrib-secret-01234567890abcdef";
+  try {
+    const ts = Date.now();
+    const sig = await signUtm({
+      business_id: "biz-x",
+      ts,
+      utm_source: "reddit",
+      utm_medium: "revenueos",
+      utm_campaign: "autonomous",
+    });
+    assert.ok(sig, "signUtm should produce a signature when secret set");
+    const v = await verifyUtm({
+      sig: sig!,
+      businessId: "biz-x",
+      utm: {
+        utm_source: "reddit",
+        utm_medium: "revenueos",
+        utm_campaign: "autonomous",
+      },
+    });
+    assert.equal(v.valid, true);
+    // Tampered sig
+    const bad = await verifyUtm({
+      sig: sig! + "AA",
+      businessId: "biz-x",
+      utm: {
+        utm_source: "reddit",
+        utm_medium: "revenueos",
+        utm_campaign: "autonomous",
+      },
+    });
+    assert.equal(bad.valid, false);
+    // attachSignedUtm + classifyIncomingAttribution
+    const url = await attachSignedUtm({
+      url: "https://example.test/",
+      businessId: "biz-x",
+      source: "reddit",
+    });
+    const decoded = new URL(url);
+    assert.equal(decoded.searchParams.get("utm_source"), "reddit");
+    assert.ok(decoded.searchParams.get("utm_sig"), "signed sig should be attached");
+    const cls = await classifyIncomingAttribution({
+      requestUrl: url,
+      businessId: "biz-x",
+    });
+    assert.equal(cls.source, "signed");
+  } finally {
+    if (prev !== undefined)
+      process.env.REVENUEOS_ATTRIBUTION_SECRET = prev;
+    else delete process.env.REVENUEOS_ATTRIBUTION_SECRET;
+  }
+});
+
+test("signed UTM without secret: signUtm returns null, classifier says self-reported", async () => {
+  const { signUtm, classifyIncomingAttribution } = await import(
+    "@revenueos/core"
+  );
+  const prev = process.env.REVENUEOS_ATTRIBUTION_SECRET;
+  delete process.env.REVENUEOS_ATTRIBUTION_SECRET;
+  try {
+    const s = await signUtm({
+      business_id: "b",
+      ts: Date.now(),
+      utm_source: "x",
+    });
+    assert.equal(s, null);
+    const cls = await classifyIncomingAttribution({
+      requestUrl: "https://example.test/?utm_source=reddit",
+      businessId: "b",
+    });
+    assert.equal(cls.source, "self_reported");
+  } finally {
+    if (prev !== undefined) process.env.REVENUEOS_ATTRIBUTION_SECRET = prev;
+  }
+});
+
+test("action-class: new actions get correct class + mechanism", async () => {
+  const { classifyExecutionActionClass, classifyMechanism } = await import(
+    "@revenueos/core"
+  );
+  assert.equal(
+    classifyExecutionActionClass("hackernews_intent_discovery"),
+    "intent",
+  );
+  assert.equal(
+    classifyExecutionActionClass("youtube_intent_discovery"),
+    "intent",
+  );
+  assert.equal(
+    classifyExecutionActionClass("gsc_query_import"),
+    "intent",
+  );
+  assert.equal(
+    classifyExecutionActionClass("gsc_indexation_check"),
+    "distribution",
+  );
+  assert.equal(
+    classifyExecutionActionClass("indiehackers_product_listing_draft"),
+    "production",
+  );
+  assert.equal(
+    classifyExecutionActionClass("hackernews_show_hn_draft"),
+    "production",
+  );
+  assert.equal(
+    classifyMechanism({ actionType: "hackernews_show_hn_draft" }),
+    "external_placement",
+  );
+  assert.equal(
+    classifyMechanism({ actionType: "indiehackers_community_post_draft" }),
+    "community_participation",
+  );
+  assert.equal(
+    classifyMechanism({ actionType: "youtube_community_reply_draft" }),
+    "community_participation",
+  );
+  assert.equal(
+    classifyMechanism({ actionType: "gsc_query_import" }),
+    "owned_content",
+  );
+  assert.equal(
+    classifyMechanism({ actionType: "exit_intent_deploy" }),
+    "conversion_optimization",
+  );
+  assert.equal(
+    classifyMechanism({ actionType: "order_bump_deploy" }),
+    "conversion_optimization",
+  );
+});
+
+test("action registry: new actions registered with proper cooldowns", async () => {
+  const { ACTION_REGISTRY } = await import("@revenueos/core");
+  const required = {
+    indiehackers_product_listing_draft: 43_200,
+    indiehackers_community_post_draft: 240,
+    hackernews_show_hn_draft: 43_200,
+    hackernews_intent_discovery: 60,
+    gsc_query_import: 360,
+    gsc_indexation_check: 720,
+    youtube_intent_discovery: 90,
+    youtube_community_reply_draft: 180,
+    exit_intent_deploy: 43_200,
+    order_bump_deploy: 10_080,
+    gumroad_product_sync: 10_080,
+    gumroad_sales_import: 360,
+  };
+  for (const [t, cd] of Object.entries(required)) {
+    const entry = ACTION_REGISTRY[t];
+    assert.ok(entry, `expected registry entry for ${t}`);
+    assert.equal(entry.cooldownMinutes, cd, `cooldown mismatch for ${t}`);
+  }
+});
+
+test("llm-strategist: new actions in LLM_PROPOSABLE_ACTIONS enum", async () => {
+  const { LLM_PROPOSABLE_ACTIONS } = await import("@revenueos/core");
+  const list = LLM_PROPOSABLE_ACTIONS as readonly string[];
+  for (const t of [
+    "indiehackers_product_listing_draft",
+    "indiehackers_community_post_draft",
+    "hackernews_show_hn_draft",
+    "hackernews_intent_discovery",
+    "gsc_query_import",
+    "gsc_indexation_check",
+    "youtube_intent_discovery",
+    "youtube_community_reply_draft",
+    "exit_intent_deploy",
+    "order_bump_deploy",
+    "gumroad_product_sync",
+    "gumroad_sales_import",
+  ]) {
+    assert.ok(list.includes(t), `LLM_PROPOSABLE_ACTIONS missing ${t}`);
+  }
+});
+
+test("gumroad actions gate cleanly when GUMROAD_ACCESS_TOKEN is missing", async () => {
+  const {
+    hasGumroadCreds,
+    executeGumroadProductSync,
+    executeGumroadSalesImport,
+  } = await import("@revenueos/core");
+  const prev = process.env.GUMROAD_ACCESS_TOKEN;
+  delete process.env.GUMROAD_ACCESS_TOKEN;
+  try {
+    assert.equal(hasGumroadCreds(), false);
+    const dir = await mkdtemp(path.join(tmpdir(), "revenueos-gumroad-"));
+    const sync = await executeGumroadProductSync({
+      rootDir: dir,
+      siteId: "test",
+      productName: "Test Kit",
+      productDescription: "A test product",
+      productUrl: "https://example.test",
+      priceUsd: 19,
+    });
+    assert.equal(sync.ok, false);
+    assert.match(sync.detail, /skipped|GUMROAD_ACCESS_TOKEN/);
+    const sales = await executeGumroadSalesImport({
+      rootDir: dir,
+      siteId: "test",
+    });
+    assert.equal(sales.ok, false);
+    assert.match(sales.detail, /skipped|GUMROAD_ACCESS_TOKEN/);
+  } finally {
+    if (prev !== undefined) process.env.GUMROAD_ACCESS_TOKEN = prev;
+  }
+});
+
+test("channel discovery produces business-specific candidates (mock LLM)", async () => {
+  const { discoverChannels } = await import("@revenueos/core");
+  const resume = await discoverChannels({
+    context: {
+      siteId: "resumeforge",
+      displayName: "ResumeForge",
+      industry: "career_tools",
+      products: [{ name: "ResumeForge Kit", priceUsd: 29, marginEstimate: 0.9 }],
+      funnelSteps: ["landing", "checkout", "purchase"],
+      brandVoice: "direct",
+      allowedChannels: ["organic"],
+      autonomousDailyCapUsd: 0,
+      timezone: "UTC",
+      constraints: ["zero_ad_spend"],
+      audienceSegments: [{ label: "job seekers" }],
+    },
+    maxCandidates: 6,
+    llmOverride: async ({ productName }) => [
+      {
+        platform: "reddit",
+        capabilityId: "reddit",
+        audience: "job seekers rewriting resumes",
+        buyerIntent: "high",
+        intentScore: 88,
+        allowedActionGuess: "helpful_reply",
+        suggestedAction: "reddit_helpful_reply",
+        effortEstimate: 2,
+        evidenceUrls: ["https://reddit.com/r/resumes/example"],
+        angle: "critique-for-ATS",
+        businessSpecificReason: `${productName} helps job seekers on r/resumes with ATS-ready rewrites`,
+        ownedAssetIdea: {
+          kind: "calculator",
+          title: "ATS score calculator",
+          intentQuery: "ats resume score calculator",
+        },
+      },
+    ],
+  });
+  const turnover = await discoverChannels({
+    context: {
+      siteId: "turnoverkit",
+      displayName: "TurnoverKit",
+      industry: "property_management",
+      products: [{ name: "TurnoverKit", priceUsd: 49, marginEstimate: 0.85 }],
+      funnelSteps: ["landing", "checkout", "purchase"],
+      brandVoice: "ops",
+      allowedChannels: ["organic"],
+      autonomousDailyCapUsd: 0,
+      timezone: "UTC",
+      constraints: ["zero_ad_spend"],
+      audienceSegments: [{ label: "Airbnb hosts" }],
+    },
+    maxCandidates: 6,
+    llmOverride: async ({ productName }) => [
+      {
+        platform: "facebook",
+        capabilityId: "major_social_organic",
+        audience: "short-term rental hosts",
+        buyerIntent: "high",
+        intentScore: 80,
+        allowedActionGuess: "draft_post",
+        effortEstimate: 3,
+        evidenceUrls: ["https://example.com/str-host-group"],
+        angle: "turnover checklist",
+        businessSpecificReason: `${productName} is for Airbnb hosts running cleaner turnovers`,
+      },
+    ],
+  });
+  assert.equal(resume.ok, true);
+  assert.equal(turnover.ok, true);
+  const resumeBlob = resume.candidates
+    .map((c) => `${c.businessSpecificReason} ${c.audience} ${c.angle}`)
+    .join(" ")
+    .toLowerCase();
+  const turnoverBlob = turnover.candidates
+    .map((c) => `${c.businessSpecificReason} ${c.audience} ${c.angle}`)
+    .join(" ")
+    .toLowerCase();
+  assert.ok(resumeBlob.includes("resumeforge") || resumeBlob.includes("job seeker"));
+  assert.ok(turnoverBlob.includes("turnoverkit") || turnoverBlob.includes("airbnb"));
+  assert.notEqual(
+    resume.candidates[0]?.platform,
+    turnover.candidates[0]?.platform,
+    "different businesses should surface different top platforms from mocked discovery",
+  );
+  assert.ok(
+    resume.candidates.some((c) => c.capabilityId === "owned_intent_tools" || c.ownedAssetIdea),
+    "owned asset path should appear for ResumeForge calculator idea",
+  );
+});
+
+test("channel registry updates posteriors from commercial signal", async () => {
+  const {
+    channelFromCapability,
+    capabilityById,
+    updateChannelPosterior,
+    computeRevenuePerAction,
+  } = await import("@revenueos/core");
+  const cap = capabilityById("reddit");
+  assert.ok(cap);
+  let ch = channelFromCapability({
+    siteId: "resumeforge",
+    business: "ResumeForge",
+    audience: "job seekers",
+    capability: cap!,
+  });
+  assert.equal(ch.untested, true);
+  assert.equal(ch.experimentsRun, 0);
+  ch = updateChannelPosterior(ch, {
+    actionType: "reddit_helpful_reply",
+    purchases: 1,
+    revenueUsd: 29,
+    qualifiedVisitors: 4,
+    traffic: 12,
+    angle: "ats-critique",
+  });
+  assert.equal(ch.untested, false);
+  assert.equal(ch.purchases, 1);
+  assert.equal(ch.revenue, 29);
+  assert.ok(ch.alpha > 1);
+  assert.ok(ch.revenuePerAction > 0);
+  assert.equal(ch.revenuePerAction, computeRevenuePerAction(ch));
+  assert.ok(ch.winningAngles.includes("ats-critique"));
+});
+
+test("channel allocation prefers high revenue_per_action", async () => {
+  const {
+    channelFromCapability,
+    capabilityById,
+    updateChannelPosterior,
+    allocateChannelEffort,
+  } = await import("@revenueos/core");
+  const reddit = capabilityById("reddit")!;
+  const social = capabilityById("major_social_organic")!;
+  let winner = channelFromCapability({
+    siteId: "site-a",
+    business: "A",
+    capability: reddit,
+  });
+  let loser = channelFromCapability({
+    siteId: "site-a",
+    business: "A",
+    capability: social,
+  });
+  for (let i = 0; i < 6; i++) {
+    winner = updateChannelPosterior(winner, {
+      purchases: 1,
+      revenueUsd: 40,
+      qualifiedVisitors: 3,
+      actionType: "reddit_helpful_reply",
+    });
+  }
+  for (let i = 0; i < 6; i++) {
+    loser = updateChannelPosterior(loser, {
+      purchases: 0,
+      revenueUsd: 0,
+      traffic: 0,
+      actionType: "buyer_discovery",
+      success: false,
+    });
+  }
+  // Deterministic RNG biased high then low — still should rank winner first
+  // across many samples because posterior mass dominates.
+  let winnerFirst = 0;
+  for (let seed = 0; seed < 40; seed++) {
+    let s = seed + 1;
+    const rand = () => {
+      s = (s * 1664525 + 1013904223) % 4294967296;
+      return s / 4294967296;
+    };
+    const arms = allocateChannelEffort({
+      channels: [loser, winner],
+      rand,
+      limit: 2,
+    });
+    if (arms[0]?.channel.id === winner.id) winnerFirst += 1;
+  }
+  assert.ok(
+    winnerFirst >= 28,
+    `expected high-RPA channel to win most allocations, got ${winnerFirst}/40`,
+  );
+});
+
+test("channel registry persists via file store and transfers portfolio winners", async () => {
+  const {
+    createFileExperimentStore,
+    runChannelRegistryTick,
+    channelFromCapability,
+    capabilityById,
+    updateChannelPosterior,
+    transferChannelHypotheses,
+  } = await import("@revenueos/core");
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-channels-"));
+  const store = createFileExperimentStore(dir);
+  const context = {
+    siteId: "resumeforge",
+    displayName: "ResumeForge",
+    industry: "career_tools",
+    products: [{ name: "ResumeForge Kit", priceUsd: 29, marginEstimate: 0.9 }],
+    funnelSteps: ["landing", "checkout", "purchase"],
+    brandVoice: "direct",
+    allowedChannels: ["organic"],
+    autonomousDailyCapUsd: 0,
+    timezone: "UTC",
+    constraints: ["zero_ad_spend"],
+    audienceSegments: [{ label: "job seekers" }],
+  };
+  const tick = await runChannelRegistryTick({
+    store,
+    context,
+    candidates: [
+      {
+        platform: "reddit",
+        capabilityId: "reddit",
+        category: "communities",
+        audience: "job seekers",
+        buyerIntent: "high",
+        intentScore: 90,
+        allowedActionGuess: "helpful_reply",
+        suggestedAction: "reddit_helpful_reply",
+        actionTypes: ["reddit_helpful_reply", "reddit_discover_intent"],
+        mechanism: "community_participation",
+        effortEstimate: 2,
+        evidenceUrls: ["https://reddit.com/r/resumes"],
+        angle: "ats",
+        postingRules: [],
+        contentFormats: ["helpful_reply"],
+        businessSpecificReason: "ResumeForge buyers ask ATS questions on Reddit",
+      },
+    ],
+    rand: () => 0.5,
+  });
+  assert.ok(tick.channels.length >= 1);
+  assert.ok(tick.opportunities.some((o) => o.safeActionType));
+  const reloaded = await store.listChannels!("resumeforge");
+  assert.ok(reloaded.length >= 1);
+
+  let peer = channelFromCapability({
+    siteId: "raiseready",
+    business: "RaiseReady",
+    capability: capabilityById("reddit")!,
+  });
+  peer = updateChannelPosterior(peer, {
+    purchases: 2,
+    revenueUsd: 78,
+    angle: "salary-thread",
+  });
+  const transferred = transferChannelHypotheses({
+    local: tick.channels,
+    peerChannels: [peer],
+    context,
+  });
+  const redditLocal = transferred.find((c) => c.capabilityId === "reddit");
+  assert.ok(redditLocal);
+  assert.ok(
+    (redditLocal!.winningAngles ?? []).some((a) => a.includes("transfer:")),
+    "winning peer angle should transfer as hypothesis",
+  );
+});
+
+test("channel actions registered with cooldowns and mechanisms", async () => {
+  const {
+    ACTION_REGISTRY,
+    LLM_PROPOSABLE_ACTIONS,
+    classifyMechanism,
+    PERMISSIONLESS_ORGANIC_TYPES,
+  } = await import("@revenueos/core");
+  for (const t of ["publish_intent_tool", "publish_calculator", "channel_discover"]) {
+    assert.ok(ACTION_REGISTRY[t], `missing ACTION_REGISTRY ${t}`);
+    assert.ok(
+      (LLM_PROPOSABLE_ACTIONS as readonly string[]).includes(t),
+      `missing LLM proposable ${t}`,
+    );
+    assert.ok(PERMISSIONLESS_ORGANIC_TYPES.has(t), `missing permissionless ${t}`);
+  }
+  assert.equal(
+    classifyMechanism({ actionType: "publish_calculator" }),
+    "owned_content",
+  );
+  assert.equal(
+    classifyMechanism({ actionType: "channel_discover" }),
+    "owned_distribution",
+  );
+});

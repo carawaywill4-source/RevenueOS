@@ -1,6 +1,7 @@
 import type {
   Attribution,
   CapabilityGap,
+  ChannelRecord,
   CycleReportRecord,
   DiscoveryDoor,
   Experiment,
@@ -47,6 +48,10 @@ export type ExperimentStore = {
   saveDiscoveryDoor?(door: DiscoveryDoor): Promise<void>;
   listCapabilityGaps?(siteId?: string): Promise<CapabilityGap[]>;
   saveCapabilityGap?(gap: CapabilityGap): Promise<void>;
+
+  /** Durable channel registry (acquisition surfaces + posteriors). */
+  listChannels?(siteId: string): Promise<ChannelRecord[]>;
+  saveChannel?(channel: ChannelRecord): Promise<void>;
 
   /** Persistent pursuit queue */
   listPursuits?(siteId: string, opts?: { states?: string[]; limit?: number }): Promise<PursuitJob[]>;

@@ -39,6 +39,8 @@ const PRODUCTION_ACTIONS = new Set([
   "publish_howto_cluster",
   "publish_comparison_page",
   "publish_template_landing",
+  "publish_intent_tool",
+  "publish_calculator",
   "publish_bundle",
   "publish_llms_txt",
   "refresh_discovery_door",
@@ -50,6 +52,7 @@ const PRODUCTION_ACTIONS = new Set([
   "discovery_attack",
   "web_research",
   "buyer_discovery",
+  "channel_discover",
   "schema_enrichment",
   "llm_hypothesize",
   "exit_intent_deploy",
@@ -149,11 +152,21 @@ export function classifyMechanism(input: {
   if (type === "order_bump_deploy") {
     return "conversion_optimization";
   }
+  if (type.startsWith("gumroad_") || key.includes("gumroad")) {
+    return "external_placement";
+  }
   if (type === "email_cold_outreach" || type === "public_form_outreach") {
     return "direct_outreach";
   }
   if (DISTRIBUTION_ACTIONS.has(input.actionType ?? "")) {
     return "owned_distribution";
+  }
+  if (
+    type === "publish_intent_tool" ||
+    type === "publish_calculator" ||
+    type === "channel_discover"
+  ) {
+    return type === "channel_discover" ? "owned_distribution" : "owned_content";
   }
   if (type.startsWith("publish_") || type === "discovery_attack" ||
       type === "market_research" || type === "refresh_discovery_door") {

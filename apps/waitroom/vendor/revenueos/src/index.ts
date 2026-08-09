@@ -100,3 +100,7 @@ export * from "./modules/youtube";
 export * from "./modules/exit-intent";
 export * from "./modules/signed-utm";
 export * from "./modules/stripe-order-bumps";
+export * from "./modules/gumroad";
+export * from "./modules/channel-catalog";
+export * from "./modules/channel-discovery";
+export * from "./modules/channel-registry";

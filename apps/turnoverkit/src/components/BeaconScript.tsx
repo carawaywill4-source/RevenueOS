@@ -1,4 +1,28 @@
+import { BRAND } from "@/lib/brand";
+
+function measurementId(): string | undefined {
+  const site = BRAND.siteId.toUpperCase();
+  return (
+    process.env[`GA4_MEASUREMENT_ID_${site}`] ||
+    process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID ||
+    process.env.GA4_MEASUREMENT_ID ||
+    undefined
+  );
+}
+
+function gscToken(): string | undefined {
+  const site = BRAND.siteId.toUpperCase();
+  return (
+    process.env[`GSC_VERIFICATION_${site}`] ||
+    process.env.GSC_VERIFICATION ||
+    process.env.GOOGLE_SITE_VERIFICATION ||
+    undefined
+  );
+}
+
 export function BeaconScript() {
+  const ga4 = measurementId();
+  const gsc = gscToken();
   const src = `
 (function(){
   try {
@@ -43,8 +67,48 @@ export function BeaconScript() {
         send('cta_click', { text: text.slice(0, 80), href: href.slice(0, 200) });
       }
     }, true);
+
+    var exitShown = false;
+    try { if (sessionStorage.getItem('revos_exit')) exitShown = true; } catch (_) {}
+    document.addEventListener('mouseout', function(e){
+      if (exitShown || !e || e.clientY > 0) return;
+      exitShown = true;
+      try { sessionStorage.setItem('revos_exit', '1'); } catch (_) {}
+      var modal = document.createElement('div');
+      modal.setAttribute('data-revos-exit','1');
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+      modal.innerHTML = '<form style="background:#fff;color:#111;max-width:360px;width:100%;padding:20px;border-radius:8px;font:14px/1.4 system-ui,sans-serif"><strong style="display:block;margin-bottom:6px">Before you go</strong><p style="margin:0 0 12px">Get one email when the next feature ships.</p><input name="email" type="email" required placeholder="you@company.com" style="width:100%;padding:8px;margin-bottom:10px;box-sizing:border-box"/><button type="submit" style="width:100%;padding:8px;background:#111;color:#fff;border:0;border-radius:6px;cursor:pointer">Notify me</button><button type="button" data-close style="width:100%;margin-top:8px;padding:6px;background:transparent;border:0;color:#666;cursor:pointer">No thanks</button></form>';
+      document.body.appendChild(modal);
+      modal.querySelector('[data-close]').addEventListener('click', function(){ modal.remove(); });
+      modal.querySelector('form').addEventListener('submit', function(ev){
+        ev.preventDefault();
+        var email = (modal.querySelector('input[name=email]')||{}).value;
+        if (!email) return;
+        fetch('/api/exit-intent-capture', {
+          method:'POST',
+          headers:{'content-type':'application/json'},
+          body: JSON.stringify({ email: email, siteId: 'turnoverkit', source: 'exit_intent', url: location.href, referrer: document.referrer||'', ts: new Date().toISOString() })
+        }).finally(function(){ modal.remove(); });
+      });
+    });
   } catch (e) {}
 })();
 `;
-  return <script dangerouslySetInnerHTML={{ __html: src }} />;
+
+  return (
+    <>
+      {gsc ? <meta name="google-site-verification" content={gsc} /> : null}
+      {ga4 ? (
+        <>
+          <script async src={`https://www.googletagmanager.com/gtag/js?id=${ga4}`} />
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', ${JSON.stringify(ga4)});`,
+            }}
+          />
+        </>
+      ) : null}
+      <script dangerouslySetInnerHTML={{ __html: src }} />
+    </>
+  );
 }
