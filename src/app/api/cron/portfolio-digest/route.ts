@@ -33,7 +33,9 @@ async function fetchPulse(url: string, token: string): Promise<SitePulse> {
     const res = await fetch(`${base}/api/owner/pulse`, {
       headers: { authorization: `Bearer ${token}` },
       cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
+      // Pulse is a thin ledger read — 45s covers cold starts without aborting
+      // half the portfolio as "timeout" every hour.
+      signal: AbortSignal.timeout(45_000),
     });
     if (!res.ok) {
       const body = await res.text();
@@ -142,44 +144,40 @@ export async function GET(request: Request) {
   const windowEnd = new Date().toISOString();
   const windowStart = new Date(Date.now() - 3_600_000).toISOString();
 
-  const sites: SitePulse[] = [];
-  for (const ref of refs) {
-    if (ref.siteId === "tributeready" || ref.siteId === "mendhaus") {
-      sites.push(
-        await legacyPulse(
+  const sites: SitePulse[] = await Promise.all(
+    refs.map(async (ref) => {
+      if (ref.siteId === "tributeready" || ref.siteId === "mendhaus") {
+        return legacyPulse(
           ref.siteId as "tributeready" | "mendhaus",
           ref.displayName,
           ref.url,
-        ),
-      );
-      continue;
-    }
-    if (!token) {
-      sites.push({
-        siteId: ref.siteId,
-        displayName: ref.displayName,
-        url: ref.url,
-        commerciallyLive: false,
-        checkoutOpen: false,
-        purchases: 0,
-        revenueUsd: 0,
-        firstCustomerMode: true,
-        actionsCompleted: 0,
-        exposureNotes: [],
-        blockers: ["PORTFOLIO_PULSE_TOKEN / CRON_SECRET missing on TributeReady"],
-        error: "no_pulse_token",
-      });
-      continue;
-    }
-    const pulse = await fetchPulse(ref.url, token);
-    if (pulse.siteId === ref.url || pulse.error) {
-      // keep display names from catalog when fetch failed
-      pulse.siteId = ref.siteId;
-      pulse.displayName = ref.displayName;
-      pulse.url = ref.url;
-    }
-    sites.push(pulse);
-  }
+        );
+      }
+      if (!token) {
+        return {
+          siteId: ref.siteId,
+          displayName: ref.displayName,
+          url: ref.url,
+          commerciallyLive: false,
+          checkoutOpen: false,
+          purchases: 0,
+          revenueUsd: 0,
+          firstCustomerMode: true,
+          actionsCompleted: 0,
+          exposureNotes: [],
+          blockers: ["PORTFOLIO_PULSE_TOKEN / CRON_SECRET missing on TributeReady"],
+          error: "no_pulse_token",
+        } satisfies SitePulse;
+      }
+      const pulse = await fetchPulse(ref.url, token);
+      if (pulse.siteId === ref.url || pulse.error) {
+        pulse.siteId = ref.siteId;
+        pulse.displayName = ref.displayName;
+        pulse.url = ref.url;
+      }
+      return pulse;
+    }),
+  );
 
   const digest = buildPortfolioDigest({ windowStart, windowEnd, sites });
   const text = formatPortfolioOwnerEmail(digest);

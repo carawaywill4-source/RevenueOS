@@ -19,7 +19,9 @@ export type BuyerReachMethod =
   | "blog_comment"
   | "newsletter_submit"
   | "directory_submit"
-  | "email";
+  | "email"
+  | "youtube_comment"
+  | "hackernews_comment";
 
 export type DurableBuyerLead = {
   url: string;
@@ -69,6 +71,8 @@ const LEAD_SCHEMA = {
               "newsletter_submit",
               "directory_submit",
               "email",
+              "youtube_comment",
+              "hackernews_comment",
             ],
           },
           score: { type: "number", minimum: 0, maximum: 100 },

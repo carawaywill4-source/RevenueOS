@@ -179,6 +179,24 @@ create table if not exists public.revenueos_leases (
 create index if not exists revenueos_leases_site_idx
   on public.revenueos_leases (site_id, kind, lease_until);
 
+-- Exit-intent captured emails (owner-owned first-party list; per-site).
+create table if not exists public.revenueos_captured_emails (
+  id bigserial primary key,
+  site_id text not null,
+  email text not null,
+  source text not null default 'exit_intent',
+  page_url text,
+  referrer text,
+  utm jsonb,
+  ip_hash text,
+  user_agent text,
+  captured_at timestamptz not null default now(),
+  unique (site_id, email)
+);
+
+create index if not exists revenueos_captured_emails_site_idx
+  on public.revenueos_captured_emails (site_id, captured_at desc);
+
 alter table public.revenueos_experiments enable row level security;
 alter table public.revenueos_lessons enable row level security;
 alter table public.revenueos_scorecards enable row level security;
@@ -191,3 +209,4 @@ alter table public.revenueos_capability_gaps enable row level security;
 alter table public.revenueos_pursuits enable row level security;
 alter table public.revenueos_pursuit_events enable row level security;
 alter table public.revenueos_leases enable row level security;
+alter table public.revenueos_captured_emails enable row level security;

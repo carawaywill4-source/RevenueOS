@@ -46,6 +46,17 @@ export const LLM_PROPOSABLE_ACTIONS = [
   "reddit_helpful_reply",
   "reddit_discover_intent",
   "email_cold_outreach",
+  "producthunt_helpful_reply",
+  "indiehackers_product_listing_draft",
+  "indiehackers_community_post_draft",
+  "hackernews_show_hn_draft",
+  "hackernews_intent_discovery",
+  "gsc_query_import",
+  "gsc_indexation_check",
+  "youtube_intent_discovery",
+  "youtube_community_reply_draft",
+  "exit_intent_deploy",
+  "order_bump_deploy",
 ] as const;
 
 export type LlmProposableAction = (typeof LLM_PROPOSABLE_ACTIONS)[number];

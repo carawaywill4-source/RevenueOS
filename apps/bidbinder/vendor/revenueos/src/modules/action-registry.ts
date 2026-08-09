@@ -114,6 +114,61 @@ export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
     exposureKey: "email-outreach",
     cooldownMinutes: 30,
   },
+  producthunt_helpful_reply: {
+    type: "producthunt_helpful_reply",
+    exposureKey: "producthunt-reply",
+    cooldownMinutes: 30,
+  },
+  indiehackers_product_listing_draft: {
+    type: "indiehackers_product_listing_draft",
+    exposureKey: "indiehackers-product-listing",
+    cooldownMinutes: 43_200,
+  },
+  indiehackers_community_post_draft: {
+    type: "indiehackers_community_post_draft",
+    exposureKey: "indiehackers-community-post",
+    cooldownMinutes: 240,
+  },
+  hackernews_show_hn_draft: {
+    type: "hackernews_show_hn_draft",
+    exposureKey: "hackernews-show-hn",
+    cooldownMinutes: 43_200,
+  },
+  hackernews_intent_discovery: {
+    type: "hackernews_intent_discovery",
+    exposureKey: "hackernews-intent",
+    cooldownMinutes: 60,
+  },
+  gsc_query_import: {
+    type: "gsc_query_import",
+    exposureKey: "gsc-queries",
+    cooldownMinutes: 360,
+  },
+  gsc_indexation_check: {
+    type: "gsc_indexation_check",
+    exposureKey: "gsc-indexation",
+    cooldownMinutes: 720,
+  },
+  youtube_intent_discovery: {
+    type: "youtube_intent_discovery",
+    exposureKey: "youtube-intent",
+    cooldownMinutes: 90,
+  },
+  youtube_community_reply_draft: {
+    type: "youtube_community_reply_draft",
+    exposureKey: "youtube-reply",
+    cooldownMinutes: 180,
+  },
+  exit_intent_deploy: {
+    type: "exit_intent_deploy",
+    exposureKey: "exit-intent",
+    cooldownMinutes: 43_200,
+  },
+  order_bump_deploy: {
+    type: "order_bump_deploy",
+    exposureKey: "order-bump",
+    cooldownMinutes: 10_080,
+  },
 };
 
 export function getRegistryEntry(type: string): ActionRegistryEntry | undefined {

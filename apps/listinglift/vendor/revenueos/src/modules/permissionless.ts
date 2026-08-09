@@ -82,6 +82,27 @@ export const PERMISSIONLESS_ORGANIC_TYPES = new Set([
   "cross_portfolio_link",
   // Outreach to publicly-listed contact surfaces (public forms only, not PII):
   "send_commercial_outreach",
+  // Reddit Devvit / draft path + Resend cold email (no owner login):
+  "reddit_helpful_reply",
+  "reddit_discover_intent",
+  "email_cold_outreach",
+  // Product Hunt developer-token comment path (no owner login at runtime):
+  "producthunt_helpful_reply",
+  // Indie Hackers (DRAFT by default, optional session-cookie writes):
+  "indiehackers_product_listing_draft",
+  "indiehackers_community_post_draft",
+  // Hacker News (DRAFT-first; discovery via public Firebase API):
+  "hackernews_show_hn_draft",
+  "hackernews_intent_discovery",
+  // Google Search Console (read-only signal ingestion):
+  "gsc_query_import",
+  "gsc_indexation_check",
+  // YouTube Data API v3 (read-only intent + optional write for replies):
+  "youtube_intent_discovery",
+  "youtube_community_reply_draft",
+  // Owned-property production features:
+  "exit_intent_deploy",
+  "order_bump_deploy",
 ]);
 
 export function isPermissionlessOrganic(type: string): boolean {

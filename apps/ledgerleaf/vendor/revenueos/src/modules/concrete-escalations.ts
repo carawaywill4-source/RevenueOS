@@ -49,10 +49,18 @@ export const MECHANISM_UNLOCKS: Record<Exclude<MechanismClass, "unknown">, Mecha
     expectedValueUsd: 150,
     providers: [
       {
-        name: "Google Search Console",
+        name: "Google Search Console (verify + service account)",
+        costPerMonthUsd: 0,
+        setupTime: "20 minutes (verify domain + create GCP service account with Owner access to the property)",
+        actionOnceEnabled:
+          "Set GOOGLE_SERVICE_ACCOUNT_JSON so RevenueOS can pull top queries (gsc_query_import) and run indexation audits (gsc_indexation_check) — high-commercial-intent queries become new opportunities automatically",
+      },
+      {
+        name: "Google Search Console (manual)",
         costPerMonthUsd: 0,
         setupTime: "10 minutes (verify domain)",
-        actionOnceEnabled: "Direct submission of sitemaps and monitoring of index/impression counts",
+        actionOnceEnabled:
+          "Direct submission of sitemaps and monitoring of index/impression counts",
       },
     ],
   },
@@ -84,27 +92,39 @@ export const MECHANISM_UNLOCKS: Record<Exclude<MechanismClass, "unknown">, Mecha
   },
   community_participation: {
     mechanism: "community_participation",
-    desiredAction: "Give RevenueOS a supervised account on communities where buyers already gather",
-    reason: "Communities are where the target buyer already lives — reaching them requires a real identity.",
+    desiredAction:
+      "Install the RevenueOS Devvit app in communities (or get it approved for public install)",
+    reason:
+      "Reddit's current path is Devvit — apps only write inside subreddits that install them. Self-service OAuth bots are dead.",
     expectedValueUsd: 800,
     providers: [
       {
-        name: "Reddit account + karma seed",
+        name: "RevenueOS Devvit app (playtest r/revenueos_dev)",
         costPerMonthUsd: 0,
-        setupTime: "1 week (build karma organically)",
-        actionOnceEnabled: "Answer questions in target subreddits with genuine help + soft product mention",
+        setupTime: "already scaffolded — npm run launch for review",
+        actionOnceEnabled:
+          "Hourly helpful replies in installed communities; mods install from Reddit app directory after publish",
       },
       {
-        name: "Indie Hackers account",
+        name: "Indie Hackers session cookie (INDIEHACKERS_SESSION_COOKIE)",
         costPerMonthUsd: 0,
-        setupTime: "1 hour",
-        actionOnceEnabled: "Post product introductions and answer relevant threads",
+        setupTime: "5 minutes (log in, copy session cookie into env)",
+        actionOnceEnabled:
+          "RevenueOS auto-posts drafted product listings + community replies. Without the cookie the same actions still run in DRAFT mode into .data/indiehackers/",
       },
       {
         name: "HackerNews Show HN",
         costPerMonthUsd: 0,
-        setupTime: "1 hour",
-        actionOnceEnabled: "Coordinated Show HN launch when product is ready",
+        setupTime: "1 hour (paste drafted Show HN from .data/hackernews/show-hn-drafts.json)",
+        actionOnceEnabled:
+          "Show HN drafts are already being generated per 30d cooldown; owner submits at https://news.ycombinator.com/submit",
+      },
+      {
+        name: "YouTube Data API key (YOUTUBE_API_KEY)",
+        costPerMonthUsd: 0,
+        setupTime: "15 minutes (Google Cloud Console → APIs → YouTube Data API v3 → create API key)",
+        actionOnceEnabled:
+          "Enables youtube_intent_discovery to surface buying-intent comments as leads; optional YOUTUBE_OAUTH_TOKEN lets RevenueOS post replies directly, otherwise it drafts them",
       },
     ],
   },

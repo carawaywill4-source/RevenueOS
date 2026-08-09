@@ -52,6 +52,10 @@ const PRODUCTION_ACTIONS = new Set([
   "buyer_discovery",
   "schema_enrichment",
   "llm_hypothesize",
+  "exit_intent_deploy",
+  "order_bump_deploy",
+  "indiehackers_product_listing_draft",
+  "hackernews_show_hn_draft",
 ]);
 
 const DISTRIBUTION_ACTIONS = new Set([
@@ -62,6 +66,13 @@ const DISTRIBUTION_ACTIONS = new Set([
   "public_form_outreach",
   "directory_submit",
   "syndicate_content",
+  "gsc_indexation_check",
+]);
+
+const INTENT_ACTIONS = new Set([
+  "hackernews_intent_discovery",
+  "youtube_intent_discovery",
+  "gsc_query_import",
 ]);
 
 /**
@@ -76,6 +87,7 @@ export function classifyExecutionActionClass(
   actionType: string | undefined,
 ): ActionClass {
   if (!actionType) return "production";
+  if (INTENT_ACTIONS.has(actionType)) return "intent";
   if (DISTRIBUTION_ACTIONS.has(actionType)) return "distribution";
   if (PRODUCTION_ACTIONS.has(actionType)) return "production";
   // Unknown types default to production so unclaimed executors never inflate
@@ -109,6 +121,33 @@ export function classifyMechanism(input: {
 
   if (type.startsWith("reddit_") || key.includes("reddit")) {
     return "community_participation";
+  }
+  if (type.startsWith("producthunt_") || key.includes("producthunt")) {
+    return "community_participation";
+  }
+  if (type === "indiehackers_community_post_draft" || key.includes("indiehackers-community")) {
+    return "community_participation";
+  }
+  if (type === "hackernews_intent_discovery" || type === "youtube_intent_discovery") {
+    return "community_participation";
+  }
+  if (type === "youtube_community_reply_draft") {
+    return "community_participation";
+  }
+  if (type === "indiehackers_product_listing_draft" || type === "hackernews_show_hn_draft") {
+    return "external_placement";
+  }
+  if (type === "gsc_query_import") {
+    return "owned_content";
+  }
+  if (type === "gsc_indexation_check") {
+    return "owned_distribution";
+  }
+  if (type === "exit_intent_deploy") {
+    return "conversion_optimization";
+  }
+  if (type === "order_bump_deploy") {
+    return "conversion_optimization";
   }
   if (type === "email_cold_outreach" || type === "public_form_outreach") {
     return "direct_outreach";

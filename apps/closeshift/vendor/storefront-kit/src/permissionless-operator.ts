@@ -19,10 +19,22 @@ import {
   executePublicOutreach,
   enrichPageSchema,
   executeRedditHelpfulReply,
-  hasRedditCreds,
+  executeProductHuntHelpfulReply,
   executeEmailOutreach,
   hasResendKey,
   rateLimitCheck,
+  executeIndieHackersCommunityPost,
+  executeIndieHackersProductListing,
+  executeHackerNewsShowHnDraft,
+  executeHackerNewsIntentDiscovery,
+  executeGscQueryImport,
+  executeGscIndexationCheck,
+  executeYouTubeIntentDiscovery,
+  executeYouTubeCommunityReplyDraft,
+  executeExitIntentDeploy,
+  executeStripeOrderBumpDeploy,
+  hasYouTubeApiKey,
+  hasGscCredentials,
   type DurableBuyerLead,
 } from "@revenueos/core";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -83,6 +95,17 @@ export function listPermissionlessSafeActions(): SafeAction[] {
     { type: "reddit_helpful_reply", risk: "safe", description: "Post a genuinely helpful Reddit reply on a buying-intent thread" },
     { type: "reddit_discover_intent", risk: "safe", description: "Search Reddit for buying-intent threads in allowed subs" },
     { type: "email_cold_outreach", risk: "safe", description: "Personalized 1:1 cold email via Resend to a publicly-listed contact" },
+    { type: "producthunt_helpful_reply", risk: "safe", description: "Comment helpfully on a matching Product Hunt launch (developer-token, no owner login)" },
+    { type: "indiehackers_product_listing_draft", risk: "safe", description: "Draft an Indie Hackers product listing for owner paste" },
+    { type: "indiehackers_community_post_draft", risk: "safe", description: "Draft (or post w/ cookie) a helpful IH community reply on a buying-intent thread" },
+    { type: "hackernews_show_hn_draft", risk: "safe", description: "Draft a Show HN submission for the current product" },
+    { type: "hackernews_intent_discovery", risk: "safe", description: "Surface HN buying-intent posts as leads via the Firebase API" },
+    { type: "gsc_query_import", risk: "safe", description: "Pull top GSC queries + classify commercial intent (needs GOOGLE_SERVICE_ACCOUNT_JSON)" },
+    { type: "gsc_indexation_check", risk: "safe", description: "Check which owned URLs are missing from Google index (needs GOOGLE_SERVICE_ACCOUNT_JSON)" },
+    { type: "youtube_intent_discovery", risk: "safe", description: "Find YouTube comments expressing buying intent (needs YOUTUBE_API_KEY)" },
+    { type: "youtube_community_reply_draft", risk: "safe", description: "Draft (or post w/ oauth token) a helpful YouTube reply to a discovered intent comment" },
+    { type: "exit_intent_deploy", risk: "safe", description: "Deploy the exit-intent email capture snippet for this site" },
+    { type: "order_bump_deploy", risk: "safe", description: "Enable a Stripe checkout order bump for this site" },
   ];
 }
 
@@ -126,6 +149,64 @@ export function permissionlessOpportunities(brand: BrandConfig) {
     patternKey: "permissionless:distribute-owned",
     precursorMetric: "landing_views",
   });
+
+  // Direct pursuit limbs — score above owned-content so FCM does not drown in
+  // publish_* loops. Email requires RESEND; Reddit drafts without OAuth and
+  // posts when Devvit/Data API write access exists.
+  items.unshift(
+    {
+      id: "perm-email-cold",
+      title: "Cold email a publicly listed buyer lead (Resend)",
+      metric: "landing_views",
+      category: "acquisition",
+      action: "1:1 personalized outreach to a discovered public email",
+      expectedImpact: 12,
+      confidence: 0.55,
+      effort: 2,
+      safeActionType: "email_cold_outreach",
+      patternKey: "pursuit:email-cold",
+      precursorMetric: "landing_views",
+    },
+    {
+      id: "perm-reddit-help",
+      title: "Helpful Reddit reply on buying-intent thread",
+      metric: "landing_views",
+      category: "acquisition",
+      action: "Community participation: genuine help + soft product mention",
+      expectedImpact: 11,
+      confidence: 0.5,
+      effort: 2,
+      safeActionType: "reddit_helpful_reply",
+      patternKey: "pursuit:reddit-help",
+      precursorMetric: "landing_views",
+    },
+    {
+      id: "perm-producthunt-help",
+      title: "Helpful Product Hunt comment on matching launch",
+      metric: "landing_views",
+      category: "acquisition",
+      action: "Community participation: peer-builder comment on relevant PH launch",
+      expectedImpact: 11,
+      confidence: 0.5,
+      effort: 2,
+      safeActionType: "producthunt_helpful_reply",
+      patternKey: "pursuit:producthunt-help",
+      precursorMetric: "landing_views",
+    },
+    {
+      id: "perm-buyer-discovery",
+      title: "Discover external buyer surfaces + public emails",
+      metric: "landing_views",
+      category: "acquisition",
+      action: "Find forums/forms/emails where target buyers already gather",
+      expectedImpact: 10,
+      confidence: 0.55,
+      effort: 2,
+      safeActionType: "buyer_discovery",
+      patternKey: "pursuit:buyer-discovery",
+      precursorMetric: "landing_views",
+    },
+  );
 
   return items;
 }
@@ -510,13 +591,8 @@ export async function executePermissionlessAction(input: {
       };
     case "reddit_helpful_reply":
     case "reddit_discover_intent": {
-      if (!hasRedditCreds()) {
-        return {
-          ok: false,
-          detail:
-            "reddit skipped: REDDIT_CLIENT_ID/SECRET/USERNAME/PASSWORD missing — owner must configure a script-app",
-        };
-      }
+      // No OAuth script apps (dead since Nov 2025). Executor drafts via public
+      // JSON when creds are missing; posts when Devvit/Data API write exists.
       const res = await executeRedditHelpfulReply({
         rootDir,
         productName: brand.product.name,
@@ -530,6 +606,211 @@ export async function executePermissionlessAction(input: {
         detail: res.detail,
         url: res.ok ? res.url : undefined,
       };
+    }
+    case "producthunt_helpful_reply": {
+      const res = await executeProductHuntHelpfulReply({
+        rootDir,
+        productName: brand.product.name,
+        productPriceUsd: brand.product.priceUsd,
+        productUrl: appUrl,
+        productKeywords: brand.product.intentKeywords ?? [brand.product.name],
+        brandVoice: brand.brandVoice,
+      });
+      return {
+        ok: res.ok,
+        detail: res.detail,
+        url: res.ok ? res.url : undefined,
+      };
+    }
+    case "indiehackers_product_listing_draft": {
+      const res = await executeIndieHackersProductListing({
+        rootDir,
+        productName: brand.product.name,
+        productPriceUsd: brand.product.priceUsd,
+        productUrl: appUrl,
+        productDescription: brand.product.description,
+        audience: brand.product.audience,
+        brandVoice: brand.brandVoice,
+      });
+      return { ok: res.ok, detail: res.detail, url: res.ok ? res.url : undefined };
+    }
+    case "indiehackers_community_post_draft": {
+      const res = await executeIndieHackersCommunityPost({
+        rootDir,
+        productName: brand.product.name,
+        productPriceUsd: brand.product.priceUsd,
+        productUrl: appUrl,
+        productKeywords: brand.product.intentKeywords ?? [brand.product.name],
+        brandVoice: brand.brandVoice,
+      });
+      return { ok: res.ok, detail: res.detail, url: res.ok ? res.url : undefined };
+    }
+    case "hackernews_show_hn_draft": {
+      const res = await executeHackerNewsShowHnDraft({
+        rootDir,
+        productName: brand.product.name,
+        productUrl: appUrl,
+        productDescription: brand.product.description,
+        audience: brand.product.audience,
+        brandVoice: brand.brandVoice,
+      });
+      return { ok: res.ok, detail: res.detail, url: res.ok ? res.url : undefined };
+    }
+    case "hackernews_intent_discovery": {
+      const res = await executeHackerNewsIntentDiscovery({
+        rootDir,
+        productName: brand.product.name,
+        productDescription: brand.product.description,
+        productKeywords: brand.product.intentKeywords ?? [brand.product.name],
+        productUrl: appUrl,
+      });
+      if (res.ok && res.leads.length) {
+        const existing = await loadBuyerLeads(rootDir);
+        const merged = [...res.leads, ...existing].reduce<DurableBuyerLead[]>(
+          (acc, l) => {
+            if (acc.some((x) => x.url === l.url)) return acc;
+            acc.push(l);
+            return acc;
+          },
+          [],
+        );
+        await saveBuyerLeads(rootDir, merged.slice(0, 200));
+      }
+      return { ok: res.ok, detail: res.detail };
+    }
+    case "gsc_query_import": {
+      if (!hasGscCredentials()) {
+        return {
+          ok: false,
+          detail:
+            "gsc_query_import skipped: GOOGLE_SERVICE_ACCOUNT_JSON missing — add a Search Console-owner service account and set the env",
+        };
+      }
+      const res = await executeGscQueryImport({
+        rootDir,
+        siteUrl: `sc-domain:${brand.domain}`,
+        productName: brand.product.name,
+        productDescription: brand.product.description,
+      });
+      return { ok: res.ok, detail: res.detail };
+    }
+    case "gsc_indexation_check": {
+      if (!hasGscCredentials()) {
+        return {
+          ok: false,
+          detail:
+            "gsc_indexation_check skipped: GOOGLE_SERVICE_ACCOUNT_JSON missing",
+        };
+      }
+      const doors = expandPermissionlessDoors(brand);
+      const base = appUrl.replace(/\/$/, "");
+      const urls = [base, ...doors.slice(0, 12).map((d) => `${base}/topics/${d.slug}`)];
+      const res = await executeGscIndexationCheck({
+        rootDir,
+        siteUrl: `sc-domain:${brand.domain}`,
+        urls,
+      });
+      if (res.ok && res.notIndexed.length) {
+        for (const missing of res.notIndexed.slice(0, 6)) {
+          await pingIndexNow({ url: missing, appUrl });
+        }
+      }
+      return { ok: res.ok, detail: res.detail };
+    }
+    case "youtube_intent_discovery": {
+      if (!hasYouTubeApiKey()) {
+        return {
+          ok: false,
+          detail:
+            "youtube_intent_discovery skipped: YOUTUBE_API_KEY missing — add a Google Cloud API key with YouTube Data API v3 enabled",
+        };
+      }
+      const res = await executeYouTubeIntentDiscovery({
+        rootDir,
+        productName: brand.product.name,
+        productDescription: brand.product.description,
+        productKeywords: brand.product.intentKeywords ?? [brand.product.name],
+        productUrl: appUrl,
+      });
+      if (res.ok && res.leads.length) {
+        const existing = await loadBuyerLeads(rootDir);
+        const merged = [...res.leads, ...existing].reduce<DurableBuyerLead[]>(
+          (acc, l) => {
+            if (acc.some((x) => x.url === l.url)) return acc;
+            acc.push(l);
+            return acc;
+          },
+          [],
+        );
+        await saveBuyerLeads(rootDir, merged.slice(0, 200));
+      }
+      return { ok: res.ok, detail: res.detail };
+    }
+    case "youtube_community_reply_draft": {
+      const leads = await loadBuyerLeads(rootDir);
+      const next = leads.find((l) => l.reachMethod === "youtube_comment");
+      if (!next) {
+        return {
+          ok: false,
+          detail:
+            "youtube_community_reply_draft: no youtube leads stored — enqueue youtube_intent_discovery first",
+        };
+      }
+      const match = next.url.match(/watch\?v=([^&]+)&lc=([^&]+)/);
+      if (!match) {
+        return {
+          ok: false,
+          detail: `youtube_community_reply_draft: could not parse video/comment ids from ${next.url}`,
+        };
+      }
+      const [, videoId, commentId] = match;
+      const res = await executeYouTubeCommunityReplyDraft({
+        rootDir,
+        productName: brand.product.name,
+        productUrl: appUrl,
+        brandVoice: brand.brandVoice,
+        targetComment: {
+          videoId: videoId!,
+          commentId: commentId!,
+          author: next.name ?? "",
+          text: next.reasonToReach ?? next.whyMatch ?? "",
+        },
+      });
+      const remaining = leads.filter((l) => l.url !== next.url);
+      await saveBuyerLeads(rootDir, remaining);
+      return { ok: res.ok, detail: res.detail, url: res.ok ? res.url : undefined };
+    }
+    case "exit_intent_deploy": {
+      const res = await executeExitIntentDeploy({
+        rootDir,
+        siteId: brand.siteId,
+        appUrl,
+      });
+      return {
+        ok: true,
+        detail: res.detail,
+        url: res.url,
+      };
+    }
+    case "order_bump_deploy": {
+      const bumpUsd = Math.max(
+        5,
+        Math.min(
+          Math.round(brand.product.priceUsd * 0.3),
+          Math.round(brand.product.priceUsd - 1),
+        ),
+      );
+      const label = `${brand.displayName} coaching add-on`;
+      const description = `A 15-minute setup call — added to your ${brand.product.name} order.`;
+      const res = await executeStripeOrderBumpDeploy({
+        rootDir,
+        siteId: brand.siteId,
+        bumpPriceUsd: bumpUsd,
+        bumpLabel: label,
+        bumpDescription: description,
+      });
+      if (!res.ok) return { ok: false, detail: res.detail };
+      return { ok: true, detail: res.detail, url: res.url };
     }
     case "email_cold_outreach": {
       if (!hasResendKey()) {

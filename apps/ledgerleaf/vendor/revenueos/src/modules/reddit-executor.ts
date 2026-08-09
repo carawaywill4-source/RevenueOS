@@ -1,16 +1,16 @@
 /**
- * Reddit executor — OAuth script-app grant, permissionless helpful replies.
+ * Reddit executor — discover buying-intent threads + helpful replies.
  *
- * Reddit is where a huge portion of our target buyers already ask their
- * questions in public. This module lets RevenueOS:
- *   1. Auth via script-app grant (username+password from env, no owner login)
- *   2. Search allowed subreddits for buying-intent threads
- *   3. Draft a genuinely helpful reply via LLM (no spam; soft mention only when
- *      the product IS the answer)
- *   4. Post with strict rate limits and per-sub rule checks
+ * Reality as of Nov 2025: Reddit killed self-service `/prefs/apps` OAuth.
+ * New write access requires Responsible Builder Policy approval via
+ * https://support.reddithelp.com/hc/en-us/requests/new?ticket_form_id=14868593862164
  *
- * Every unsafe branch fails closed: missing creds → skip; rules disallow →
- * skip; per-day cap → skip; low-karma → skip. Never throws.
+ * Modes:
+ *   1. WRITE (hasRedditCreds): OAuth password grant → search → LLM gate → post
+ *   2. DRAFT (no creds): public subreddit JSON discovery → LLM draft → save for
+ *      owner paste (still useful commercial work; no silent spam)
+ *
+ * Never throws. Caps + thread-dedup always apply.
  */
 
 import { callOpenAI, hasOpenAIKey } from "./openai-client";
@@ -168,30 +168,12 @@ export type IntentThread = {
   createdUtc: number;
 };
 
-/**
- * Search allowed subreddits for threads asking questions that our product may
- * genuinely answer. Uses Reddit's search API — no scraping.
- */
-export async function discoverBuyingIntent(input: {
-  productName: string;
-  productKeywords: string[];
-  subreddits?: string[];
-  limit?: number;
-}): Promise<{ ok: true; threads: IntentThread[] } | { ok: false; reason: string }> {
-  if (!hasRedditCreds()) return { ok: false, reason: "creds missing" };
-  const subs = input.subreddits ?? allowedSubreddits();
-  const limit = Math.min(input.limit ?? 15, 25);
-  const query = input.productKeywords.slice(0, 3).join(" OR ");
-  const q = encodeURIComponent(query);
-  const restrictSr = subs.length ? `+${subs.join("+")}` : "";
-  const path = `/r/${subs.join("+")}/search?q=${q}&restrict_sr=1&sort=new&t=week&limit=${limit}`;
-  const res = await apiGet(path);
-  if (!res.ok) return { ok: false, reason: res.reason };
-  const data = res.data as {
-    data?: { children?: Array<{ data?: any }> };
-  };
+function parseListingChildren(
+  children: Array<{ data?: any }> | undefined,
+  limit: number,
+): IntentThread[] {
   const threads: IntentThread[] = [];
-  for (const child of data?.data?.children ?? []) {
+  for (const child of children ?? []) {
     const d = child.data;
     if (!d) continue;
     if (d.locked || d.archived || d.removed_by_category) continue;
@@ -206,8 +188,91 @@ export async function discoverBuyingIntent(input: {
       numComments: d.num_comments ?? 0,
       createdUtc: d.created_utc ?? 0,
     });
+    if (threads.length >= limit) break;
   }
-  return { ok: true, threads: threads.slice(0, limit) };
+  return threads;
+}
+
+/**
+ * Public read path — no OAuth. Hits `/r/{sub}/search.json` / `/new.json`.
+ * May 403 from datacenter IPs; caller treats that as discover failure.
+ */
+async function discoverViaPublicJson(input: {
+  productKeywords: string[];
+  subreddits: string[];
+  limit: number;
+}): Promise<{ ok: true; threads: IntentThread[] } | { ok: false; reason: string }> {
+  const query = encodeURIComponent(input.productKeywords.slice(0, 3).join(" OR "));
+  const threads: IntentThread[] = [];
+  const reasons: string[] = [];
+  for (const sub of input.subreddits.slice(0, 4)) {
+    const urls = [
+      `https://www.reddit.com/r/${sub}/search.json?q=${query}&restrict_sr=1&sort=new&t=week&limit=10`,
+      `https://www.reddit.com/r/${sub}/new.json?limit=10`,
+    ];
+    for (const url of urls) {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 12_000);
+      try {
+        const res = await fetch(url, {
+          headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          reasons.push(`${sub}:${res.status}`);
+          continue;
+        }
+        const data = (await res.json()) as {
+          data?: { children?: Array<{ data?: any }> };
+        };
+        threads.push(...parseListingChildren(data?.data?.children, input.limit));
+        if (threads.length >= input.limit) {
+          return { ok: true, threads: threads.slice(0, input.limit) };
+        }
+      } catch (err) {
+        reasons.push(`${sub}: ${(err as Error).message.slice(0, 40)}`);
+      } finally {
+        clearTimeout(t);
+      }
+    }
+  }
+  if (threads.length) return { ok: true, threads: threads.slice(0, input.limit) };
+  return {
+    ok: false,
+    reason:
+      reasons.length
+        ? `public json blocked (${reasons.slice(0, 4).join("; ")}) — need Data API approval`
+        : "no public threads",
+  };
+}
+
+/**
+ * Search allowed subreddits for buying-intent threads. Prefers OAuth search
+ * when approved creds exist; otherwise falls back to public JSON.
+ */
+export async function discoverBuyingIntent(input: {
+  productName: string;
+  productKeywords: string[];
+  subreddits?: string[];
+  limit?: number;
+}): Promise<{ ok: true; threads: IntentThread[] } | { ok: false; reason: string }> {
+  const subs = input.subreddits ?? allowedSubreddits();
+  const limit = Math.min(input.limit ?? 15, 25);
+  if (hasRedditCreds()) {
+    const query = encodeURIComponent(input.productKeywords.slice(0, 3).join(" OR "));
+    const oauthPath = `/r/${subs.join("+")}/search?q=${query}&restrict_sr=1&sort=new&t=week&limit=${limit}`;
+    const res = await apiGet(oauthPath);
+    if (res.ok) {
+      const data = res.data as { data?: { children?: Array<{ data?: any }> } };
+      const threads = parseListingChildren(data?.data?.children, limit);
+      if (threads.length) return { ok: true, threads };
+    }
+  }
+  return discoverViaPublicJson({
+    productKeywords: input.productKeywords,
+    subreddits: subs,
+    limit,
+  });
 }
 
 const REPLY_SCHEMA = {
@@ -305,6 +370,11 @@ export async function postRedditReply(input: {
 }
 
 function dataDir(rootDir: string): string {
+  // Vercel serverless mounts /var/task read-only; only /tmp is writable.
+  if (process.env.VERCEL || process.env.REVENUEOS_DATA_DIR) {
+    const base = process.env.REVENUEOS_DATA_DIR || "/tmp/revenueos";
+    return path.join(base, "reddit");
+  }
   return path.join(rootDir, ".data", "reddit");
 }
 
@@ -318,8 +388,15 @@ async function readJson<T>(p: string, fallback: T): Promise<T> {
 }
 
 async function writeJson(p: string, data: unknown) {
-  await mkdir(path.dirname(p), { recursive: true });
-  await writeFile(p, JSON.stringify(data, null, 2));
+  // Persistence is best-effort. On read-only filesystems (like Vercel's
+  // /var/task) we must not throw — the reddit action is ephemeral by design
+  // when durable storage isn't available.
+  try {
+    await mkdir(path.dirname(p), { recursive: true });
+    await writeFile(p, JSON.stringify(data, null, 2));
+  } catch {
+    /* swallow: ephemeral persistence, cooldown will retry next invocation */
+  }
 }
 
 /** Count today's Reddit actions from a per-day file (no store dependency). */
@@ -354,8 +431,53 @@ async function recordRepliedThread(rootDir: string, threadId: string) {
 }
 
 /**
- * End-to-end: search intent → LLM decide → post → record. One thread per call
- * so cycles produce distinct signal per attempt.
+ * Persistent cooldown for discovery failures. Reddit blocks unauthenticated
+ * JSON from datacenter IPs, so retrying every cron cycle just spams the
+ * job queue with the same 403. We back off for 24h and let the owner-facing
+ * concrete_escalation (community_participation) carry the signal.
+ */
+async function readDiscoveryCooldown(rootDir: string): Promise<number | null> {
+  const file = path.join(dataDir(rootDir), "discovery-cooldown.json");
+  const data = await readJson<{ blockedUntil?: number }>(file, {});
+  return data.blockedUntil ?? null;
+}
+
+async function writeDiscoveryCooldown(rootDir: string, untilMs: number) {
+  const file = path.join(dataDir(rootDir), "discovery-cooldown.json");
+  await writeJson(file, { blockedUntil: untilMs, updatedAt: new Date().toISOString() });
+}
+
+async function saveDraftForOwner(input: {
+  rootDir: string;
+  thread: IntentThread;
+  body: string;
+  reason: string;
+  productName: string;
+}) {
+  const file = path.join(dataDir(input.rootDir), "drafts-pending.json");
+  const data = await readJson<{ drafts: Array<Record<string, unknown>> }>(file, {
+    drafts: [],
+  });
+  data.drafts = [
+    {
+      at: new Date().toISOString(),
+      threadId: input.thread.id,
+      subreddit: input.thread.subreddit,
+      url: input.thread.url,
+      title: input.thread.title,
+      productName: input.productName,
+      body: input.body,
+      reason: input.reason,
+      status: "awaiting_owner_post",
+    },
+    ...data.drafts,
+  ].slice(0, 50);
+  await writeJson(file, data);
+}
+
+/**
+ * End-to-end: search intent → LLM decide → post (if approved OAuth) OR save
+ * draft for owner. One thread per call.
  */
 export async function executeRedditHelpfulReply(input: {
   rootDir: string;
@@ -372,20 +494,38 @@ export async function executeRedditHelpfulReply(input: {
       url?: string;
       threadId: string;
       subreddit: string;
+      mode: "posted" | "drafted";
     }
   | { ok: false; detail: string }
 > {
-  if (!hasRedditCreds()) return { ok: false, detail: "reddit creds missing" };
+  const canPost = hasRedditCreds();
   const cap = dailyActionCap();
   const { used } = await todaysRedditActions({ rootDir: input.rootDir, now: input.now });
   if (used >= cap) {
     return { ok: false, detail: `reddit daily cap ${used}/${cap} hit` };
   }
+  const nowMs = (input.now ?? new Date()).getTime();
+  const blockedUntil = await readDiscoveryCooldown(input.rootDir);
+  if (blockedUntil && blockedUntil > nowMs) {
+    const hoursLeft = Math.max(1, Math.round((blockedUntil - nowMs) / 3_600_000));
+    return {
+      ok: false,
+      detail: `reddit_discovery_cooldown: ${hoursLeft}h left — Reddit Data API approval required (file at support.reddithelp.com, ticket_form_id=14868593862164). Devvit app carries in-community activity.`,
+    };
+  }
   const disc = await discoverBuyingIntent({
     productName: input.productName,
     productKeywords: input.productKeywords,
   });
-  if (!disc.ok) return { ok: false, detail: `discover: ${disc.reason}` };
+  if (!disc.ok) {
+    // Reddit fully blocks unauth reads from serverless IPs — 24h cooldown so
+    // we don't hammer the queue every hour with the same 403.
+    await writeDiscoveryCooldown(input.rootDir, nowMs + 24 * 3_600_000);
+    return {
+      ok: false,
+      detail: `discover_blocked (24h cooldown set): ${disc.reason}. Owner: file Data Access Request at support.reddithelp.com (ticket_form_id=14868593862164). Meanwhile Devvit app handles in-community replies.`,
+    };
+  }
   if (disc.threads.length === 0) {
     return { ok: false, detail: "no intent threads found this window" };
   }
@@ -401,6 +541,27 @@ export async function executeRedditHelpfulReply(input: {
     });
     if (!draft.ok) continue;
     if (!draft.reply.shouldReply) continue;
+
+    if (!canPost) {
+      await saveDraftForOwner({
+        rootDir: input.rootDir,
+        thread,
+        body: draft.reply.body,
+        reason: draft.reply.reason,
+        productName: input.productName,
+      });
+      await recordRepliedThread(input.rootDir, thread.id);
+      await incrementTodayCounter(input.rootDir, input.now);
+      return {
+        ok: true,
+        mode: "drafted",
+        detail: `DRAFT (no API write access): r/${thread.subreddit} "${thread.title.slice(0, 60)}" — paste from .data/reddit/drafts-pending.json. Apply: reddithelp Data Access Request.`,
+        url: thread.url,
+        threadId: thread.id,
+        subreddit: thread.subreddit,
+      };
+    }
+
     const posted = await postRedditReply({
       parentFullname: thread.id,
       body: draft.reply.body,
@@ -412,6 +573,7 @@ export async function executeRedditHelpfulReply(input: {
     await incrementTodayCounter(input.rootDir, input.now);
     return {
       ok: true,
+      mode: "posted",
       detail: `Replied in r/${thread.subreddit} on "${thread.title.slice(0, 80)}" (${draft.reply.reason.slice(0, 80)})`,
       url: thread.url,
       threadId: thread.id,
