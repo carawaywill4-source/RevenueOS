@@ -9,6 +9,64 @@ import {
 import { cronRequestIsAuthorized } from "@/lib/growth";
 import { claimHourlyEmailSlot } from "@/revenueos/hourly-email-lock";
 import { resolvePortfolioSites } from "@/revenueos/portfolio-sites";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
+
+type VisitorRoll = {
+  pageViews: number;
+  ctaClicks: number;
+  checkoutStarts: number;
+  checkoutCompletes: number;
+};
+
+/**
+ * Roll first-party beacon events (event_type='beacon') per site over the
+ * reporting window. Visitors are the missing middle of the funnel — without
+ * them the digest cannot tell "action fired but nobody saw it" apart from
+ * "action fired, humans arrived, but no one bought".
+ */
+async function rollVisitors(
+  siteIds: string[],
+  windowStart: string,
+): Promise<Record<string, VisitorRoll>> {
+  const empty: Record<string, VisitorRoll> = {};
+  for (const id of siteIds) {
+    empty[id] = {
+      pageViews: 0,
+      ctaClicks: 0,
+      checkoutStarts: 0,
+      checkoutCompletes: 0,
+    };
+  }
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return empty;
+  }
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("revenueos_pursuit_events")
+      .select("site_id,detail")
+      .eq("event_type", "beacon")
+      .in("site_id", siteIds)
+      .gte("created_at", windowStart)
+      .limit(20_000);
+    if (error || !data) return empty;
+    for (const row of data as Array<{
+      site_id: string;
+      detail: { kind?: string } | null;
+    }>) {
+      const bucket = empty[row.site_id];
+      if (!bucket) continue;
+      const kind = row.detail?.kind ?? "";
+      if (kind === "page_view") bucket.pageViews += 1;
+      else if (kind === "cta_click") bucket.ctaClicks += 1;
+      else if (kind === "checkout_start") bucket.checkoutStarts += 1;
+      else if (kind === "checkout_complete") bucket.checkoutCompletes += 1;
+    }
+    return empty;
+  } catch {
+    return empty;
+  }
+}
 
 export const maxDuration = 120;
 export const dynamic = "force-dynamic";
@@ -179,6 +237,22 @@ export async function GET(request: Request) {
     }),
   );
 
+  const visitors = await rollVisitors(
+    sites.map((s) => s.siteId),
+    windowStart,
+  );
+  for (const s of sites) {
+    const v = visitors[s.siteId];
+    if (!v) continue;
+    s.thisHour = {
+      ...(s.thisHour ?? { actionsExecuted: s.actionsCompleted }),
+      pageViews: v.pageViews,
+      ctaClicks: v.ctaClicks,
+      checkoutStarts: v.checkoutStarts,
+      checkoutCompletes: v.checkoutCompletes,
+    };
+  }
+
   const digest = buildPortfolioDigest({ windowStart, windowEnd, sites });
   const text = formatPortfolioOwnerEmail(digest);
   const subject = portfolioDigestSubject(digest);
@@ -217,6 +291,12 @@ export async function GET(request: Request) {
     purchases: digest.portfolioPurchases,
     revenueUsd: digest.portfolioRevenueUsd,
     totalActionsCompleted: digest.totalActionsCompleted,
+    visitors: {
+      pageViews: digest.portfolioPageViews,
+      ctaClicks: digest.portfolioCtaClicks,
+      checkoutStarts: digest.portfolioCheckoutStarts,
+      checkoutCompletes: digest.portfolioCheckoutCompletes,
+    },
     preview: text.slice(0, 1200),
   });
 }
