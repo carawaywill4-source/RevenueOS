@@ -36,6 +36,7 @@ import { filterAutonomousActions } from "../policy";
 import {
   drainPursuits,
   enqueuePursuitsFromOpportunities,
+  releaseFastCycleWaiting,
   type DrainResult,
 } from "./pursuit-engine";
 import {
@@ -262,7 +263,7 @@ export async function planAndEnqueuePursuits(
   });
 
   const hypotheses = opportunitiesToHypotheses(opportunities);
-  const existing = store.listPursuits
+  let existing = store.listPursuits
     ? await store.listPursuits(context.siteId)
     : [];
   const openExisting = existing.filter(
@@ -278,6 +279,18 @@ export async function planAndEnqueuePursuits(
     observation.money.purchases === 0;
   const replenishedEmptyQueue =
     belowObjective && executableOpen.length === 0;
+
+  // Waiting fast-cycle jobs were blocking re-enqueue (same idempotency keys).
+  // Release them so the operator keeps creating buyer exposure 24/7.
+  if (replenishedEmptyQueue) {
+    const released = releaseFastCycleWaiting(existing, now);
+    for (let i = 0; i < released.length; i++) {
+      if (released[i] !== existing[i] && store.savePursuit) {
+        await store.savePursuit(released[i]!);
+      }
+    }
+    existing = released;
+  }
 
   const enqueued = enqueuePursuitsFromOpportunities({
     siteId: context.siteId,

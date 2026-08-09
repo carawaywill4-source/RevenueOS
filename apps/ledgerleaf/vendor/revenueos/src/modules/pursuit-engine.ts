@@ -24,7 +24,7 @@ import type {
 const EXECUTION_STATES = new Set(["DISCOVER", "QUALIFY", "EXECUTE", "REPLENISH"]);
 
 /** High-frequency organic actions must re-fire often — never sit 7 days idle. */
-const FAST_CYCLE_ACTIONS = new Set([
+export const FAST_CYCLE_ACTIONS = new Set([
   "indexnow_submit",
   "sitemap_ping",
   "ping_search_engines",
@@ -41,6 +41,28 @@ const FAST_CYCLE_ACTIONS = new Set([
   "market_research",
   "feature_product",
 ]);
+
+/** Close measuring fast-cycle jobs so 24/7 replenish can enqueue fresh work. */
+export function releaseFastCycleWaiting(jobs: PursuitJob[], now: Date): PursuitJob[] {
+  const iso = now.toISOString();
+  return jobs.map((job) => {
+    if (
+      job.state === "WAITING_FOR_EVIDENCE" &&
+      job.actionType &&
+      FAST_CYCLE_ACTIONS.has(job.actionType)
+    ) {
+      return {
+        ...job,
+        state: "DONE" as const,
+        workSummary: `${job.workSummary ?? "Executed"} · released for 24/7 replenish`,
+        updatedAt: iso,
+        leaseOwner: null,
+        leaseUntil: null,
+      };
+    }
+    return job;
+  });
+}
 
 export function pursuitIdempotencyKey(
   opportunity: Opportunity,
