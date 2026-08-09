@@ -4,14 +4,26 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/*",
+    "services/*"
   ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "operator:dev": "npm --workspace @revenueos/operator-service run dev",
+    "operator:start": "npm --workspace @revenueos/operator-service run start",
+    "operator:deploy": "npm --workspace @revenueos/operator-service run deploy",
+    "operator:test": "npm --workspace @revenueos/operator-service run test",
+    "sidecar:start": "npm --workspace @revenueos/browser-sidecar run start",
+    "sidecar:dev": "npm --workspace @revenueos/browser-sidecar run dev",
+    "sidecar:cli": "npm --workspace @revenueos/browser-sidecar run cli --",
+    "sidecar:test": "SKIP_PLAYWRIGHT_INSTALL=1 npm --workspace @revenueos/browser-sidecar run test",
+    "dashboard:dev": "npm --workspace @portfolio/dashboard run dev",
+    "dashboard:build": "npm --workspace @portfolio/dashboard run build",
+    "dashboard:start": "npm --workspace @portfolio/dashboard run start"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
