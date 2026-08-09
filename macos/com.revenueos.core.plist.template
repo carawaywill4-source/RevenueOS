@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  RevenueOSCore — persistent brain. UI process is NOT the worker.
+  Install via macos/install-core-launchd.sh
+-->
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.revenueos.core</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>__NODE__</string>
+      <string>__OPERATOR_ENTRY__</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>__OPERATOR_DIR__</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+      <key>NODE_ENV</key>
+      <string>production</string>
+      <key>OPERATOR_NAME</key>
+      <string>mac-core</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>StandardOutPath</key>
+    <string>__LOG_DIR__/revenueos-core.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOG_DIR__/revenueos-core.stderr.log</string>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+  </dict>
+</plist>
