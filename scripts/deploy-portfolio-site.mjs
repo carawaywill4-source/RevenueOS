@@ -51,15 +51,28 @@ function sh(cmd, opts = {}) {
 }
 
 
+/**
+ * Canonical production URL per site. `vercel inspect --prod --json` sometimes
+ * returns the deployment host (`${siteId}-<hash>-<team>.vercel.app`) as its
+ * first alias, which is unstable and dies on the next deploy — publishing that
+ * as an exposure URL is not customer pursuit. Hard-map the alias here so
+ * `NEXT_PUBLIC_APP_URL` never drifts back to a preview host on re-deploy.
+ */
+const CANONICAL_APP_URLS = {
+  bidbinder: "https://bidbinder.vercel.app",
+  closeshift: "https://closeshift.vercel.app",
+  depositproof: "https://depositproof-omega.vercel.app",
+  ledgerleaf: "https://ledgerleaf-ashen.vercel.app",
+  listinglift: "https://listinglift-eight.vercel.app",
+  raiseready: "https://raiseready-seven.vercel.app",
+  resumeforge: "https://resumeforge-liard.vercel.app",
+  shopbeacon: "https://shopbeacon.vercel.app",
+  turnoverkit: "https://turnoverkit.vercel.app",
+  waitroom: "https://waitroom-sepia.vercel.app",
+};
+
 function resolveProdUrl(siteId) {
-  try {
-    const r = spawnSync("vercel", ["ls"], { cwd: appDir, encoding: "utf8" });
-    const aliased = [...(r.stdout || "").matchAll(/https:\/\/[a-z0-9-]+\.vercel\.app/g)].map(m=>m[0]);
-    // Prefer clean project.vercel.app or project-word.vercel.app
-    const preferred = aliased.find((u) => u.includes(`${siteId}.`) || u.includes(`${siteId}-`));
-    if (preferred) return preferred;
-  } catch {}
-  return `https://${siteId}.vercel.app`;
+  return CANONICAL_APP_URLS[siteId] || `https://${siteId}.vercel.app`;
 }
 
 function vercelEnv(key, value) {
@@ -140,36 +153,17 @@ spawnSync("vercel", ["link", "--yes", "--project", siteId], {
 });
 
 for (const [k, v] of Object.entries(localEnv)) vercelEnv(k, v);
-vercelEnv("NEXT_PUBLIC_APP_URL", `https://${siteId}.vercel.app`);
+// Pre-deploy: seed the env with the canonical URL directly. The redeploy step
+// below re-writes it, but seeding here means the first cron tick after a fresh
+// deploy already emits canonical exposure URLs instead of `${siteId}.vercel.app`.
+vercelEnv("NEXT_PUBLIC_APP_URL", resolveProdUrl(siteId));
 
 console.log("deploying…");
 sh("vercel --prod --yes", { cwd: appDir });
 
-// Resolve production URL
-const inspect = spawnSync("vercel", ["ls", siteId, "--prod"], {
-  cwd: appDir,
-  encoding: "utf8",
-});
-const aliasMatch =
-  inspect.stdout?.match(/https:\/\/[a-z0-9-]+\.vercel\.app/) ||
-  [];
-let prodUrl = resolveProdUrl(siteId);
-// Prefer *-*.vercel.app from inspect JSON
-try {
-  const j = spawnSync(
-    "vercel",
-    ["inspect", siteId, "--prod", "--json"],
-    { cwd: appDir, encoding: "utf8" },
-  );
-  const data = JSON.parse(j.stdout || "{}");
-  const aliases = data.aliases || data.url;
-  if (typeof aliases === "string") prodUrl = aliases.startsWith("http") ? aliases : `https://${aliases}`;
-  else if (Array.isArray(aliases) && aliases[0]) {
-    prodUrl = aliases[0].startsWith("http") ? aliases[0] : `https://${aliases[0]}`;
-  }
-} catch {
-  /* keep default */
-}
+// Canonical production URL — never trust `vercel inspect` alias order, that
+// returns the deployment host (dies on next deploy). See CANONICAL_APP_URLS.
+const prodUrl = resolveProdUrl(siteId);
 
 vercelEnv("NEXT_PUBLIC_APP_URL", prodUrl);
 

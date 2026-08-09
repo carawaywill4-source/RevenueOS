@@ -60,6 +60,10 @@ import {
 import { proposeLlmStrategies } from "./llm-strategist";
 import { enforceMechanismDiversity } from "./mechanism-diversity";
 import {
+  applyExplorationFloor,
+  type ExplorationFloorReport,
+} from "./exploration-floor";
+import {
   applyRevenuePriority,
   EMPTY_PORTFOLIO_SIGNAL,
   type PortfolioSignal,
@@ -152,6 +156,21 @@ export type PlanAndEnqueueResult = {
     channelCount: number;
     discovered: number;
     ranking: Array<{ platform: string; score: number; revenuePerAction: number }>;
+  };
+  /**
+   * Exploration-floor invariants applied this cycle (A/B/C/E). Present so
+   * cron routes can prove the floor fired instead of the planner silently
+   * skipping it.
+   */
+  explorationFloor?: {
+    forcedChannelDiscover: boolean;
+    forcedBuyerDiscovery: boolean;
+    forcedExternal: boolean;
+    cappedActionTypes: string[];
+    externalMechanismInTopN: string | null;
+    buyerLeadCount: number;
+    activeChannelCount: number;
+    topN: number;
   };
 };
 
@@ -540,6 +559,42 @@ export async function planAndEnqueuePursuits(
     });
   }
 
+  // Exploration floor — HARD invariants the planner MUST honor per cycle.
+  //   A. external-mechanism floor (FCM w/ 0 purchases → ≥1 external in top-N)
+  //   B. channel-registry cold-start floor (<5 channels → force channel_discover)
+  //   C. FCM buyer-lead floor (0 leads in FCM → force buyer_discovery)
+  //   E. per-cycle same-action cap (no action type >2× per cycle)
+  //
+  // These land LAST (right before enqueue) so no downstream re-score can
+  // re-drown the top-N in publish_* loops. `topN` mirrors the enqueue slice
+  // computed below and matches `maxEnqueue` used by
+  // `enqueuePursuitsFromOpportunities`.
+  const belowObjectiveForFloor =
+    observation.money.estimatedProfitUsd < 10_000 ||
+    observation.money.purchases === 0;
+  const floorTopN =
+    opts.maxEnqueue ??
+    Math.max(belowObjectiveForFloor ? 14 : 8, ambition.concurrentBets * 2);
+  const buyerLeadCount =
+    typeof adapter.getBuyerLeadCount === "function"
+      ? await adapter.getBuyerLeadCount().catch(() => 0)
+      : 0;
+  const activeChannelCount = channelArms.length
+    ? channelArms.filter((a) => a.channel.status !== "paused").length
+    : 0;
+  const floorReport: ExplorationFloorReport = applyExplorationFloor({
+    opportunities,
+    firstCustomerModeActive: firstCustomerMode.active,
+    purchases: observation.money.purchases,
+    buyerLeadCount,
+    activeChannelCount,
+    recentEvents,
+    siteId: context.siteId,
+    topN: floorTopN,
+    now,
+  });
+  opportunities = floorReport.opportunities;
+
   const hypotheses = opportunitiesToHypotheses(opportunities);
   let existing = store.listPursuits
     ? await store.listPursuits(context.siteId)
@@ -608,12 +663,10 @@ export async function planAndEnqueuePursuits(
         opportunities,
         hypotheses,
         existing,
-        maxEnqueue:
-          opts.maxEnqueue ??
-          Math.max(
-            replenishedEmptyQueue ? 14 : 8,
-            ambition.concurrentBets * 2,
-          ),
+        // Same slice size the exploration floor computed against — otherwise
+        // the floor might promote an external mechanism at position N-1 and
+        // this call would still slice it off.
+        maxEnqueue: floorTopN,
         now,
       });
 
@@ -708,6 +761,16 @@ export async function planAndEnqueuePursuits(
     unlockProposals,
     llmInsight,
     channelAllocation,
+    explorationFloor: {
+      forcedChannelDiscover: floorReport.forcedChannelDiscover,
+      forcedBuyerDiscovery: floorReport.forcedBuyerDiscovery,
+      forcedExternal: floorReport.forcedExternal,
+      cappedActionTypes: floorReport.cappedActionTypes,
+      externalMechanismInTopN: floorReport.externalMechanismInTopN,
+      buyerLeadCount,
+      activeChannelCount,
+      topN: floorTopN,
+    },
   };
 }
 

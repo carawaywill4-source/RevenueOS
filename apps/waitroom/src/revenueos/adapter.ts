@@ -14,7 +14,9 @@ import { checkoutAllowed } from "@/lib/readiness";
 import {
   executePermissionlessAction,
   listPermissionlessSafeActions,
+  loadBuyerLeadCount,
   permissionlessOpportunities,
+  resolveAppUrl,
 } from "@revenueos/storefront-kit";
 import { createDurableExperimentStore } from "@/revenueos/durable-store";
 
@@ -135,13 +137,19 @@ export function createAdapter(): SiteAdapter {
       return listPermissionlessSafeActions();
     },
     async execute(action) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+      const appUrl = resolveAppUrl({
+        siteId: BRAND.siteId,
+        envUrl: process.env.NEXT_PUBLIC_APP_URL,
+      });
       return executePermissionlessAction({
         brand: BRAND,
         rootDir: process.cwd(),
         appUrl,
         actionType: action.type,
       });
+    },
+    async getBuyerLeadCount() {
+      return loadBuyerLeadCount(process.cwd());
     },
     getExperimentStore() {
       return store;

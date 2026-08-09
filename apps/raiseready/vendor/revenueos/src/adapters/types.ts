@@ -76,4 +76,11 @@ export interface SiteAdapter {
 
   /** Retire a killed discovery door so it stops receiving investment. */
   retireDiscoveryDoor?(doorId: string, reason: string): Promise<ActionResult>;
+
+  /**
+   * Durable count of buyer leads this site currently knows about. Consumed by
+   * the exploration floor to force `buyer_discovery` in FCM cycles that have
+   * nothing for external pursuit limbs to work with.
+   */
+  getBuyerLeadCount?(): Promise<number>;
 }

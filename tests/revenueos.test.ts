@@ -4343,3 +4343,279 @@ test("channel actions registered with cooldowns and mechanisms", async () => {
     "owned_distribution",
   );
 });
+
+/* -------------------------------------------------------------------------- *
+ *  Exploration floor — HARD invariants that MUST hold every cycle in FCM.
+ *  Regression coverage for the "61 actions, 0 external distribution" failure.
+ * -------------------------------------------------------------------------- */
+
+type FloorOpp = {
+  id: string;
+  title: string;
+  metric: string;
+  category: "acquisition";
+  action: string;
+  expectedImpact: number;
+  confidence: number;
+  effort: number;
+  score: number;
+  safeActionType: string;
+  patternKey: string;
+  precursorMetric: "landing_views";
+};
+
+function floorOpp(
+  id: string,
+  actionType: string,
+  score: number,
+  overrides: Partial<FloorOpp> = {},
+): FloorOpp {
+  return {
+    id,
+    title: id,
+    metric: "landing_views",
+    category: "acquisition",
+    action: id,
+    expectedImpact: 5,
+    confidence: 0.5,
+    effort: 2,
+    score,
+    safeActionType: actionType,
+    patternKey: `p:${id}`,
+    precursorMetric: "landing_views",
+    ...overrides,
+  };
+}
+
+test("exploration floor A: FCM w/ 0 purchases promotes external-mechanism when top-N is all owned", async () => {
+  const { applyExplorationFloor, firstExternalMechanismInTopN } = await import(
+    "@revenueos/core"
+  );
+  const opps = [
+    floorOpp("publish-1", "publish_intent_tool", 100),
+    floorOpp("publish-2", "publish_calculator", 95),
+    floorOpp("publish-3", "publish_howto_cluster", 90),
+    floorOpp("publish-4", "distribute_owned_urls", 85),
+    floorOpp("reddit-help", "reddit_helpful_reply", 40),
+    floorOpp("email-cold", "email_cold_outreach", 35),
+  ];
+  const floor = applyExplorationFloor({
+    opportunities: opps,
+    firstCustomerModeActive: true,
+    purchases: 0,
+    buyerLeadCount: 5,
+    activeChannelCount: 10,
+    recentEvents: [],
+    siteId: "test-site",
+    topN: 4,
+  });
+  assert.equal(
+    floor.forcedExternal,
+    true,
+    "external-mechanism must be forced into top-N when all top-N are owned_content",
+  );
+  const mech = firstExternalMechanismInTopN(floor.opportunities, 4);
+  assert.notEqual(mech, null, "top-N must contain at least one external mechanism");
+});
+
+test("exploration floor B: cold channel registry (<5) forces channel_discover this cycle", async () => {
+  const { applyExplorationFloor } = await import("@revenueos/core");
+  const opps = [
+    floorOpp("publish-1", "publish_intent_tool", 100),
+    floorOpp("publish-2", "publish_calculator", 95),
+  ];
+  const floor = applyExplorationFloor({
+    opportunities: opps,
+    firstCustomerModeActive: true,
+    purchases: 0,
+    buyerLeadCount: 5,
+    activeChannelCount: 2,
+    recentEvents: [],
+    siteId: "test-site",
+    topN: 5,
+  });
+  assert.equal(
+    floor.forcedChannelDiscover,
+    true,
+    "channel_discover must be forced when the registry has <5 usable channels",
+  );
+  assert.ok(
+    floor.opportunities.some((o) => o.safeActionType === "channel_discover"),
+    "channel_discover opportunity must exist in the top-N",
+  );
+});
+
+test("exploration floor C: FCM with 0 buyer leads forces buyer_discovery this cycle", async () => {
+  const { applyExplorationFloor } = await import("@revenueos/core");
+  const opps = [
+    floorOpp("publish-1", "publish_intent_tool", 100),
+    floorOpp("publish-2", "publish_calculator", 95),
+  ];
+  const floor = applyExplorationFloor({
+    opportunities: opps,
+    firstCustomerModeActive: true,
+    purchases: 0,
+    buyerLeadCount: 0,
+    activeChannelCount: 10,
+    recentEvents: [],
+    siteId: "test-site",
+    topN: 5,
+  });
+  assert.equal(
+    floor.forcedBuyerDiscovery,
+    true,
+    "buyer_discovery must be forced when FCM w/ 0 durable leads",
+  );
+  assert.ok(
+    floor.opportunities.some((o) => o.safeActionType === "buyer_discovery"),
+    "buyer_discovery opportunity must exist in the top-N",
+  );
+});
+
+test("exploration floor E: no action type may be enqueued more than 2× per cycle in top-N", async () => {
+  const { applyExplorationFloor } = await import("@revenueos/core");
+  const opps = [
+    floorOpp("p1", "publish_intent_tool", 100),
+    floorOpp("p2", "publish_intent_tool", 99),
+    floorOpp("p3", "publish_intent_tool", 98),
+    floorOpp("p4", "publish_intent_tool", 97),
+    floorOpp("p5", "publish_intent_tool", 96),
+    floorOpp("p6", "publish_intent_tool", 95),
+    floorOpp("distribute", "distribute_owned_urls", 90),
+    floorOpp("reddit", "reddit_helpful_reply", 60),
+    floorOpp("email", "email_cold_outreach", 55),
+  ];
+  const floor = applyExplorationFloor({
+    opportunities: opps,
+    firstCustomerModeActive: true,
+    purchases: 0,
+    buyerLeadCount: 5,
+    activeChannelCount: 10,
+    recentEvents: [],
+    siteId: "test-site",
+    topN: 6,
+  });
+  const topSlice = floor.opportunities.slice(0, 6);
+  const publishHits = topSlice.filter(
+    (o) => o.safeActionType === "publish_intent_tool",
+  ).length;
+  assert.ok(
+    publishHits <= 2,
+    `publish_intent_tool must not appear more than 2× in top-N; saw ${publishHits}`,
+  );
+  assert.ok(
+    floor.cappedActionTypes.includes("publish_intent_tool"),
+    "cappedActionTypes must record the swap",
+  );
+});
+
+test("exploration floor: full stack composes A+B+C+E for a fresh FCM cycle (regression)", async () => {
+  const { applyExplorationFloor, classifyMechanism } = await import(
+    "@revenueos/core"
+  );
+  // Reproduces the 61-actions-0-external cycle: FCM, no purchases, no leads,
+  // cold channel registry, planner keeps proposing publish_intent_tool.
+  const opps = [
+    floorOpp("p1", "publish_intent_tool", 100),
+    floorOpp("p2", "publish_intent_tool", 99),
+    floorOpp("p3", "publish_intent_tool", 98),
+    floorOpp("distribute", "distribute_owned_urls", 90),
+    floorOpp("exit", "exit_intent_deploy", 85),
+    floorOpp("bump", "order_bump_deploy", 80),
+    floorOpp("gum", "gumroad_product_sync", 78),
+    floorOpp("reddit", "reddit_helpful_reply", 20),
+  ];
+  const floor = applyExplorationFloor({
+    opportunities: opps,
+    firstCustomerModeActive: true,
+    purchases: 0,
+    buyerLeadCount: 0,
+    activeChannelCount: 1,
+    recentEvents: [],
+    siteId: "test-site",
+    topN: 8,
+  });
+  assert.equal(floor.forcedChannelDiscover, true, "B must fire");
+  assert.equal(floor.forcedBuyerDiscovery, true, "C must fire");
+  const topSlice = floor.opportunities.slice(0, 8);
+  const externalCount = topSlice.filter((o) => {
+    const m = classifyMechanism({
+      actionType: o.safeActionType,
+      patternKey: o.patternKey,
+      category: o.category,
+    });
+    return (
+      m === "external_placement" ||
+      m === "community_participation" ||
+      m === "direct_outreach"
+    );
+  }).length;
+  assert.ok(
+    externalCount >= 1,
+    `top-N must contain ≥1 external mechanism; saw ${externalCount}`,
+  );
+  const publishHits = topSlice.filter(
+    (o) => o.safeActionType === "publish_intent_tool",
+  ).length;
+  assert.ok(
+    publishHits <= 2,
+    `publish_intent_tool capped at 2 in top-N; saw ${publishHits}`,
+  );
+});
+
+/* -------------------------------------------------------------------------- *
+ *  Exposure URL canonicalization — no deployment/preview hosts leak out.
+ * -------------------------------------------------------------------------- */
+
+test("canonical urls: every mapped site maps to a stable alias, not the deployment host", async () => {
+  const { CANONICAL_APP_URLS, canonicalAppUrl, isPreviewLikeUrl } = await import(
+    "@revenueos/storefront-kit"
+  );
+  for (const [siteId, url] of Object.entries(CANONICAL_APP_URLS)) {
+    assert.equal(
+      isPreviewLikeUrl(url, siteId),
+      false,
+      `canonical ${siteId} must not be preview-like (${url})`,
+    );
+    assert.equal(canonicalAppUrl(siteId), url);
+  }
+  // A deployment host with team suffix is preview-like.
+  assert.equal(
+    isPreviewLikeUrl(
+      "https://raiseready-8pnbiusk5-will739944c-1981s-projects.vercel.app",
+      "raiseready",
+    ),
+    true,
+  );
+  // Long random hex suffix is preview-like even without a team segment.
+  assert.equal(
+    isPreviewLikeUrl("https://bidbinder-abc123def4.vercel.app", "bidbinder"),
+    true,
+  );
+});
+
+test("resolveAppUrl prefers a good env URL and refuses preview URLs, falling back to canonical", async () => {
+  const { resolveAppUrl } = await import("@revenueos/storefront-kit");
+  // Env is canonical → use it.
+  assert.equal(
+    resolveAppUrl({
+      siteId: "raiseready",
+      envUrl: "https://raiseready-seven.vercel.app",
+    }),
+    "https://raiseready-seven.vercel.app",
+  );
+  // Env is a deployment host → fall back to canonical.
+  assert.equal(
+    resolveAppUrl({
+      siteId: "raiseready",
+      envUrl:
+        "https://raiseready-8pnbiusk5-will739944c-1981s-projects.vercel.app",
+    }),
+    "https://raiseready-seven.vercel.app",
+  );
+  // Env missing → canonical.
+  assert.equal(
+    resolveAppUrl({ siteId: "bidbinder", envUrl: undefined }),
+    "https://bidbinder.vercel.app",
+  );
+});

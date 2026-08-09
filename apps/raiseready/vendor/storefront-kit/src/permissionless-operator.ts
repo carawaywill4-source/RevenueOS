@@ -384,6 +384,17 @@ async function loadBuyerLeads(rootDir: string): Promise<DurableBuyerLead[]> {
   }
 }
 
+/**
+ * Public helper — read the durable buyer-lead count for the caller's rootDir.
+ * The exploration floor uses this to guarantee `buyer_discovery` fires in FCM
+ * cycles where downstream limbs (email/reddit/form) have no lead to work with.
+ * Returns 0 when the store is missing or unreadable.
+ */
+export async function loadBuyerLeadCount(rootDir: string): Promise<number> {
+  const leads = await loadBuyerLeads(rootDir);
+  return leads.length;
+}
+
 async function saveBuyerLeads(rootDir: string, leads: DurableBuyerLead[]) {
   const file = await buyerLeadsPath(rootDir);
   await mkdir(path.dirname(file), { recursive: true });

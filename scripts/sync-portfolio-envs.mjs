@@ -169,11 +169,21 @@ async function main() {
   const args = process.argv.slice(2);
   const envIdx = args.indexOf("--env");
   const envName = envIdx >= 0 ? args[envIdx + 1] : "production";
+  const skipTr = args.includes("--skip-tr");
   const canonical = parseEnvFile(resolve(REPO, ".env.portfolio"));
   // Fallback: fill missing keys from root .env.local (developer convenience).
   const local = parseEnvFile(resolve(REPO, ".env.local"));
   for (const k of SHARED_KEYS) {
     if (!canonical[k] && local[k]) canonical[k] = local[k];
+  }
+  // Ensure PORTFOLIO_PULSE_TOKEN is defined and matches the shared portfolio
+  // CRON_SECRET. TR's digest fetcher sends `PORTFOLIO_PULSE_TOKEN || CRON_SECRET`
+  // — if TR falls back to its OWN CRON_SECRET the portfolio sites 401 because
+  // their CRON_SECRET is different (a fresh one is minted per portfolio deploy).
+  // Pinning `PORTFOLIO_PULSE_TOKEN = portfolio CRON_SECRET` is the invariant
+  // that guarantees digest→pulse auth succeeds portfolio-wide.
+  if (!canonical.PORTFOLIO_PULSE_TOKEN && canonical.CRON_SECRET) {
+    canonical.PORTFOLIO_PULSE_TOKEN = canonical.CRON_SECRET;
   }
   const missing = SHARED_KEYS.filter((k) => !canonical[k]);
   if (missing.length) {
@@ -197,6 +207,16 @@ async function main() {
       results.push(`${ok ? "+" : "!"}${key}`);
     }
     console.log(`  ${site}: ${results.join(" ")}`);
+  }
+  // Also push the pulse auth secret to the TR project itself so the portfolio
+  // digest cron fetches each portfolio pulse endpoint with a token those
+  // endpoints accept (they check the same list). Never sync ALL shared keys
+  // to TR (its Stripe/Resend etc. differ) — pulse auth is the only leaking key.
+  if (!skipTr && canonical.PORTFOLIO_PULSE_TOKEN && existsSync(resolve(REPO, ".vercel"))) {
+    const okA = upsert(REPO, "PORTFOLIO_PULSE_TOKEN", canonical.PORTFOLIO_PULSE_TOKEN, envName);
+    console.log(`  tributeready (root): ${okA ? "+" : "!"}PORTFOLIO_PULSE_TOKEN`);
+  } else if (!skipTr) {
+    console.log(`  tributeready (root): SKIP (missing .vercel/ link or no PORTFOLIO_PULSE_TOKEN)`);
   }
   console.log("Done. Redeploy to activate new envs on running functions.");
 }

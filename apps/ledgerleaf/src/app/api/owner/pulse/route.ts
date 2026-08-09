@@ -3,6 +3,7 @@ import {
   commercialActionTypesFromEvents,
   evaluateFirstCustomerMode,
 } from "@revenueos/core";
+import { resolveAppUrl } from "@revenueos/storefront-kit";
 import { BRAND } from "@/lib/brand";
 import { checkoutAllowed, ownerGates } from "@/lib/readiness";
 import { purchaseStats } from "@/lib/purchases";
@@ -12,10 +13,14 @@ import { resolveDurableLedgerMode } from "@/revenueos/durable-store";
 export const dynamic = "force-dynamic";
 
 function authorized(request: Request) {
-  const secret =
-    process.env.PORTFOLIO_PULSE_TOKEN || process.env.CRON_SECRET;
-  if (!secret) return false;
-  return request.headers.get("authorization") === `Bearer ${secret}`;
+  const candidates = [
+    process.env.PORTFOLIO_PULSE_TOKEN,
+    process.env.PORTFOLIO_CRON_SECRET,
+    process.env.CRON_SECRET,
+  ].filter((v): v is string => typeof v === "string" && v.length > 0);
+  if (candidates.length === 0) return false;
+  const header = request.headers.get("authorization") ?? "";
+  return candidates.some((s) => header === `Bearer ${s}`);
 }
 
 export async function GET(request: Request) {
@@ -42,9 +47,10 @@ export async function GET(request: Request) {
   const observation = await adapter.observe();
   const fcm = evaluateFirstCustomerMode(observation);
 
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    `https://${BRAND.siteId}.vercel.app`;
+  const appUrl = resolveAppUrl({
+    siteId: BRAND.siteId,
+    envUrl: process.env.NEXT_PUBLIC_APP_URL,
+  });
 
   const cycleStatus =
     ledgerMode === "ephemeral"
