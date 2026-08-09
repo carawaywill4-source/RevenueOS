@@ -21,6 +21,11 @@ export type StatusSnapshotProvider = () => {
     uptimeSec: number;
   };
   businesses: BusinessRuntimeStatus[];
+  cutover?: {
+    shadowMode: boolean;
+    claimEnabled: boolean;
+    operator: string;
+  };
 };
 
 async function fetchStripeMoney(): Promise<Record<string, unknown>> {

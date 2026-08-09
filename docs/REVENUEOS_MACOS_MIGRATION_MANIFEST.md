@@ -1,6 +1,7 @@
 # RevenueOS macOS Migration Manifest
 
-**Status:** Phase 0 inventory complete · Phase 1 scaffolding in progress  
+**Status:** Phase 0–1 done · claims DDL **NOT applied** on active Supabase · Mac shadow tick **proven**  
+**Live status:** `docs/REVENUEOS_MAC_CUTOVER_STATUS.md` · module inventory `docs/REVENUEOS_MODULE_MANIFEST.md`  
 **Rule:** THIS IS A MIGRATION OF THE EXISTING BRAIN. Nothing is deleted until its Mac replacement is verified.  
 **Cutover rule:** Exactly one system owns a given action after cutover.
 

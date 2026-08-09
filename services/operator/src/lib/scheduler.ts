@@ -47,6 +47,8 @@ export type SchedulerConfig = {
   /** Tick budget in ms — persistent operator uses generous budgets. */
   tickBudgetMs?: number;
   maxJobsPerTick?: number;
+  /** Observe-only ticks — no enqueue/drain (Mac shadow cutover). */
+  skipEnqueue?: boolean;
   logger: OperatorLoopLogger;
   signal: AbortSignal;
 };
@@ -154,6 +156,7 @@ export class PortfolioScheduler {
             portfolioSignal: this.config.portfolioSignal?.(),
             tickBudgetMs: this.config.tickBudgetMs,
             maxJobsPerTick: this.config.maxJobsPerTick,
+            skipEnqueue: this.config.skipEnqueue === true,
             logger: log,
           });
           this.recordTick(business.siteId, tick);

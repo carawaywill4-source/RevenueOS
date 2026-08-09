@@ -22,7 +22,7 @@ import {
   createOperatorAdapter,
   type OperatorLoopLogger,
 } from "@revenueos/core";
-import { loadEnv } from "./env.js";
+import { hydrateEnvFromFiles, loadEnv } from "./env.js";
 import { PORTFOLIO } from "./portfolio.js";
 import {
   createSupabaseStore,
@@ -51,13 +51,18 @@ const logger: OperatorLoopLogger = (level, event, fields) => {
 };
 
 async function main() {
+  hydrateEnvFromFiles();
   const env = loadEnv();
+  const shadow = env.SHADOW_MODE === true;
+  const claimEnabled = env.CLAIM_ENABLED === true && !shadow;
   logger("info", "operator.boot.start", {
     service: SERVICE_NAME,
     version: SERVICE_VERSION,
     operator: env.OPERATOR_NAME,
     maxConcurrency: env.MAX_CONCURRENCY,
     tickBudgetMs: env.TICK_BUDGET_MS,
+    shadowMode: shadow,
+    claimEnabled,
   });
 
   const { store, mode, client } = createSupabaseStore({
@@ -109,6 +114,12 @@ async function main() {
         store,
         safeActionSource: listOperatorSafeActions,
         executor: async (action) => {
+          if (shadow) {
+            return {
+              ok: true,
+              detail: `shadow_mode: would execute ${action.type}`,
+            };
+          }
           if (!env.SIDECAR_URL || !env.SIDECAR_TOKEN) {
             return {
               ok: false,
@@ -132,6 +143,10 @@ async function main() {
         },
       }),
     createClaim: async (business) => {
+      if (!claimEnabled) {
+        // Synthetic lease so the scheduler still ticks; Vercel remains owner.
+        return new Date(Date.now() + env.CLAIM_LEASE_MS).toISOString();
+      }
       const claim = await claimBusiness(client, {
         siteId: business.siteId,
         owner: env.OPERATOR_NAME,
@@ -139,15 +154,18 @@ async function main() {
       });
       return claim?.leaseUntil ?? null;
     },
-    releaseClaim: (business) =>
-      releaseBusiness(client, {
+    releaseClaim: async (business) => {
+      if (!claimEnabled) return;
+      await releaseBusiness(client, {
         siteId: business.siteId,
         owner: env.OPERATOR_NAME,
-      }),
+      });
+    },
     maxConcurrency: env.MAX_CONCURRENCY,
     perBusinessMinIntervalMs: env.PER_BUSINESS_MIN_INTERVAL_MS,
     tickBudgetMs: env.TICK_BUDGET_MS,
     maxJobsPerTick: env.MAX_JOBS_PER_TICK,
+    skipEnqueue: shadow,
     logger,
     signal: abortController.signal,
   });
@@ -166,11 +184,20 @@ async function main() {
         ledgerMode,
       },
       businesses: scheduler.getStatuses(),
+      cutover: {
+        shadowMode: shadow,
+        claimEnabled,
+        operator: env.OPERATOR_NAME,
+      },
     }),
   });
 
   await scheduler.start();
-  logger("info", "operator.boot.ready", { at: new Date().toISOString() });
+  logger("info", "operator.boot.ready", {
+    at: new Date().toISOString(),
+    shadowMode: shadow,
+    claimEnabled,
+  });
 
   const shutdown = async (signal: string) => {
     logger("info", "operator.shutdown.start", { signal });
