@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   buildOwnerReportSummary,
   runPursuitTick,
+  checkOperatorHosting,
 } from "@revenueos/core";
 import { appendJournal } from "@/lib/events";
 import { sendMendhausEmail, resendConfigured } from "@/lib/mail";
@@ -94,6 +95,17 @@ async function claimLaunchEmail(): Promise<boolean> {
 export async function GET(request: Request) {
   if (!authorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const host = await checkOperatorHosting("mendhaus");
+  if (host.hosted) {
+    return NextResponse.json({
+      ok: true,
+      site: "mendhaus",
+      mode: "hosted_by_operator",
+      cycleStatus: "hosted_by_operator",
+      skipped: true,
+      host,
+    });
   }
   if (!supabaseConfigured()) {
     return NextResponse.json(

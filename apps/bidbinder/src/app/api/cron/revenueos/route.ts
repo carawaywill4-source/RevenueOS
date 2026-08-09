@@ -3,6 +3,7 @@ import {
   buildOwnerReportSummary,
   formatOwnerReport,
   runPursuitTick,
+  checkOperatorHosting,
 } from "@revenueos/core";
 import { createAdapter } from "@/revenueos/adapter";
 import { resolveDurableLedgerMode } from "@/revenueos/durable-store";
@@ -21,6 +22,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const adapter = createAdapter();
+  const host = await checkOperatorHosting(adapter.id);
+  if (host.hosted) {
+    return NextResponse.json({
+      ok: true,
+      site: adapter.id,
+      mode: "hosted_by_operator",
+      cycleStatus: "hosted_by_operator",
+      skipped: true,
+      host,
+      note: "RevenueOSCore holds an active claim — Vercel cron no-ops to prevent dual execution",
+    });
+  }
   const durableLedger = await resolveDurableLedgerMode();
   const { plan, drain } = await runPursuitTick(adapter, {
     budgetMs: 55_000,

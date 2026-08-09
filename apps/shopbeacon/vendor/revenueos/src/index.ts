@@ -108,3 +108,4 @@ export * from "./modules/operator-adapter";
 export * from "./modules/operator-loop";
 export * from "./modules/free-listings";
 export * from "./modules/exploration-floor";
+export * from "./modules/operator-claims";

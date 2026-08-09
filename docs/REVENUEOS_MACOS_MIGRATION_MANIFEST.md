@@ -191,6 +191,15 @@ RevenueOSCore (launchd)          ← Node process: services/operator + @revenueo
 
 ---
 
+## Critical risks (from exhaustive inventory)
+
+1. **Purchases often `/tmp/purchases.json` on Vercel** — not durable; Stripe is financial truth for Mac UI.
+2. **Buyer leads on `/tmp/buyer-leads.json`** — same ephemerality; prefer Supabase events.
+3. **Dual brain copies** — `packages/*` vs `apps/*/vendor/*`; Core pins `packages/revenueos`.
+4. **Cron claim handoff** — was documented but **not wired** in app cron routes → dual-execution risk. **Fixed:** `checkOperatorHosting` at top of each digital-app cron (no-op when Core holds lease or `REVENUEOS_OPERATOR_HOSTED=1`).
+5. **`revenueos_operator_claims` table** may be missing on active Supabase (PostgREST 404) — apply `supabase/migrations/20260810_revenueos_operator_claims.sql` before Mac claims.
+6. Community writes still need Mac-local browser sidecar (residential IP).
+
 ## Explicit non-goals
 
 - No rewrite / simplification / feature culling
