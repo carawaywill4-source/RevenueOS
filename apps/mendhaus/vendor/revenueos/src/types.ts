@@ -597,6 +597,14 @@ export type Lesson = {
 export type FirstCustomerMode = {
   active: boolean;
   reason: string;
+  /** Current ladder stage while purchases = 0 (or conversion_optimization after). */
+  stage:
+    | "buyer_exposure"
+    | "qualified_visits"
+    | "offer_testing"
+    | "checkout_starts"
+    | "purchase"
+    | "conversion_optimization";
   priority: "buyer_exposure";
   /** Boost pattern keys that can put a real buyer in front of the offer. */
   preferredActionTypes: string[];
@@ -617,6 +625,10 @@ export type PortfolioBusinessSnapshot = {
   profitPerVisitor: number;
   marginalEvProxy: number;
   learningValue: number;
+  /** Owner-blocker suspension state — do not spend autonomous budget here. */
+  suspended?: boolean;
+  /** Number of banned patterns for this site (surface exhaustion signal). */
+  bannedPatternCount?: number;
 };
 
 export type PortfolioAllocation = {
@@ -903,7 +915,8 @@ export type PursuitEventType =
   | "learned"
   | "replenished"
   | "failed"
-  | "done";
+  | "done"
+  | "beacon";
 
 /** Durable organic revenue work item — waiting jobs do not idle the operator. */
 export type PursuitJob = {
@@ -942,6 +955,53 @@ export type PursuitEvent = {
   eventType: PursuitEventType;
   detail: Record<string, unknown>;
   createdAt: string;
+};
+
+/**
+ * Durable acquisition-channel record (Channel Registry).
+ * Tracks outcomes so effort allocation compounds by revenue_per_action.
+ */
+export type ChannelRecord = {
+  id: string;
+  siteId: string;
+  platform: string;
+  capabilityId?: string;
+  account: string;
+  business: string;
+  audience: string;
+  buyerIntent: "high" | "medium" | "low";
+  allowedActions: string[];
+  postingRules: string[];
+  rateLimits: {
+    cooldownMinutes: number;
+    maxActionsPerDay: number;
+  };
+  contentFormats: string[];
+  lastAction: string | null;
+  lastActionAt: string | null;
+  trafficGenerated: number;
+  qualifiedVisitors: number;
+  checkoutStarts: number;
+  purchases: number;
+  revenue: number;
+  conversionRate: number;
+  revenuePerAction: number;
+  alpha: number;
+  beta: number;
+  confidence: number;
+  experimentsRun: number;
+  winningAngles: string[];
+  losingAngles: string[];
+  nextAction: string | null;
+  mechanism: string;
+  actionTypes: string[];
+  evidenceUrls: string[];
+  intentScore: number;
+  effortEstimate: number;
+  untested: boolean;
+  status: "active" | "paused" | "banned";
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type PursuitLease = {

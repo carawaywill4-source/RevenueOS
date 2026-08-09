@@ -45,6 +45,195 @@ export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
     type: "retire_discovery_door",
     exposureKey: "discovery-retire",
   },
+  publish_programmatic_door: {
+    type: "publish_programmatic_door",
+    exposureKey: "programmatic-door",
+    cooldownMinutes: 12,
+  },
+  publish_free_resource: {
+    type: "publish_free_resource",
+    exposureKey: "free-resource",
+    cooldownMinutes: 20,
+  },
+  publish_lead_magnet: {
+    type: "publish_lead_magnet",
+    exposureKey: "lead-magnet",
+    cooldownMinutes: 20,
+  },
+  publish_howto_cluster: {
+    type: "publish_howto_cluster",
+    exposureKey: "howto-cluster",
+    cooldownMinutes: 15,
+  },
+  publish_comparison_page: {
+    type: "publish_comparison_page",
+    exposureKey: "comparison-page",
+    cooldownMinutes: 15,
+  },
+  publish_template_landing: {
+    type: "publish_template_landing",
+    exposureKey: "template-landing",
+    cooldownMinutes: 15,
+  },
+  publish_intent_tool: {
+    type: "publish_intent_tool",
+    exposureKey: "intent-tool",
+    cooldownMinutes: 20,
+  },
+  publish_calculator: {
+    type: "publish_calculator",
+    exposureKey: "calculator",
+    cooldownMinutes: 20,
+  },
+  channel_discover: {
+    type: "channel_discover",
+    exposureKey: "channel-discover",
+    cooldownMinutes: 360,
+  },
+  distribute_owned_urls: {
+    type: "distribute_owned_urls",
+    exposureKey: "distribute-owned",
+    cooldownMinutes: 25,
+  },
+  ping_search_engines: {
+    type: "ping_search_engines",
+    exposureKey: "sitemap-ping",
+    cooldownMinutes: 30,
+  },
+  publish_llms_txt: {
+    type: "publish_llms_txt",
+    exposureKey: "llms-txt",
+    cooldownMinutes: 60,
+  },
+  refresh_discovery_door: {
+    type: "refresh_discovery_door",
+    exposureKey: "discovery-refresh",
+    cooldownMinutes: 15,
+  },
+  feature_product: {
+    type: "feature_product",
+    exposureKey: "homepage-focus",
+  },
+  reddit_helpful_reply: {
+    type: "reddit_helpful_reply",
+    exposureKey: "reddit-reply",
+    cooldownMinutes: 25,
+  },
+  reddit_discover_intent: {
+    type: "reddit_discover_intent",
+    exposureKey: "reddit-discover",
+    cooldownMinutes: 60,
+  },
+  email_cold_outreach: {
+    type: "email_cold_outreach",
+    exposureKey: "email-outreach",
+    cooldownMinutes: 30,
+  },
+  producthunt_helpful_reply: {
+    type: "producthunt_helpful_reply",
+    exposureKey: "producthunt-reply",
+    cooldownMinutes: 30,
+  },
+  indiehackers_product_listing_draft: {
+    type: "indiehackers_product_listing_draft",
+    exposureKey: "indiehackers-product-listing",
+    cooldownMinutes: 43_200,
+  },
+  indiehackers_community_post_draft: {
+    type: "indiehackers_community_post_draft",
+    exposureKey: "indiehackers-community-post",
+    cooldownMinutes: 240,
+  },
+  hackernews_show_hn_draft: {
+    type: "hackernews_show_hn_draft",
+    exposureKey: "hackernews-show-hn",
+    cooldownMinutes: 43_200,
+  },
+  hackernews_intent_discovery: {
+    type: "hackernews_intent_discovery",
+    exposureKey: "hackernews-intent",
+    cooldownMinutes: 60,
+  },
+  gsc_query_import: {
+    type: "gsc_query_import",
+    exposureKey: "gsc-queries",
+    cooldownMinutes: 360,
+  },
+  gsc_indexation_check: {
+    type: "gsc_indexation_check",
+    exposureKey: "gsc-indexation",
+    cooldownMinutes: 720,
+  },
+  youtube_intent_discovery: {
+    type: "youtube_intent_discovery",
+    exposureKey: "youtube-intent",
+    cooldownMinutes: 90,
+  },
+  youtube_community_reply_draft: {
+    type: "youtube_community_reply_draft",
+    exposureKey: "youtube-reply",
+    cooldownMinutes: 180,
+  },
+  gbp_post: {
+    type: "gbp_post",
+    exposureKey: "gbp-post",
+    cooldownMinutes: 720,
+  },
+  gbp_qa_answer: {
+    type: "gbp_qa_answer",
+    exposureKey: "gbp-qa",
+    cooldownMinutes: 360,
+  },
+  bing_places_post: {
+    type: "bing_places_post",
+    exposureKey: "bing-places",
+    cooldownMinutes: 720,
+  },
+  apple_business_showcase: {
+    type: "apple_business_showcase",
+    exposureKey: "apple-business",
+    cooldownMinutes: 1440,
+  },
+  nextdoor_business_post: {
+    type: "nextdoor_business_post",
+    exposureKey: "nextdoor-post",
+    cooldownMinutes: 360,
+  },
+  yelp_business_post: {
+    type: "yelp_business_post",
+    exposureKey: "yelp-post",
+    cooldownMinutes: 480,
+  },
+  yelp_review_response: {
+    type: "yelp_review_response",
+    exposureKey: "yelp-review",
+    cooldownMinutes: 240,
+  },
+  youtube_shorts_publish: {
+    type: "youtube_shorts_publish",
+    exposureKey: "youtube-shorts",
+    cooldownMinutes: 1440,
+  },
+  exit_intent_deploy: {
+    type: "exit_intent_deploy",
+    exposureKey: "exit-intent",
+    cooldownMinutes: 43_200,
+  },
+  order_bump_deploy: {
+    type: "order_bump_deploy",
+    exposureKey: "order-bump",
+    cooldownMinutes: 10_080,
+  },
+  gumroad_product_sync: {
+    type: "gumroad_product_sync",
+    exposureKey: "gumroad-product",
+    cooldownMinutes: 10_080,
+  },
+  gumroad_sales_import: {
+    type: "gumroad_sales_import",
+    exposureKey: "gumroad-sales",
+    cooldownMinutes: 360,
+  },
 };
 
 export function getRegistryEntry(type: string): ActionRegistryEntry | undefined {

@@ -1,4 +1,10 @@
 import type { ActionRisk, SafeAction } from "./types";
+import {
+  isOwnerRequired,
+  isPermissionlessOrganic,
+  OWNER_REQUIRED_TYPES,
+  PERMISSIONLESS_ORGANIC_TYPES,
+} from "./modules/permissionless";
 
 const RISK_RANK: Record<ActionRisk, number> = {
   safe: 0,
@@ -6,32 +12,25 @@ const RISK_RANK: Record<ActionRisk, number> = {
   forbidden: 2,
 };
 
-/** MVP allowlist of action types the executive may run without an owner. */
-export const AUTONOMOUS_SAFE_TYPES = new Set([
-  "scorecard_snapshot",
-  "email_daily_review",
-  "indexnow_submit",
-  "record_experiment",
-  "record_lesson",
-  "journal_decision",
-  "merch_optimize",
-  "activate_kit_deal",
-  "clear_promo",
-  "set_homepage_focus",
-  "set_free_shipping_threshold",
-  "market_research",
-  "publish_intent_page",
-  "sitemap_ping",
-  "discovery_attack",
-  "retire_discovery_door",
-]);
+/**
+ * Autonomous allowlist = permissionless organic doctrine.
+ * Anything that creates leads/sales without accounts/logins/spend is safe.
+ */
+export const AUTONOMOUS_SAFE_TYPES = PERMISSIONLESS_ORGANIC_TYPES;
 
-export const OWNER_GATE_TYPES = new Set([
-  "rewrite_page_copy",
-  "change_price",
-  "send_commercial_outreach",
-  "create_account",
-  "spend_ads",
+/**
+ * Only actions that need a human identity, wallet, or legal say-so.
+ * Operator mandate: "no paid ads, no owner login" — everything else is safe.
+ */
+export const OWNER_GATE_TYPES = new Set([...OWNER_REQUIRED_TYPES]);
+
+/** Never autonomous — destructive or out of policy. */
+export const FORBIDDEN_TYPES = new Set([
+  "delete_production_data",
+  "mass_delete",
+  "price_sabotage",
+  "fabricate_reviews",
+  "scrape_pii",
 ]);
 
 /**
@@ -52,16 +51,26 @@ export const PROFIT_HEARTBEAT_CANDIDATES = new Set([
   "market_research",
   "discovery_attack",
   "sitemap_ping",
+  "ping_search_engines",
+  "publish_programmatic_door",
+  "publish_free_resource",
+  "distribute_owned_urls",
   "merch_optimize",
   "activate_kit_deal",
   "set_homepage_focus",
   "set_free_shipping_threshold",
+  "feature_product",
 ]);
 
 export function classifyActionType(type: string): ActionRisk {
-  if (AUTONOMOUS_SAFE_TYPES.has(type)) return "safe";
-  if (OWNER_GATE_TYPES.has(type)) return "owner_gate";
-  return "forbidden";
+  if (FORBIDDEN_TYPES.has(type)) return "forbidden";
+  if (isOwnerRequired(type) || OWNER_GATE_TYPES.has(type)) return "owner_gate";
+  if (isPermissionlessOrganic(type) || AUTONOMOUS_SAFE_TYPES.has(type)) {
+    return "safe";
+  }
+  // Unknown types default to owner_gate so new limbs can be proposed as asks
+  // without a core release — still never auto-run account/spend/destructive.
+  return "owner_gate";
 }
 
 export function policyAllows(

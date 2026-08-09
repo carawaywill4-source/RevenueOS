@@ -28,6 +28,9 @@
       ],
       "@revenueos/core": [
         "./vendor/revenueos/src/index.ts"
+      ],
+      "@revenueos/storefront-kit": [
+        "./vendor/storefront-kit/src/index.ts"
       ]
     }
   },

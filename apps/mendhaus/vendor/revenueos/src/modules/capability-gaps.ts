@@ -17,11 +17,11 @@ export const KNOWN_CAPABILITY_GAPS = {
     importance: "high" as CapabilityImportance,
   },
   outreach_executor: {
-    desiredAction: "Run consented organic outreach / directory placement",
+    desiredAction: "Owner login for optional third-party accounts",
     reason:
-      "High-EV acquisition plays repeatedly require outreach the brain cannot execute autonomously.",
-    expectedValueUsd: 600,
-    importance: "high" as CapabilityImportance,
+      "Only account/login channels need the owner. Permissionless owned-property distribution is autonomous — do not block progress waiting for Reddit/directory logins.",
+    expectedValueUsd: 200,
+    importance: "medium" as CapabilityImportance,
   },
   paid_ads: {
     desiredAction: "Run paid acquisition tests under a spend cap",
