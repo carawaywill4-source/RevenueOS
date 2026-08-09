@@ -1,0 +1,25 @@
+{
+  "name": "@revenueos/operator-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Persistent RevenueOS operator — supervises N businesses in one always-on process.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsx --test src/tests/*.test.ts",
+    "deploy": "fly deploy",
+    "deploy:setup": "fly launch --copy-config --no-deploy"
+  },
+  "dependencies": {
+    "@revenueos/core": "file:../../packages/revenueos",
+    "@supabase/supabase-js": "^2.109.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.23.10",
+    "typescript": "^5"
+  }
+}
