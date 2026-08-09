@@ -100,10 +100,19 @@ export const SHARED_KEYS = [
   "HN_PASSWORD",
   "HN_USER_AGENT",
   "HN_DAILY_DISCOVERY_CAP",
-  // YouTube Data API v3 optional oauth token (for comment writes).
+  // YouTube Data API v3 optional oauth token (for comment writes / Shorts).
   "YOUTUBE_OAUTH_TOKEN",
   "YOUTUBE_USER_AGENT",
   "YOUTUBE_DAILY_DISCOVERY_CAP",
+  // Free listing / local surfaces (draft-first; no paid ads).
+  "BING_PLACES_TOKEN",
+  "APPLE_BUSINESS_TEAM_ID",
+  "APPLE_BUSINESS_KEY_ID",
+  "APPLE_BUSINESS_PRIVATE_KEY",
+  "NEXTDOOR_SESSION_COOKIE",
+  "YELP_API_KEY",
+  "SIDECAR_URL",
+  "SIDECAR_TOKEN",
   // Google Search Console user agent override.
   "GSC_USER_AGENT",
   // Signed UTM attribution HMAC secret.

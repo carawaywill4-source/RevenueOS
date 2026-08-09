@@ -137,6 +137,24 @@ export function classifyMechanism(input: {
   if (type === "youtube_community_reply_draft") {
     return "community_participation";
   }
+  if (
+    type === "gbp_qa_answer" ||
+    type === "yelp_review_response" ||
+    key.includes("gbp-qa") ||
+    key.includes("yelp-review")
+  ) {
+    return "community_participation";
+  }
+  if (
+    type === "gbp_post" ||
+    type === "bing_places_post" ||
+    type === "apple_business_showcase" ||
+    type === "nextdoor_business_post" ||
+    type === "yelp_business_post" ||
+    type === "youtube_shorts_publish"
+  ) {
+    return "owned_distribution";
+  }
   if (type === "indiehackers_product_listing_draft" || type === "hackernews_show_hn_draft") {
     return "external_placement";
   }

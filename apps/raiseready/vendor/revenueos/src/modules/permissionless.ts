@@ -109,6 +109,15 @@ export const PERMISSIONLESS_ORGANIC_TYPES = new Set([
   // Gumroad marketplace (access-token writes + sales import):
   "gumroad_product_sync",
   "gumroad_sales_import",
+  // Zero-cost free listing / visual surfaces (draft-first):
+  "gbp_post",
+  "gbp_qa_answer",
+  "bing_places_post",
+  "apple_business_showcase",
+  "nextdoor_business_post",
+  "yelp_business_post",
+  "yelp_review_response",
+  "youtube_shorts_publish",
 ]);
 
 export function isPermissionlessOrganic(type: string): boolean {

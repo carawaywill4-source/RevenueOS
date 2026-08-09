@@ -174,6 +174,46 @@ export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
     exposureKey: "youtube-reply",
     cooldownMinutes: 180,
   },
+  gbp_post: {
+    type: "gbp_post",
+    exposureKey: "gbp-post",
+    cooldownMinutes: 720,
+  },
+  gbp_qa_answer: {
+    type: "gbp_qa_answer",
+    exposureKey: "gbp-qa",
+    cooldownMinutes: 360,
+  },
+  bing_places_post: {
+    type: "bing_places_post",
+    exposureKey: "bing-places",
+    cooldownMinutes: 720,
+  },
+  apple_business_showcase: {
+    type: "apple_business_showcase",
+    exposureKey: "apple-business",
+    cooldownMinutes: 1440,
+  },
+  nextdoor_business_post: {
+    type: "nextdoor_business_post",
+    exposureKey: "nextdoor-post",
+    cooldownMinutes: 360,
+  },
+  yelp_business_post: {
+    type: "yelp_business_post",
+    exposureKey: "yelp-post",
+    cooldownMinutes: 480,
+  },
+  yelp_review_response: {
+    type: "yelp_review_response",
+    exposureKey: "yelp-review",
+    cooldownMinutes: 240,
+  },
+  youtube_shorts_publish: {
+    type: "youtube_shorts_publish",
+    exposureKey: "youtube-shorts",
+    cooldownMinutes: 1440,
+  },
   exit_intent_deploy: {
     type: "exit_intent_deploy",
     exposureKey: "exit-intent",

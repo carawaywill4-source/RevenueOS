@@ -40,6 +40,14 @@ import {
   hasGscCredentials,
   hasGumroadCreds,
   attachSignedUtm,
+  executeGbpPost,
+  executeGbpQaAnswer,
+  executeBingPlacesPost,
+  executeAppleBusinessShowcase,
+  executeNextdoorBusinessPost,
+  executeYelpBusinessPost,
+  executeYelpReviewResponse,
+  executeYoutubeShortsPublish,
   type DurableBuyerLead,
 } from "@revenueos/core";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -116,6 +124,14 @@ export function listPermissionlessSafeActions(): SafeAction[] {
     { type: "order_bump_deploy", risk: "safe", description: "Enable a Stripe checkout order bump for this site" },
     { type: "gumroad_product_sync", risk: "safe", description: "Ensure product is listed on Gumroad (needs GUMROAD_ACCESS_TOKEN)" },
     { type: "gumroad_sales_import", risk: "safe", description: "Import Gumroad sales into local attribution ledger" },
+    { type: "gbp_post", risk: "safe", description: "Draft a free Google Business Profile post (owner paste / SA when granted)" },
+    { type: "gbp_qa_answer", risk: "safe", description: "Draft a helpful GBP Q&A answer" },
+    { type: "bing_places_post", risk: "safe", description: "Draft a Bing Places business update" },
+    { type: "apple_business_showcase", risk: "safe", description: "Draft an Apple Business Connect showcase update" },
+    { type: "nextdoor_business_post", risk: "safe", description: "Draft (or sidecar-post) a free Nextdoor Business neighborhood post" },
+    { type: "yelp_business_post", risk: "safe", description: "Draft a free Yelp for Business owner post" },
+    { type: "yelp_review_response", risk: "safe", description: "Draft a Yelp owner review response" },
+    { type: "youtube_shorts_publish", risk: "safe", description: "Draft a YouTube Shorts script for free algorithmic distribution" },
   ];
 }
 
@@ -253,6 +269,58 @@ export function permissionlessOpportunities(brand: BrandConfig) {
       effort: 1,
       safeActionType: "gsc_query_import",
       patternKey: "pursuit:gsc-queries",
+      precursorMetric: "landing_views",
+    },
+    {
+      id: "perm-gbp-post",
+      title: "Google Business Profile free post",
+      metric: "landing_views",
+      category: "acquisition",
+      action: "Draft a free GBP update/offer post for local search surfaces",
+      expectedImpact: 11,
+      confidence: 0.52,
+      effort: 1,
+      safeActionType: "gbp_post",
+      patternKey: "pursuit:gbp-post",
+      precursorMetric: "landing_views",
+    },
+    {
+      id: "perm-nextdoor-post",
+      title: "Nextdoor Business free neighborhood post",
+      metric: "landing_views",
+      category: "acquisition",
+      action: "Draft a free Nextdoor Business Page post for local intent",
+      expectedImpact: 11,
+      confidence: 0.5,
+      effort: 2,
+      safeActionType: "nextdoor_business_post",
+      patternKey: "pursuit:nextdoor-post",
+      precursorMetric: "landing_views",
+    },
+    {
+      id: "perm-youtube-shorts",
+      title: "YouTube Shorts free distribution draft",
+      metric: "landing_views",
+      category: "acquisition",
+      action: "Draft a Shorts script for algorithmic free distribution",
+      expectedImpact: 10,
+      confidence: 0.45,
+      effort: 3,
+      safeActionType: "youtube_shorts_publish",
+      patternKey: "pursuit:youtube-shorts",
+      precursorMetric: "landing_views",
+    },
+    {
+      id: "perm-bing-places",
+      title: "Bing Places free business update",
+      metric: "landing_views",
+      category: "acquisition",
+      action: "Draft a Bing Places update for Microsoft local search",
+      expectedImpact: 9,
+      confidence: 0.48,
+      effort: 1,
+      safeActionType: "bing_places_post",
+      patternKey: "pursuit:bing-places",
       precursorMetric: "landing_views",
     },
     {
@@ -1018,6 +1086,102 @@ export async function executePermissionlessAction(input: {
         siteId: brand.siteId,
       });
       return { ok: res.ok, detail: res.detail };
+    }
+    case "gbp_post": {
+      const res = await executeGbpPost({
+        rootDir,
+        siteId: brand.siteId,
+        productName: brand.product.name,
+        productUrl: signedProductUrl,
+        productDescription: brand.product.description,
+        brandVoice: brand.brandVoice,
+        audience: brand.product.audience,
+      });
+      return { ok: res.ok, detail: res.ok ? res.detail : res.reason, url: res.ok ? res.url : undefined };
+    }
+    case "gbp_qa_answer": {
+      const res = await executeGbpQaAnswer({
+        rootDir,
+        siteId: brand.siteId,
+        productName: brand.product.name,
+        productUrl: signedProductUrl,
+        productDescription: brand.product.description,
+        brandVoice: brand.brandVoice,
+        audience: brand.product.audience,
+      });
+      return { ok: res.ok, detail: res.ok ? res.detail : res.reason, url: res.ok ? res.url : undefined };
+    }
+    case "bing_places_post": {
+      const res = await executeBingPlacesPost({
+        rootDir,
+        siteId: brand.siteId,
+        productName: brand.product.name,
+        productUrl: signedProductUrl,
+        productDescription: brand.product.description,
+        brandVoice: brand.brandVoice,
+        audience: brand.product.audience,
+      });
+      return { ok: res.ok, detail: res.ok ? res.detail : res.reason, url: res.ok ? res.url : undefined };
+    }
+    case "apple_business_showcase": {
+      const res = await executeAppleBusinessShowcase({
+        rootDir,
+        siteId: brand.siteId,
+        productName: brand.product.name,
+        productUrl: signedProductUrl,
+        productDescription: brand.product.description,
+        brandVoice: brand.brandVoice,
+        audience: brand.product.audience,
+      });
+      return { ok: res.ok, detail: res.ok ? res.detail : res.reason, url: res.ok ? res.url : undefined };
+    }
+    case "nextdoor_business_post": {
+      const res = await executeNextdoorBusinessPost({
+        rootDir,
+        siteId: brand.siteId,
+        productName: brand.product.name,
+        productUrl: signedProductUrl,
+        productDescription: brand.product.description,
+        brandVoice: brand.brandVoice,
+        audience: brand.product.audience,
+      });
+      return { ok: res.ok, detail: res.ok ? res.detail : res.reason, url: res.ok ? res.url : undefined };
+    }
+    case "yelp_business_post": {
+      const res = await executeYelpBusinessPost({
+        rootDir,
+        siteId: brand.siteId,
+        productName: brand.product.name,
+        productUrl: signedProductUrl,
+        productDescription: brand.product.description,
+        brandVoice: brand.brandVoice,
+        audience: brand.product.audience,
+      });
+      return { ok: res.ok, detail: res.ok ? res.detail : res.reason, url: res.ok ? res.url : undefined };
+    }
+    case "yelp_review_response": {
+      const res = await executeYelpReviewResponse({
+        rootDir,
+        siteId: brand.siteId,
+        productName: brand.product.name,
+        productUrl: signedProductUrl,
+        productDescription: brand.product.description,
+        brandVoice: brand.brandVoice,
+        audience: brand.product.audience,
+      });
+      return { ok: res.ok, detail: res.ok ? res.detail : res.reason, url: res.ok ? res.url : undefined };
+    }
+    case "youtube_shorts_publish": {
+      const res = await executeYoutubeShortsPublish({
+        rootDir,
+        siteId: brand.siteId,
+        productName: brand.product.name,
+        productUrl: signedProductUrl,
+        productDescription: brand.product.description,
+        brandVoice: brand.brandVoice,
+        audience: brand.product.audience,
+      });
+      return { ok: res.ok, detail: res.ok ? res.detail : res.reason, url: res.ok ? res.url : undefined };
     }
     case "email_cold_outreach": {
       if (!hasResendKey()) {

@@ -106,3 +106,5 @@ export * from "./modules/channel-discovery";
 export * from "./modules/channel-registry";
 export * from "./modules/operator-adapter";
 export * from "./modules/operator-loop";
+export * from "./modules/free-listings";
+export * from "./modules/exploration-floor";

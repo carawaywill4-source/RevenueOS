@@ -25,6 +25,11 @@ export type SitePulse = {
     actionTypes?: string[];
     checkouts?: number;
     landingViews?: number;
+    /** Real first-party beacon signal for the reporting window. */
+    pageViews?: number;
+    ctaClicks?: number;
+    checkoutStarts?: number;
+    checkoutCompletes?: number;
     learned?: string[];
     killed?: string[];
     next?: string[];
@@ -42,6 +47,11 @@ export type PortfolioDigest = {
   operatingCount: number;
   cycleStatus: "ok" | "failed" | "stagnant";
   totalActionsCompleted: number;
+  /** Aggregate first-party visitor signal across the portfolio this hour. */
+  portfolioPageViews: number;
+  portfolioCtaClicks: number;
+  portfolioCheckoutStarts: number;
+  portfolioCheckoutCompletes: number;
 };
 
 function ledgerMode(s: SitePulse): "native" | "document" | "ephemeral" {
@@ -82,6 +92,9 @@ export function buildPortfolioDigest(input: {
         ? "failed"
         : "ok";
 
+  const sumHour = (k: keyof NonNullable<SitePulse["thisHour"]>) =>
+    sites.reduce((n, s) => n + Number((s.thisHour?.[k] as number) || 0), 0);
+
   return {
     windowStart: input.windowStart,
     windowEnd: input.windowEnd,
@@ -92,6 +105,10 @@ export function buildPortfolioDigest(input: {
     operatingCount: sites.filter((s) => !s.error).length,
     cycleStatus,
     totalActionsCompleted,
+    portfolioPageViews: sumHour("pageViews"),
+    portfolioCtaClicks: sumHour("ctaClicks"),
+    portfolioCheckoutStarts: sumHour("checkoutStarts"),
+    portfolioCheckoutCompletes: sumHour("checkoutCompletes"),
   };
 }
 
@@ -119,6 +136,20 @@ export function formatPortfolioOwnerEmail(digest: PortfolioDigest): string {
   lines.push(
     `• Live checkout: ${digest.liveCount}/${digest.sites.length} · Reporting: ${digest.operatingCount}/${digest.sites.length}`,
   );
+  const totalVisitors =
+    digest.portfolioPageViews +
+    digest.portfolioCtaClicks +
+    digest.portfolioCheckoutStarts +
+    digest.portfolioCheckoutCompletes;
+  if (totalVisitors > 0) {
+    lines.push(
+      `• Visitors: ${digest.portfolioPageViews} page views · ${digest.portfolioCtaClicks} CTA clicks · ${digest.portfolioCheckoutStarts} checkout starts · ${digest.portfolioCheckoutCompletes} completes`,
+    );
+  } else {
+    lines.push(
+      "• Visitors: 0 — no first-party beacon signal this hour (owned pages are empty of humans)",
+    );
+  }
   if (failed) {
     lines.push(
       `• Status: ${digest.cycleStatus.toUpperCase()} — generating this email is not commercial success`,
@@ -157,6 +188,16 @@ export function formatPortfolioOwnerEmail(digest: PortfolioDigest): string {
     );
     const hour = s.thisHour;
     if (hour) {
+      const vTotal =
+        (hour.pageViews || 0) +
+        (hour.ctaClicks || 0) +
+        (hour.checkoutStarts || 0) +
+        (hour.checkoutCompletes || 0);
+      if (vTotal > 0) {
+        lines.push(
+          `  Visitors: ${hour.pageViews || 0} views · ${hour.ctaClicks || 0} CTA · ${hour.checkoutStarts || 0} checkout starts · ${hour.checkoutCompletes || 0} completes`,
+        );
+      }
       if (hour.actionTypes?.length) {
         lines.push(`  Executed: ${hour.actionTypes.slice(0, 6).join(", ")}`);
       }
@@ -213,11 +254,14 @@ export function portfolioDigestSubject(digest: PortfolioDigest): string {
   if (digest.portfolioPurchases > 0) {
     return `RevenueOS: $${digest.portfolioRevenueUsd.toFixed(0)} / ${digest.portfolioPurchases} sale(s) across ${digest.liveCount} live businesses`;
   }
+  const v = digest.portfolioPageViews;
+  const i = digest.portfolioCtaClicks + digest.portfolioCheckoutStarts;
+  const trafficTag = v > 0 || i > 0 ? ` · ${v}v/${i}i` : "";
   if (digest.cycleStatus === "stagnant") {
-    return `RevenueOS: STAGNANT · $0 · ${digest.totalActionsCompleted} actions · mutate strategy`;
+    return `RevenueOS: STAGNANT · $0${trafficTag} · ${digest.totalActionsCompleted} actions · mutate strategy`;
   }
   if (digest.cycleStatus === "failed") {
-    return `RevenueOS: CYCLE FAILED · $0 · actions ${digest.totalActionsCompleted} · not a successful run`;
+    return `RevenueOS: CYCLE FAILED · $0${trafficTag} · actions ${digest.totalActionsCompleted} · not a successful run`;
   }
-  return `RevenueOS: $0 · ${digest.totalActionsCompleted} actions · ${digest.liveCount} live · pursuing first customer`;
+  return `RevenueOS: $0${trafficTag} · ${digest.totalActionsCompleted} actions · ${digest.liveCount} live · pursuing first customer`;
 }
