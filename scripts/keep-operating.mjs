@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
- * Continuous RevenueOS operator — not a 20-minute heartbeat.
+ * 24/7 RevenueOS operator — always trying to make money.
  *
- * Drains pursuits across the portfolio as fast as hosts allow.
- * Only brief pauses when every site is waiting on evidence (no executable work).
+ * Runs forever (until killed). Drains pursuits across the portfolio
+ * continuously. Brief pause only when every site has zero executable work.
  *
- * Usage: node scripts/keep-operating.mjs [--hours 8]
+ * Usage:
+ *   node scripts/keep-operating.mjs
+ *   node scripts/keep-operating.mjs --hours 8   # optional timebox
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -53,10 +55,10 @@ function arg(name, fallback) {
   return fallback;
 }
 
-const hours = Number(arg("--hours", "8"));
-const endAt = Date.now() + hours * 60 * 60 * 1000;
-const BUSY_PAUSE_MS = 2_000; // work remaining → almost no pause
-const IDLE_PAUSE_MS = 12_000; // all waiting on evidence → short breathe
+const hoursRaw = arg("--hours", "");
+const endAt = hoursRaw ? Date.now() + Number(hoursRaw) * 60 * 60 * 1000 : null;
+const BUSY_PAUSE_MS = 1_500;
+const IDLE_PAUSE_MS = 8_000;
 const logDir = path.join(ROOT, ".data");
 mkdirSync(logDir, { recursive: true });
 const logPath = path.join(logDir, "keep-operating.log");
@@ -90,6 +92,7 @@ async function tickSite(siteId, url) {
     enqueued: data.enqueued ?? 0,
     claimable: drain.claimableRemaining ?? 0,
     stillWaiting: drain.stillWaiting ?? 0,
+    replenished: data.replenishedEmptyQueue,
     fcm: data.firstCustomerMode,
   };
 }
@@ -114,14 +117,15 @@ async function maybeDigest() {
   };
 }
 
-log(`keep-operating CONTINUOUS start hours=${hours}`);
+log(
+  `keep-operating 24/7 start ${endAt ? `until ${new Date(endAt).toISOString()}` : "FOREVER"}`,
+);
 
 let round = 0;
 let lastDigestHour = "";
-while (Date.now() < endAt) {
+while (!endAt || Date.now() < endAt) {
   round += 1;
   const started = Date.now();
-  // Hit all sites in parallel — continuous portfolio pressure
   const outcomes = await Promise.all(
     SITES.map(async ([siteId, url]) => {
       try {
@@ -134,20 +138,24 @@ while (Date.now() < endAt) {
 
   let execTotal = 0;
   let claimableTotal = 0;
+  let enqTotal = 0;
   for (const o of outcomes) {
     if (o.error) log(`${o.siteId} ERROR ${o.error}`);
     else {
       execTotal += o.executed || 0;
       claimableTotal += o.claimable || 0;
-      log(
-        `${o.siteId} exec=${o.executed} enq=${o.enqueued} claimable=${o.claimable} wait=${o.stillWaiting}`,
-      );
+      enqTotal += o.enqueued || 0;
+      if (o.executed || o.enqueued || o.replenished) {
+        log(
+          `${o.siteId} exec=${o.executed} enq=${o.enqueued} claimable=${o.claimable} wait=${o.stillWaiting}${o.replenished ? " REPLENISH" : ""}`,
+        );
+      }
     }
   }
   const elapsed = Date.now() - started;
-  const busy = execTotal > 0 || claimableTotal > 0;
+  const busy = execTotal > 0 || claimableTotal > 0 || enqTotal > 0;
   log(
-    `round ${round} exec=${execTotal} claimable=${claimableTotal} ${elapsed}ms mode=${busy ? "BUSY→continue" : "IDLE→brief"}`,
+    `round ${round} exec=${execTotal} enq=${enqTotal} claimable=${claimableTotal} ${elapsed}ms ${busy ? "BUSY" : "IDLE→retry"}`,
   );
 
   const hourKey = new Date().toISOString().slice(0, 13);
@@ -168,10 +176,12 @@ while (Date.now() < endAt) {
     JSON.stringify(
       {
         at: new Date().toISOString(),
-        mode: "continuous",
+        mode: "24/7",
+        forever: !endAt,
         round,
         outcomes,
         execTotal,
+        enqTotal,
         claimableTotal,
         busy,
       },
@@ -180,9 +190,8 @@ while (Date.now() < endAt) {
     ),
   );
 
-  if (Date.now() >= endAt) break;
-  const pause = busy ? BUSY_PAUSE_MS : IDLE_PAUSE_MS;
-  await new Promise((r) => setTimeout(r, pause));
+  if (endAt && Date.now() >= endAt) break;
+  await new Promise((r) => setTimeout(r, busy ? BUSY_PAUSE_MS : IDLE_PAUSE_MS));
 }
 
 log("keep-operating finished");

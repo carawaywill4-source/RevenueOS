@@ -268,11 +268,16 @@ export async function planAndEnqueuePursuits(
   const openExisting = existing.filter(
     (job) => !["DONE", "FAILED"].includes(job.state),
   );
-  // Empty queue is NOT job complete — replenish when below objective.
+  const executableOpen = openExisting.filter((job) =>
+    ["DISCOVER", "QUALIFY", "EXECUTE", "REPLENISH"].includes(job.state),
+  );
+  // Below objective with no executable work = failure mode. Replenish even if
+  // other pursuits are WAITING_FOR_EVIDENCE — money work never idles 24/7.
   const belowObjective =
     observation.money.estimatedProfitUsd < 10_000 ||
     observation.money.purchases === 0;
-  const replenishedEmptyQueue = openExisting.length === 0 && belowObjective;
+  const replenishedEmptyQueue =
+    belowObjective && executableOpen.length === 0;
 
   const enqueued = enqueuePursuitsFromOpportunities({
     siteId: context.siteId,
@@ -282,7 +287,7 @@ export async function planAndEnqueuePursuits(
     maxEnqueue:
       opts.maxEnqueue ??
       Math.max(
-        replenishedEmptyQueue ? 10 : 8,
+        replenishedEmptyQueue ? 14 : 8,
         ambition.concurrentBets * 2,
       ),
     now,

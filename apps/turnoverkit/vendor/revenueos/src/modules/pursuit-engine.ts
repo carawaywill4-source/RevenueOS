@@ -23,12 +23,51 @@ import type {
 
 const EXECUTION_STATES = new Set(["DISCOVER", "QUALIFY", "EXECUTE", "REPLENISH"]);
 
-export function pursuitIdempotencyKey(opportunity: Opportunity): string {
-  return [
+/** High-frequency organic actions must re-fire often — never sit 7 days idle. */
+const FAST_CYCLE_ACTIONS = new Set([
+  "indexnow_submit",
+  "sitemap_ping",
+  "ping_search_engines",
+  "distribute_owned_urls",
+  "publish_programmatic_door",
+  "publish_free_resource",
+  "publish_lead_magnet",
+  "publish_howto_cluster",
+  "publish_comparison_page",
+  "publish_intent_page",
+  "discovery_attack",
+  "refresh_discovery_door",
+  "publish_llms_txt",
+  "market_research",
+  "feature_product",
+]);
+
+export function pursuitIdempotencyKey(
+  opportunity: Opportunity,
+  now: Date = new Date(),
+): string {
+  const base = [
     opportunity.safeActionType ?? "advisory",
     opportunity.patternKey ?? opportunity.id,
     opportunity.id,
   ].join(":");
+  // 10-minute bucket so permissionless work re-fires all day — prior waves
+  // can keep measuring without blocking the next money attempt.
+  if (
+    opportunity.safeActionType &&
+    FAST_CYCLE_ACTIONS.has(opportunity.safeActionType)
+  ) {
+    const bucket = Math.floor(now.getTime() / (10 * 60_000));
+    return `${base}:${bucket}`;
+  }
+  return base;
+}
+
+function measureWaitMs(actionType: string | undefined): number {
+  if (actionType && FAST_CYCLE_ACTIONS.has(actionType)) {
+    return 45 * 60_000; // 45 minutes — keep cycling for revenue
+  }
+  return 7 * 86_400_000;
 }
 
 export function kindForOpportunity(opportunity: Opportunity): PursuitKind {
@@ -82,7 +121,7 @@ export function enqueuePursuitsFromOpportunities(input: {
   for (const opportunity of input.opportunities) {
     if (created.length >= maxEnqueue) break;
     if (!opportunity.safeActionType) continue;
-    const key = pursuitIdempotencyKey(opportunity);
+    const key = pursuitIdempotencyKey(opportunity, now);
     if (existingKeys.has(key)) continue;
 
     const hypothesis: Hypothesis =
@@ -320,15 +359,17 @@ export async function advancePursuit(input: {
       return job;
     }
 
-    const signalDays = experiment?.measurement?.timeToSignalDays ?? 7;
+    const waitMs = measureWaitMs(action.type);
     const waitUntil =
-      experiment?.measurement?.scheduledCheckAt ??
-      new Date(now.getTime() + signalDays * 86_400_000).toISOString();
+      waitMs <= 60 * 60_000
+        ? new Date(now.getTime() + waitMs).toISOString()
+        : (experiment?.measurement?.scheduledCheckAt ??
+          new Date(now.getTime() + waitMs).toISOString());
     job = {
       ...job,
       state: "WAITING_FOR_EVIDENCE",
       notBefore: waitUntil,
-      workSummary: `Executed ${action.type}; measuring until ${waitUntil.slice(0, 10)}`,
+      workSummary: `Executed ${action.type}; measuring until ${waitUntil.slice(0, 16)}`,
       leaseOwner: null,
       leaseUntil: null,
     };
