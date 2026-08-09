@@ -490,6 +490,7 @@ export async function executePermissionlessAction(input: {
           industry: brand.industry,
           products: [
             {
+              id: brand.product.id,
               name: brand.product.name,
               priceUsd: brand.product.priceUsd,
               marginEstimate: 0.85,

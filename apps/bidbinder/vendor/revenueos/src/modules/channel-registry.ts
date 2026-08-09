@@ -647,9 +647,8 @@ export function transferChannelHypotheses(input: {
   // Mechanism-level portfolio signal → nudge matching channels.
   if (input.portfolioSignal) {
     for (const ch of byKey.values()) {
-      const sig = input.portfolioSignal.mechanismSignal.get(
-        ch.mechanism as MechanismClass,
-      );
+      const mechKey = ch.mechanism as unknown as MechanismClass;
+      const sig = input.portfolioSignal.mechanismSignal.get(mechKey);
       if (!sig) continue;
       if (sig.commercial > 0) {
         ch.alpha += Math.min(1.5, sig.commercial * 0.25);
