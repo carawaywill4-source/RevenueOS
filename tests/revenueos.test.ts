@@ -9,7 +9,11 @@ test("policy keeps the brain inside hard boundaries", async () => {
     "@revenueos/core"
   );
   assert.equal(classifyActionType("indexnow_submit"), "safe");
+  assert.equal(classifyActionType("publish_free_resource"), "safe");
+  assert.equal(classifyActionType("distribute_owned_urls"), "safe");
   assert.equal(classifyActionType("spend_ads"), "owner_gate");
+  assert.equal(classifyActionType("create_account"), "owner_gate");
+  assert.equal(classifyActionType("login_account"), "owner_gate");
   assert.equal(classifyActionType("delete_production_data"), "forbidden");
   assert.equal(
     policyAllows({

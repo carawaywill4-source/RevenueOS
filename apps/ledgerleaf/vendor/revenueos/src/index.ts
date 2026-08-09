@@ -49,6 +49,8 @@ export * from "./modules/pursuit-engine";
 export * from "./modules/pursuit-plan";
 export * from "./modules/first-customer-mode";
 export * from "./modules/portfolio";
+export * from "./modules/portfolio-digest";
+export * from "./modules/permissionless";
 export * from "./intelligence/planner-quota";
 export * from "./knowledge/commerce";
 export * from "./knowledge/shopping-psychology";

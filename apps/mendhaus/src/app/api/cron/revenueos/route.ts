@@ -162,7 +162,10 @@ export async function GET(request: Request) {
 
   let emailId: string | undefined;
   let emailSkip: string | undefined;
-  if (resendConfigured()) {
+  // Single portfolio digest owns owner email unless explicitly disabled.
+  if (process.env.PORTFOLIO_DIGEST_ENABLED !== "0") {
+    emailSkip = "deferred_to_portfolio_digest";
+  } else if (resendConfigured()) {
     const launchClaimed = await claimLaunchEmail();
     const emailClaimed = launchClaimed
       ? ((await claimHourlyEmailSlot()), true)

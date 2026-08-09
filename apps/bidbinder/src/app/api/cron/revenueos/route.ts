@@ -21,8 +21,8 @@ export async function GET(request: Request) {
   }
   const adapter = createAdapter();
   const { plan, drain } = await runPursuitTick(adapter, {
-    budgetMs: 45_000,
-    maxJobs: 8,
+    budgetMs: 55_000,
+    maxJobs: 12,
   });
   const store = adapter.getExperimentStore();
   const windowEnd = new Date().toISOString();

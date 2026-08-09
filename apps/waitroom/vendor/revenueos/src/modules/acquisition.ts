@@ -42,7 +42,21 @@ export function proposeAcquisition(input: {
     (landing < 40 && purchases === 0) ||
     (world.shopper.primaryFriction === "discovery" && cvr >= 0.02);
 
-  // Executable, account-free discovery levers — always available, hotter when empty.
+  // Permissionless organic levers — no accounts, no owner login, always available.
+  items.push({
+    id: "distribute-owned-urls",
+    title: "Distribute every owned buyer URL (permissionless)",
+    metric: "indexed URLs",
+    category: "acquisition",
+    precursorMetric: "landing_views",
+    expectedImpact: Number(((discoveryUrgent ? 9 : 6) * resolve).toFixed(2)),
+    confidence: 0.6,
+    effort: 1,
+    action:
+      "IndexNow + public sitemap pings for all owned offer/door URLs. Never wait for marketplace accounts.",
+    safeActionType: "distribute_owned_urls",
+    patternKey: "permissionless-distribute",
+  });
   items.push({
     id: "index-known-urls",
     title: "Get public URLs discovered and indexed",
@@ -53,9 +67,37 @@ export function proposeAcquisition(input: {
     confidence: 0.55,
     effort: 1,
     action:
-      "Submit known public URLs via IndexNow and pursue account-free directories; do not fabricate links. Never wait on a marketplace.",
+      "Submit known public URLs via IndexNow; do not fabricate links. Never wait on a marketplace login.",
     safeActionType: "indexnow_submit",
     patternKey: "indexnow-discovery",
+  });
+  items.push({
+    id: "publish-free-resource",
+    title: "Publish a free resource that funnels to the paid offer",
+    metric: "qualified visits",
+    category: "acquisition",
+    precursorMetric: "landing_views",
+    expectedImpact: Number(((discoveryUrgent ? 9 : 6.5) * resolve).toFixed(2)),
+    confidence: 0.58,
+    effort: 1,
+    action:
+      "Own-property lead magnet / checklist page → CTA to checkout. No third-party accounts.",
+    safeActionType: "publish_free_resource",
+    patternKey: "permissionless-free-resource",
+  });
+  items.push({
+    id: "publish-programmatic-doors",
+    title: "Expand long-tail intent doors on owned domain",
+    metric: "landing_views",
+    category: "acquisition",
+    precursorMetric: "landing_views",
+    expectedImpact: Number(((discoveryUrgent ? 8.5 : 6) * resolve).toFixed(2)),
+    confidence: 0.55,
+    effort: 1,
+    action:
+      "Programmatic SEO pages from intent keywords on our site; distribute via IndexNow.",
+    safeActionType: "publish_programmatic_door",
+    patternKey: "permissionless-programmatic",
   });
   items.push({
     id: "internet-market-research",

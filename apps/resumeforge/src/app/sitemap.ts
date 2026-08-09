@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { BRAND } from "@/lib/brand";
+import { expandPermissionlessDoors } from "@revenueos/storefront-kit";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = (process.env.NEXT_PUBLIC_APP_URL || "https://resumeforge.vercel.app").replace(
@@ -9,7 +10,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
   return [
     { url: base, lastModified: now, changeFrequency: "daily", priority: 1 },
-    ...BRAND.discoveryDoors.map((d) => ({
+    ...expandPermissionlessDoors(BRAND).map((d) => ({
       url: `${base}/topics/${d.slug}`,
       lastModified: now,
       changeFrequency: "weekly" as const,

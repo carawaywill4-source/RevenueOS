@@ -597,6 +597,14 @@ export type Lesson = {
 export type FirstCustomerMode = {
   active: boolean;
   reason: string;
+  /** Current ladder stage while purchases = 0 (or conversion_optimization after). */
+  stage:
+    | "buyer_exposure"
+    | "qualified_visits"
+    | "offer_testing"
+    | "checkout_starts"
+    | "purchase"
+    | "conversion_optimization";
   priority: "buyer_exposure";
   /** Boost pattern keys that can put a real buyer in front of the offer. */
   preferredActionTypes: string[];

@@ -22,16 +22,26 @@ export type FirstCustomerStage = (typeof FIRST_CUSTOMER_STAGES)[number];
 
 const STAGE_ACTIONS: Record<FirstCustomerStage, string[]> = {
   buyer_exposure: [
+    "distribute_owned_urls",
+    "publish_programmatic_door",
+    "publish_free_resource",
+    "publish_lead_magnet",
     "discovery_attack",
     "publish_intent_page",
+    "publish_howto_cluster",
+    "publish_comparison_page",
     "indexnow_submit",
+    "ping_search_engines",
     "sitemap_ping",
     "market_research",
   ],
   qualified_visits: [
+    "publish_free_resource",
+    "publish_programmatic_door",
     "publish_intent_page",
     "discovery_attack",
     "feature_product",
+    "distribute_owned_urls",
     "indexnow_submit",
   ],
   offer_testing: [
@@ -39,6 +49,7 @@ const STAGE_ACTIONS: Record<FirstCustomerStage, string[]> = {
     "publish_bundle",
     "change_default_cta",
     "publish_template_landing",
+    "publish_comparison_page",
   ],
   checkout_starts: [
     "feature_product",
@@ -84,6 +95,7 @@ export function evaluateFirstCustomerMode(
   const stage = resolveFirstCustomerStage(observation);
   return {
     active,
+    stage,
     reason: active
       ? `Zero customers — stage ${stage}: chase buyers before polish.`
       : "Customers exist — evidence-driven optimization.",

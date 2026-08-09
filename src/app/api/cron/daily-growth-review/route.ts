@@ -97,7 +97,13 @@ export async function GET(request: Request) {
     const forceRequested =
       url.searchParams.get("email") === "1" && url.searchParams.get("force") === "1";
 
-    if (wantEmail && process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL) {
+    // Single portfolio digest owns owner email (see /api/cron/portfolio-digest).
+    // Set PORTFOLIO_DIGEST_ENABLED=0 to restore TributeReady-only hourly mail.
+    const portfolioDigestOwnsEmail =
+      process.env.PORTFOLIO_DIGEST_ENABLED !== "0";
+    if (portfolioDigestOwnsEmail && wantEmail) {
+      emailSkip = "deferred_to_portfolio_digest";
+    } else if (wantEmail && process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL) {
       const claimed = await claimHourlyEmailSlot("tributeready");
       if (!claimed) {
         emailSkip = forceRequested ? "already_sent_this_hour" : "already_sent_this_hour";

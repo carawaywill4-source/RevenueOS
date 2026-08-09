@@ -9,6 +9,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/portfolio-digest",
+      "schedule": "5 * * * *"
+    },
+    {
       "path": "/api/cron/growth-report",
       "schedule": "15 14 * * 1"
     }

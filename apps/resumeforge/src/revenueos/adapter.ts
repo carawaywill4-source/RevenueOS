@@ -11,9 +11,9 @@ import { BRAND } from "@/lib/brand";
 import { purchaseStats } from "@/lib/purchases";
 import { checkoutAllowed } from "@/lib/readiness";
 import {
-  publishNextDiscoveryDoor,
-  pingIndexNow,
-  siteOpportunitiesFromBrand,
+  executePermissionlessAction,
+  listPermissionlessSafeActions,
+  permissionlessOpportunities,
 } from "@revenueos/storefront-kit";
 import { createDurableExperimentStore } from "@/revenueos/durable-store";
 
@@ -21,10 +21,10 @@ function ledgerRoot() {
   if (process.env.REVENUEOS_LEDGER_DIR) {
     return path.isAbsolute(process.env.REVENUEOS_LEDGER_DIR)
       ? process.env.REVENUEOS_LEDGER_DIR
-      : path.join(process.cwd(), process.env.REVENUEOS_LEDGER_DIR);
+      : path.join(/*turbopackIgnore: true*/ process.cwd(), process.env.REVENUEOS_LEDGER_DIR);
   }
   if (process.env.VERCEL) return "/tmp/revenueos";
-  return path.join(process.cwd(), ".data/revenueos");
+  return path.join(/*turbopackIgnore: true*/ process.cwd(), ".data/revenueos");
 }
 
 const store = createDurableExperimentStore(ledgerRoot());
@@ -47,10 +47,15 @@ export function createAdapter(): SiteAdapter {
         ],
         funnelSteps: ["landing_view", "checkout_started", "purchase_completed"],
         brandVoice: BRAND.brandVoice,
-        allowedChannels: ["organic", "directories"],
+        allowedChannels: ["organic", "owned_property", "public_indexes"],
         autonomousDailyCapUsd: 0,
         timezone: "UTC",
-        constraints: checkoutAllowed() ? [] : ["OWNER_BLOCKED_FULFILLMENT"],
+        constraints: checkoutAllowed()
+          ? [
+              "permissionless_organic_default",
+              "no_third_party_account_login",
+            ]
+          : ["OWNER_BLOCKED_FULFILLMENT"],
         commercial: {
           businessModel: BRAND.businessModel,
           industry: BRAND.industry,
@@ -106,51 +111,19 @@ export function createAdapter(): SiteAdapter {
       };
     },
     async listSiteOpportunities() {
-      return siteOpportunitiesFromBrand(BRAND);
+      return permissionlessOpportunities(BRAND);
     },
     listSafeActions(): SafeAction[] {
-      return [
-        { type: "scorecard_snapshot", risk: "safe", description: "Persist scorecard" },
-        { type: "indexnow_submit", risk: "safe", description: "IndexNow ping" },
-        { type: "sitemap_ping", risk: "safe", description: "Sitemap ping" },
-        { type: "publish_intent_page", risk: "safe", description: "Publish intent door" },
-        { type: "discovery_attack", risk: "safe", description: "Research + publish door" },
-        { type: "feature_product", risk: "safe", description: "Feature primary offer" },
-      ];
+      return listPermissionlessSafeActions();
     },
     async execute(action) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-      if (action.type === "scorecard_snapshot") {
-        return { ok: true, detail: "scorecard noted" };
-      }
-      if (
-        action.type === "discovery_attack" ||
-        action.type === "publish_intent_page"
-      ) {
-        return publishNextDiscoveryDoor({
-          brand: BRAND,
-          rootDir: process.cwd(),
-          appUrl,
-        });
-      }
-      if (action.type === "indexnow_submit" || action.type === "sitemap_ping") {
-        const door = BRAND.discoveryDoors[0];
-        const url = door
-          ? `${appUrl.replace(/\/$/, "")}/topics/${door.slug}`
-          : appUrl;
-        if (action.type === "sitemap_ping") {
-          return { ok: true, detail: `Sitemap ping queued for ${appUrl}/sitemap.xml` };
-        }
-        const ping = await pingIndexNow({ url, appUrl });
-        return { ok: ping.ok || true, detail: ping.detail + ` · ${url}` };
-      }
-      if (action.type === "feature_product") {
-        return {
-          ok: true,
-          detail: `Featured ${BRAND.product.name} at ${BRAND.product.priceUsd} on homepage`,
-        };
-      }
-      return { ok: false, detail: `Unsupported ${action.type}` };
+      return executePermissionlessAction({
+        brand: BRAND,
+        rootDir: process.cwd(),
+        appUrl,
+        actionType: action.type,
+      });
     },
     getExperimentStore() {
       return store;

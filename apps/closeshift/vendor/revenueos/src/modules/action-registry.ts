@@ -45,6 +45,60 @@ export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
     type: "retire_discovery_door",
     exposureKey: "discovery-retire",
   },
+  publish_programmatic_door: {
+    type: "publish_programmatic_door",
+    exposureKey: "programmatic-door",
+    cooldownMinutes: 12,
+  },
+  publish_free_resource: {
+    type: "publish_free_resource",
+    exposureKey: "free-resource",
+    cooldownMinutes: 20,
+  },
+  publish_lead_magnet: {
+    type: "publish_lead_magnet",
+    exposureKey: "lead-magnet",
+    cooldownMinutes: 20,
+  },
+  publish_howto_cluster: {
+    type: "publish_howto_cluster",
+    exposureKey: "howto-cluster",
+    cooldownMinutes: 15,
+  },
+  publish_comparison_page: {
+    type: "publish_comparison_page",
+    exposureKey: "comparison-page",
+    cooldownMinutes: 15,
+  },
+  publish_template_landing: {
+    type: "publish_template_landing",
+    exposureKey: "template-landing",
+    cooldownMinutes: 15,
+  },
+  distribute_owned_urls: {
+    type: "distribute_owned_urls",
+    exposureKey: "distribute-owned",
+    cooldownMinutes: 25,
+  },
+  ping_search_engines: {
+    type: "ping_search_engines",
+    exposureKey: "sitemap-ping",
+    cooldownMinutes: 30,
+  },
+  publish_llms_txt: {
+    type: "publish_llms_txt",
+    exposureKey: "llms-txt",
+    cooldownMinutes: 60,
+  },
+  refresh_discovery_door: {
+    type: "refresh_discovery_door",
+    exposureKey: "discovery-refresh",
+    cooldownMinutes: 15,
+  },
+  feature_product: {
+    type: "feature_product",
+    exposureKey: "homepage-focus",
+  },
 };
 
 export function getRegistryEntry(type: string): ActionRegistryEntry | undefined {
