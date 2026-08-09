@@ -15,11 +15,39 @@ import {
 } from "@revenueos/core";
 import { getSupabaseAdmin, supabaseConfigured } from "@/lib/supabase";
 
-let availabilityCache: Promise<boolean> | null = null;
+/**
+ * Persistence modes:
+ * - native: revenueos_pursuits / revenueos_pursuit_events tables exist
+ * - document: encode pursuits/events into revenueos_experiments (durable across
+ *   Vercel instances when dedicated pursuit DDL has not been applied)
+ * - ephemeral: no Supabase — /tmp file store (reporting will lie across instances)
+ */
+export type DurableLedgerMode = "native" | "document" | "ephemeral";
 
-export function probeDurableLedger(): Promise<boolean> {
-  if (availabilityCache) return availabilityCache;
-  availabilityCache = (async () => {
+const PURSUIT_CAT = "__ros_pursuit__";
+const PURSUIT_EVENT_CAT = "__ros_pursuit_event__";
+const LEASE_CAT = "__ros_lease__";
+
+function pursuitDocId(id: string) {
+  return `ros:pursuit:${id}`;
+}
+function pursuitEventDocId(id: string) {
+  return `ros:pevt:${id}`;
+}
+function leaseDocId(id: string) {
+  return `ros:lease:${id}`;
+}
+function isRosDocId(id: string) {
+  return id.startsWith("ros:");
+}
+
+let baseLedgerCache: Promise<boolean> | null = null;
+let pursuitNativeCache: Promise<boolean> | null = null;
+let modeCache: Promise<DurableLedgerMode> | null = null;
+
+async function probeBaseLedger(): Promise<boolean> {
+  if (baseLedgerCache) return baseLedgerCache;
+  baseLedgerCache = (async () => {
     if (!supabaseConfigured()) return false;
     try {
       const sb = getSupabaseAdmin();
@@ -27,28 +55,143 @@ export function probeDurableLedger(): Promise<boolean> {
         .from("revenueos_experiments")
         .select("id")
         .limit(1);
-      if (experiments.error) return false;
-      // Pursuit engine requires these tables; fall back to /tmp file store until migrated.
-      const pursuits = await sb.from("revenueos_pursuits").select("id").limit(1);
-      if (pursuits.error) return false;
-      return true;
+      return !experiments.error;
     } catch {
       return false;
     }
   })();
-  return availabilityCache;
+  return baseLedgerCache;
+}
+
+async function probePursuitNative(): Promise<boolean> {
+  if (pursuitNativeCache) return pursuitNativeCache;
+  pursuitNativeCache = (async () => {
+    if (!(await probeBaseLedger())) return false;
+    try {
+      const sb = getSupabaseAdmin();
+      const pursuits = await sb.from("revenueos_pursuits").select("id").limit(1);
+      if (pursuits.error) return false;
+      const events = await sb
+        .from("revenueos_pursuit_events")
+        .select("id")
+        .limit(1);
+      return !events.error;
+    } catch {
+      return false;
+    }
+  })();
+  return pursuitNativeCache;
+}
+
+/** True when any durable Supabase path is available (native or document). */
+export function probeDurableLedger(): Promise<boolean> {
+  return probeBaseLedger();
+}
+
+export async function resolveDurableLedgerMode(): Promise<DurableLedgerMode> {
+  if (modeCache) return modeCache;
+  modeCache = (async () => {
+    if (!(await probeBaseLedger())) return "ephemeral";
+    if (await probePursuitNative()) return "native";
+    return "document";
+  })();
+  return modeCache;
 }
 
 export function createDurableExperimentStore(fileDir: string): ExperimentStore {
   const fallback = createFileExperimentStore(fileDir);
 
   async function supabaseAvailable() {
-    // File fallback is intentional on Vercel when pursuit tables are not migrated yet
-    // (/tmp is writable; state is per-instance until Supabase schema is applied).
-    return probeDurableLedger();
+    // Base experiments/lessons/scorecards use Supabase whenever the core
+    // tables exist. Pursuits use native tables or document encoding — never
+    // silently /tmp when Supabase is up (that caused actions=0 in pulse).
+    return probeBaseLedger();
   }
 
   const sb = () => getSupabaseAdmin();
+
+  async function savePursuitDocument(job: PursuitJob) {
+    const { error } = await sb().from("revenueos_experiments").upsert({
+      id: pursuitDocId(job.id),
+      site_id: job.siteId,
+      status: job.state,
+      pattern_key: job.patternKey ?? job.idempotencyKey,
+      category: PURSUIT_CAT,
+      document: job,
+      updated_at: job.updatedAt,
+    });
+    if (error) {
+      throw new Error(`Document pursuit save failed: ${error.message}`);
+    }
+  }
+
+  async function listPursuitDocuments(
+    siteId: string,
+    opts?: { states?: string[]; limit?: number },
+  ): Promise<PursuitJob[]> {
+    let query = sb()
+      .from("revenueos_experiments")
+      .select("document")
+      .eq("site_id", siteId)
+      .eq("category", PURSUIT_CAT)
+      .order("updated_at", { ascending: false });
+    if (opts?.limit) query = query.limit(opts.limit);
+    else query = query.limit(200);
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`Document pursuit list failed: ${error.message}`);
+    }
+    let jobs = (data ?? [])
+      .map((row) => row.document as PursuitJob)
+      .filter((j) => j && j.id);
+    if (opts?.states?.length) {
+      const states = new Set(opts.states);
+      jobs = jobs.filter((j) => states.has(j.state));
+    }
+    return jobs.sort((a, b) => b.priority - a.priority);
+  }
+
+  async function appendPursuitEventDocument(event: PursuitEvent) {
+    const { error } = await sb().from("revenueos_experiments").upsert({
+      id: pursuitEventDocId(event.id),
+      site_id: event.siteId,
+      status: event.eventType,
+      pattern_key: event.pursuitId,
+      category: PURSUIT_EVENT_CAT,
+      document: event,
+      updated_at: event.createdAt,
+      created_at: event.createdAt,
+    });
+    if (error) {
+      throw new Error(`Document pursuit event save failed: ${error.message}`);
+    }
+  }
+
+  async function listPursuitEventDocuments(
+    siteId: string,
+    opts?: { since?: string; limit?: number },
+  ): Promise<PursuitEvent[]> {
+    let query = sb()
+      .from("revenueos_experiments")
+      .select("document")
+      .eq("site_id", siteId)
+      .eq("category", PURSUIT_EVENT_CAT)
+      .order("created_at", { ascending: false });
+    if (opts?.limit) query = query.limit(opts.limit);
+    else query = query.limit(200);
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`Document pursuit event list failed: ${error.message}`);
+    }
+    let events = (data ?? [])
+      .map((row) => row.document as PursuitEvent)
+      .filter((e) => e && e.id);
+    if (opts?.since) {
+      const sinceMs = Date.parse(opts.since);
+      events = events.filter((e) => Date.parse(e.createdAt) >= sinceMs);
+    }
+    return events;
+  }
 
   return {
     async listExperiments(siteId) {
@@ -59,12 +202,17 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         .eq("site_id", siteId)
         .order("created_at", { ascending: false });
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger experiments read failed: ${error.message}`);
         return fallback.listExperiments(siteId);
       }
       return (data ?? [])
         .map((row) => row.document as Experiment)
-        .filter((exp) => exp && exp.hypothesis?.patternKey != null && !String(exp.id).startsWith("hourly-email:"));
+        .filter(
+          (exp) =>
+            exp &&
+            exp.hypothesis?.patternKey != null &&
+            !String(exp.id).startsWith("hourly-email:") &&
+            !isRosDocId(String(exp.id)),
+        );
     },
 
     async getExperiment(id) {
@@ -93,7 +241,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
           updated_at: experiment.updatedAt,
         });
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger experiment save failed: ${error.message}`);
         return fallback.saveExperiment(experiment);
       }
     },
@@ -106,7 +253,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         .from("revenueos_lessons")
         .select("document,scope,site_id,industry");
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger lessons read failed: ${error.message}`);
         return fallback.listLessons({ siteId, industry });
       }
       return (data ?? [])
@@ -131,7 +277,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         .from("revenueos_lessons")
         .select("document");
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger lessons read-all failed: ${error.message}`);
         return fallback.listAllLessons ? fallback.listAllLessons() : [];
       }
       return (data ?? []).map((row) => row.document as Lesson);
@@ -151,7 +296,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
           updated_at: lesson.updatedAt,
         });
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger lesson save failed: ${error.message}`);
         return fallback.saveLesson(lesson);
       }
     },
@@ -162,7 +306,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         .from("revenueos_scorecards")
         .insert({ site_id: scorecard.siteId, document: scorecard });
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger scorecard save failed: ${error.message}`);
         return fallback.saveScorecard(scorecard);
       }
     },
@@ -178,7 +321,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         .order("created_at", { ascending: false })
         .limit(limit);
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger scorecard read failed: ${error.message}`);
         return fallback.listScorecards(siteId, limit);
       }
       return (data ?? []).map((row) => row.document as Scorecard);
@@ -198,7 +340,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
           document: attribution,
         });
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger attribution save failed: ${error.message}`);
         return fallback.saveAttribution(attribution);
       }
     },
@@ -210,7 +351,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         .select("document")
         .eq("site_id", siteId);
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger attribution read failed: ${error.message}`);
         return fallback.listAttributions(siteId);
       }
       return (data ?? []).map((row) => row.document as Attribution);
@@ -225,7 +365,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         .order("created_at", { ascending: false })
         .limit(limit);
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger planner read failed: ${error.message}`);
         return fallback.listPlannerRuns!(siteId, limit);
       }
       return (data ?? []).map((row) => row.document as PlannerRunRecord);
@@ -241,7 +380,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         document: record,
       });
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger planner save failed: ${error.message}`);
         return fallback.savePlannerRun!(record);
       }
     },
@@ -255,7 +393,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         .order("created_at", { ascending: false })
         .limit(limit);
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger cycle report read failed: ${error.message}`);
         return fallback.listCycleReports!(siteId, limit);
       }
       return (data ?? []).map((row) => row.document as CycleReportRecord);
@@ -271,7 +408,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         document: record,
       });
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger cycle report save failed: ${error.message}`);
         return fallback.saveCycleReport!(record);
       }
     },
@@ -285,7 +421,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         .order("started_at", { ascending: false })
         .limit(limit);
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger exposure read failed: ${error.message}`);
         return fallback.listExposures!(siteId, limit);
       }
       return (data ?? []).map((row) => row.document as ExposureRecord);
@@ -305,7 +440,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         document: record,
       });
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger exposure save failed: ${error.message}`);
         return fallback.saveExposure!(record);
       }
     },
@@ -318,7 +452,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         .eq("site_id", siteId)
         .order("published_at", { ascending: false });
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger discovery doors read failed: ${error.message}`);
         return fallback.listDiscoveryDoors!(siteId);
       }
       return (data ?? []).map((row) => row.document as DiscoveryDoor);
@@ -336,7 +469,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         updated_at: new Date().toISOString(),
       });
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger discovery door save failed: ${error.message}`);
         return fallback.saveDiscoveryDoor!(door);
       }
     },
@@ -347,7 +479,6 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
       if (siteId) query = query.eq("site_id", siteId);
       const { data, error } = await query.order("last_seen_at", { ascending: false });
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger capability gaps read failed: ${error.message}`);
         return fallback.listCapabilityGaps!(siteId);
       }
       return (data ?? []).map((row) => row.document as CapabilityGap);
@@ -370,13 +501,16 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         { onConflict: "site_id,missing_capability,desired_action" },
       );
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger capability gap save failed: ${error.message}`);
         return fallback.saveCapabilityGap!(gap);
       }
     },
 
     async listPursuits(siteId, opts) {
       if (!(await supabaseAvailable())) return fallback.listPursuits!(siteId, opts);
+      const mode = await resolveDurableLedgerMode();
+      if (mode === "document") {
+        return listPursuitDocuments(siteId, opts);
+      }
       let query = sb()
         .from("revenueos_pursuits")
         .select("document")
@@ -385,15 +519,17 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
       if (opts?.states?.length) query = query.in("state", opts.states);
       if (opts?.limit) query = query.limit(opts.limit);
       const { data, error } = await query;
-      if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger pursuits read failed: ${error.message}`);
-        return fallback.listPursuits!(siteId, opts);
-      }
+      if (error) return listPursuitDocuments(siteId, opts);
       return (data ?? []).map((row) => row.document as PursuitJob);
     },
 
     async savePursuit(job: PursuitJob) {
       if (!(await supabaseAvailable())) return fallback.savePursuit!(job);
+      const mode = await resolveDurableLedgerMode();
+      if (mode === "document") {
+        await savePursuitDocument(job);
+        return;
+      }
       const { error } = await sb().from("revenueos_pursuits").upsert(
         {
           id: job.id,
@@ -420,8 +556,7 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         { onConflict: "id" },
       );
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger pursuit save failed: ${error.message}`);
-        return fallback.savePursuit!(job);
+        await savePursuitDocument(job);
       }
     },
 
@@ -430,31 +565,58 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
       const now = input.now ?? new Date();
       const nowIso = now.toISOString();
       const leaseUntil = new Date(now.getTime() + input.leaseMs).toISOString();
-      const claimableStates = [
-        "DISCOVER",
-        "QUALIFY",
-        "EXECUTE",
-        "WAITING_FOR_EVIDENCE",
-        "ATTRIBUTE",
-        "LEARN",
-        "REPLENISH",
-      ];
-      const { data, error } = await sb()
-        .from("revenueos_pursuits")
-        .select("document")
-        .eq("site_id", input.siteId)
-        .in("state", claimableStates)
-        .order("priority", { ascending: false })
-        .limit(Math.max(input.limit * 3, 24));
-      if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger claim pursuits failed: ${error.message}`);
-        return fallback.claimPursuits!(input);
-      }
+      const mode = await resolveDurableLedgerMode();
+
+      const candidates: PursuitJob[] =
+        mode === "document"
+          ? await listPursuitDocuments(input.siteId, {
+              states: [
+                "DISCOVER",
+                "QUALIFY",
+                "EXECUTE",
+                "WAITING_FOR_EVIDENCE",
+                "ATTRIBUTE",
+                "LEARN",
+                "REPLENISH",
+              ],
+              limit: Math.max(input.limit * 3, 24),
+            })
+          : await (async () => {
+              const { data, error } = await sb()
+                .from("revenueos_pursuits")
+                .select("document")
+                .eq("site_id", input.siteId)
+                .in("state", [
+                  "DISCOVER",
+                  "QUALIFY",
+                  "EXECUTE",
+                  "WAITING_FOR_EVIDENCE",
+                  "ATTRIBUTE",
+                  "LEARN",
+                  "REPLENISH",
+                ])
+                .order("priority", { ascending: false })
+                .limit(Math.max(input.limit * 3, 24));
+              if (error) {
+                return listPursuitDocuments(input.siteId, {
+                  states: [
+                    "DISCOVER",
+                    "QUALIFY",
+                    "EXECUTE",
+                    "WAITING_FOR_EVIDENCE",
+                    "ATTRIBUTE",
+                    "LEARN",
+                    "REPLENISH",
+                  ],
+                  limit: Math.max(input.limit * 3, 24),
+                });
+              }
+              return (data ?? []).map((row) => row.document as PursuitJob);
+            })();
 
       const claimed: PursuitJob[] = [];
-      for (const row of data ?? []) {
+      for (const job of candidates) {
         if (claimed.length >= input.limit) break;
-        const job = row.document as PursuitJob;
         if (job.notBefore && Date.parse(job.notBefore) > now.getTime()) continue;
         if (
           job.leaseUntil &&
@@ -476,36 +638,51 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
           leaseUntil,
           updatedAt: nowIso,
         };
-        const { error: saveError } = await sb().from("revenueos_pursuits").upsert({
-          id: next.id,
-          site_id: next.siteId,
-          state: next.state,
-          kind: next.kind,
-          pattern_key: next.patternKey ?? null,
-          action_type: next.actionType ?? null,
-          priority: next.priority,
-          effort: next.effort,
-          experiment_id: next.experimentId ?? null,
-          opportunity_id: next.opportunityId ?? null,
-          idempotency_key: next.idempotencyKey,
-          lease_owner: next.leaseOwner,
-          lease_until: next.leaseUntil,
-          not_before: next.notBefore ?? null,
-          attempts: next.attempts,
-          max_attempts: next.maxAttempts,
-          last_error: next.lastError ?? null,
-          document: next,
-          created_at: next.createdAt,
-          updated_at: next.updatedAt,
-        });
-        if (saveError) continue;
-        claimed.push(next);
+        try {
+          if (mode === "document") {
+            await savePursuitDocument(next);
+          } else {
+            const { error: saveError } = await sb()
+              .from("revenueos_pursuits")
+              .upsert({
+                id: next.id,
+                site_id: next.siteId,
+                state: next.state,
+                kind: next.kind,
+                pattern_key: next.patternKey ?? null,
+                action_type: next.actionType ?? null,
+                priority: next.priority,
+                effort: next.effort,
+                experiment_id: next.experimentId ?? null,
+                opportunity_id: next.opportunityId ?? null,
+                idempotency_key: next.idempotencyKey,
+                lease_owner: next.leaseOwner,
+                lease_until: next.leaseUntil,
+                not_before: next.notBefore ?? null,
+                attempts: next.attempts,
+                max_attempts: next.maxAttempts,
+                last_error: next.lastError ?? null,
+                document: next,
+                created_at: next.createdAt,
+                updated_at: next.updatedAt,
+              });
+            if (saveError) await savePursuitDocument(next);
+          }
+          claimed.push(next);
+        } catch {
+          continue;
+        }
       }
       return claimed;
     },
 
     async appendPursuitEvent(event: PursuitEvent) {
       if (!(await supabaseAvailable())) return fallback.appendPursuitEvent!(event);
+      const mode = await resolveDurableLedgerMode();
+      if (mode === "document") {
+        await appendPursuitEventDocument(event);
+        return;
+      }
       const { error } = await sb().from("revenueos_pursuit_events").upsert({
         id: event.id,
         pursuit_id: event.pursuitId,
@@ -515,14 +692,17 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         created_at: event.createdAt,
       });
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger pursuit event failed: ${error.message}`);
-        return fallback.appendPursuitEvent!(event);
+        await appendPursuitEventDocument(event);
       }
     },
 
     async listPursuitEvents(siteId, opts) {
       if (!(await supabaseAvailable())) {
         return fallback.listPursuitEvents!(siteId, opts);
+      }
+      const mode = await resolveDurableLedgerMode();
+      if (mode === "document") {
+        return listPursuitEventDocuments(siteId, opts);
       }
       let query = sb()
         .from("revenueos_pursuit_events")
@@ -533,10 +713,7 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
       if (opts?.limit) query = query.limit(opts.limit);
       else query = query.limit(200);
       const { data, error } = await query;
-      if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger pursuit events read failed: ${error.message}`);
-        return fallback.listPursuitEvents!(siteId, opts);
-      }
+      if (error) return listPursuitEventDocuments(siteId, opts);
       return (data ?? []).map(
         (row) =>
           ({
@@ -552,7 +729,38 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
 
     async claimLease(input) {
       if (!(await supabaseAvailable())) return fallback.claimLease!(input);
+      const mode = await resolveDurableLedgerMode();
       const nowIso = new Date().toISOString();
+      if (mode === "document") {
+        const { data: existing } = await sb()
+          .from("revenueos_experiments")
+          .select("document")
+          .eq("id", leaseDocId(input.id))
+          .maybeSingle();
+        const doc = existing?.document as { leaseUntil?: string } | undefined;
+        if (doc?.leaseUntil && Date.parse(doc.leaseUntil) > Date.now()) {
+          return false;
+        }
+        const { error } = await sb().from("revenueos_experiments").upsert({
+          id: leaseDocId(input.id),
+          site_id: input.siteId,
+          status: "leased",
+          pattern_key: input.kind,
+          category: LEASE_CAT,
+          document: {
+            id: input.id,
+            siteId: input.siteId,
+            kind: input.kind,
+            leaseUntil: input.leaseUntil,
+            document: input.document ?? {},
+          },
+          updated_at: nowIso,
+        });
+        if (error) {
+          throw new Error(`Document lease claim failed: ${error.message}`);
+        }
+        return true;
+      }
       const { data: existing } = await sb()
         .from("revenueos_leases")
         .select("lease_until")
@@ -573,8 +781,25 @@ export function createDurableExperimentStore(fileDir: string): ExperimentStore {
         created_at: nowIso,
       });
       if (error) {
-        if (process.env.VERCEL) throw new Error(`Ledger lease claim failed: ${error.message}`);
-        return fallback.claimLease!(input);
+        // Native leases table missing — document fallback
+        const { error: docErr } = await sb().from("revenueos_experiments").upsert({
+          id: leaseDocId(input.id),
+          site_id: input.siteId,
+          status: "leased",
+          pattern_key: input.kind,
+          category: LEASE_CAT,
+          document: {
+            id: input.id,
+            siteId: input.siteId,
+            kind: input.kind,
+            leaseUntil: input.leaseUntil,
+            document: input.document ?? {},
+          },
+          updated_at: nowIso,
+        });
+        if (docErr) {
+          throw new Error(`Ledger lease claim failed: ${error.message}`);
+        }
       }
       return true;
     },

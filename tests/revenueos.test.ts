@@ -2262,3 +2262,115 @@ test("portfolio allocator ranks FIRST_CUSTOMER businesses for effort", async () 
   assert.ok(allocation.notes.some((n) => n.includes("FIRST_CUSTOMER")));
 });
 
+test("three identical zero-result cycles force strategy mutation", async () => {
+  const {
+    buildCycleFingerprint,
+    detectExecutionStagnation,
+    mutateOpportunitiesAfterStagnation,
+  } = await import("@revenueos/core");
+
+  const fp = () =>
+    buildCycleFingerprint({
+      actionTypes: ["indexnow_submit", "distribute_owned_urls"],
+      purchases: 0,
+      revenueUsd: 0,
+      landingViews: 0,
+      checkouts: 0,
+      stage: "buyer_exposure",
+    });
+
+  const hour1 = fp();
+  const hour2 = fp();
+  const hour3 = fp();
+  const verdict = detectExecutionStagnation({
+    prior: [hour1, hour2],
+    current: hour3,
+  });
+  assert.equal(verdict.systemFailure, true);
+  assert.ok(verdict.consecutiveIdentical >= 3);
+  assert.ok(verdict.killActionTypes.includes("indexnow_submit"));
+
+  const mutated = mutateOpportunitiesAfterStagnation({
+    opportunities: [
+      {
+        id: "a",
+        title: "IndexAgain",
+        metric: "views",
+        category: "acquisition",
+        action: "index",
+        expectedImpact: 8,
+        confidence: 0.6,
+        effort: 1,
+        score: 90,
+        safeActionType: "indexnow_submit",
+      },
+      {
+        id: "b",
+        title: "Comparison page",
+        metric: "views",
+        category: "acquisition",
+        action: "publish",
+        expectedImpact: 7,
+        confidence: 0.55,
+        effort: 1,
+        score: 40,
+        safeActionType: "publish_comparison_page",
+      },
+    ],
+    killActionTypes: verdict.killActionTypes,
+  });
+  assert.equal(mutated[0]?.safeActionType, "publish_comparison_page");
+  assert.ok((mutated[0]?.score ?? 0) > (mutated[1]?.score ?? 0));
+});
+
+test("infrastructure-only zero-result cycle is stagnant without waiting for hour 3", async () => {
+  const { buildCycleFingerprint, detectExecutionStagnation } = await import(
+    "@revenueos/core"
+  );
+  const current = buildCycleFingerprint({
+    actionTypes: ["indexnow_submit", "sitemap_ping"],
+    purchases: 0,
+    revenueUsd: 0,
+    landingViews: 0,
+    stage: "buyer_exposure",
+  });
+  const verdict = detectExecutionStagnation({ prior: [], current });
+  assert.equal(verdict.stagnant, true);
+  assert.match(verdict.reason, /Infrastructure-only|mutate/i);
+});
+
+test("portfolio digest marks zero-action FCM cycle as FAILED", async () => {
+  const {
+    buildPortfolioDigest,
+    formatPortfolioOwnerEmail,
+    portfolioDigestSubject,
+  } = await import("@revenueos/core");
+  const digest = buildPortfolioDigest({
+    windowStart: "2026-08-09T06:00:00.000Z",
+    windowEnd: "2026-08-09T07:00:00.000Z",
+    sites: [
+      {
+        siteId: "raiseready",
+        displayName: "RaiseReady",
+        url: "https://raiseready.example",
+        commerciallyLive: true,
+        checkoutOpen: true,
+        purchases: 0,
+        revenueUsd: 0,
+        firstCustomerMode: true,
+        firstCustomerStage: "buyer_exposure",
+        actionsCompleted: 0,
+        exposureNotes: ["https://raiseready.example/topics/x"],
+        blockers: [],
+        durableLedger: "ephemeral",
+      },
+    ],
+  });
+  assert.equal(digest.cycleStatus, "failed");
+  assert.equal(digest.totalActionsCompleted, 0);
+  const text = formatPortfolioOwnerEmail(digest);
+  assert.match(text, /CYCLE FAILED|FAILED/);
+  assert.match(text, /THIS HOUR/);
+  assert.match(portfolioDigestSubject(digest), /CYCLE FAILED/);
+});
+

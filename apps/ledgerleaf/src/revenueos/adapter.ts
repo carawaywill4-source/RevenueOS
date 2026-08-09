@@ -73,9 +73,11 @@ export function createAdapter(): SiteAdapter {
       const stats = await purchaseStats();
       const fees = stats.revenueUsd * 0.029 + stats.purchases * 0.3;
       const profit = Math.max(0, stats.revenueUsd - fees);
+      // Do not fabricate funnel traffic — fake views force FCM into the wrong
+      // stage and make IndexNow loops look like qualified-visit progress.
       const events = {
-        landing_view: Math.max(stats.purchases * 40, 20),
-        checkout_started: Math.max(stats.purchases, 0),
+        landing_view: 0,
+        checkout_started: 0,
         purchase_completed: stats.purchases,
       };
       const steps = buildFunnel(

@@ -43,6 +43,13 @@ import {
   applyFirstCustomerPressure,
   evaluateFirstCustomerMode,
 } from "./first-customer-mode";
+import {
+  detectExecutionStagnation,
+  executedActionTypesFromEvents,
+  fingerprintsFromEvents,
+  mutateOpportunitiesAfterStagnation,
+  type StagnationVerdict,
+} from "./stagnation";
 import { filterTransferableLessons } from "../memory/similarity";
 import { newId } from "../ledger/store";
 import type {
@@ -93,6 +100,7 @@ export type PlanAndEnqueueResult = {
   concurrentSlots: number;
   firstCustomerMode: FirstCustomerMode;
   replenishedEmptyQueue: boolean;
+  stagnation?: StagnationVerdict;
 };
 
 /**
@@ -262,10 +270,73 @@ export async function planAndEnqueuePursuits(
     observation,
   });
 
+  // Stagnation: identical zero-result cycles must mutate strategy, not repeat.
+  const recentEvents = store.listPursuitEvents
+    ? await store.listPursuitEvents(context.siteId, {
+        since: new Date(now.getTime() - 3 * 3_600_000).toISOString(),
+        limit: 240,
+      })
+    : [];
+  const priorFingerprints = fingerprintsFromEvents(recentEvents, {
+    purchases: observation.money.purchases,
+    revenueUsd: observation.money.revenueUsd,
+    landingViews: observation.funnel.landingViews,
+    checkouts: observation.funnel.checkouts,
+    stage: firstCustomerMode.stage,
+  });
+  const currentFingerprint = priorFingerprints[priorFingerprints.length - 1] ?? {
+    hash: "none",
+    actionTypes: executedActionTypesFromEvents(recentEvents),
+    purchases: observation.money.purchases,
+    revenueUsd: observation.money.revenueUsd,
+    landingViews: observation.funnel.landingViews,
+    checkouts: observation.funnel.checkouts,
+    stage: firstCustomerMode.stage,
+    at: now.toISOString(),
+  };
+  const stagnation = detectExecutionStagnation({
+    prior: priorFingerprints.slice(0, -1),
+    current: currentFingerprint,
+  });
+  if (stagnation.stagnant) {
+    opportunities = mutateOpportunitiesAfterStagnation({
+      opportunities,
+      killActionTypes: stagnation.killActionTypes,
+    });
+  }
+
   const hypotheses = opportunitiesToHypotheses(opportunities);
   let existing = store.listPursuits
     ? await store.listPursuits(context.siteId)
     : [];
+
+  // Stagnation: close repeated zero-result pursuits so mutated bets can enqueue.
+  if (stagnation.stagnant && stagnation.killActionTypes.length && store.savePursuit) {
+    const killed = new Set(stagnation.killActionTypes);
+    const iso = now.toISOString();
+    existing = await Promise.all(
+      existing.map(async (job) => {
+        if (
+          job.actionType &&
+          killed.has(job.actionType) &&
+          !["DONE", "FAILED"].includes(job.state)
+        ) {
+          const next = {
+            ...job,
+            state: "DONE" as const,
+            workSummary: `${job.workSummary ?? "Executed"} · closed by stagnation detector`,
+            updatedAt: iso,
+            leaseOwner: null,
+            leaseUntil: null,
+          };
+          await store.savePursuit!(next);
+          return next;
+        }
+        return job;
+      }),
+    );
+  }
+
   const openExisting = existing.filter(
     (job) => !["DONE", "FAILED"].includes(job.state),
   );
@@ -333,6 +404,7 @@ export async function planAndEnqueuePursuits(
     concurrentSlots: ambition.concurrentBets,
     firstCustomerMode,
     replenishedEmptyQueue,
+    stagnation,
   };
 }
 
@@ -364,6 +436,7 @@ export async function runPursuitTick(
       concurrentSlots: 4,
       firstCustomerMode: evaluateFirstCustomerMode(observation),
       replenishedEmptyQueue: false,
+      stagnation: undefined,
     };
   } else {
     plan = await planAndEnqueuePursuits(adapter, {

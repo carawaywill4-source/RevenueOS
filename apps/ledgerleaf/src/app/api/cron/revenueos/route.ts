@@ -5,6 +5,7 @@ import {
   runPursuitTick,
 } from "@revenueos/core";
 import { createAdapter } from "@/revenueos/adapter";
+import { resolveDurableLedgerMode } from "@/revenueos/durable-store";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -20,6 +21,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const adapter = createAdapter();
+  const durableLedger = await resolveDurableLedgerMode();
   const { plan, drain } = await runPursuitTick(adapter, {
     budgetMs: 55_000,
     maxJobs: 12,
@@ -46,14 +48,38 @@ export async function GET(request: Request) {
     firstCustomerMode: plan.firstCustomerMode.active,
     firstCustomerStage: plan.firstCustomerMode.stage,
   });
+  const cycleFailed =
+    durableLedger === "ephemeral" ||
+    (plan.firstCustomerMode.active &&
+      report.actionsCompleted === 0 &&
+      drain.executed === 0) ||
+    Boolean(plan.stagnation?.systemFailure);
+
   return NextResponse.json({
-    ok: true,
+    ok: !cycleFailed,
     site: adapter.id,
     mode: "persistent_pursuit",
+    durableLedger,
     firstCustomerMode: plan.firstCustomerMode.active,
+    firstCustomerStage: plan.firstCustomerMode.stage,
     replenishedEmptyQueue: plan.replenishedEmptyQueue,
     enqueued: plan.enqueuedCount,
+    stagnation: plan.stagnation
+      ? {
+          stagnant: plan.stagnation.stagnant,
+          systemFailure: plan.stagnation.systemFailure,
+          consecutiveIdentical: plan.stagnation.consecutiveIdentical,
+          killActionTypes: plan.stagnation.killActionTypes,
+          reason: plan.stagnation.reason,
+        }
+      : null,
     drain,
+    actionsCompleted: report.actionsCompleted,
+    cycleStatus: cycleFailed
+      ? plan.stagnation?.systemFailure
+        ? "stagnant"
+        : "failed"
+      : "ok",
     ownerReportPreview: formatOwnerReport(report).slice(0, 500),
   });
 }

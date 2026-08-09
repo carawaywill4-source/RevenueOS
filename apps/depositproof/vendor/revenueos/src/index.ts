@@ -48,6 +48,7 @@ export * from "./modules/organic-mastery";
 export * from "./modules/pursuit-engine";
 export * from "./modules/pursuit-plan";
 export * from "./modules/first-customer-mode";
+export * from "./modules/stagnation";
 export * from "./modules/portfolio";
 export * from "./modules/portfolio-digest";
 export * from "./modules/permissionless";

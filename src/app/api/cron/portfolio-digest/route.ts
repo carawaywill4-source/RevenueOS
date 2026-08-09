@@ -208,8 +208,9 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({
-    ok: true,
+    ok: digest.cycleStatus === "ok",
     mode: "single_portfolio_digest",
+    cycleStatus: digest.cycleStatus,
     subject,
     emailId,
     emailSkip,
@@ -217,6 +218,7 @@ export async function GET(request: Request) {
     liveCount: digest.liveCount,
     purchases: digest.portfolioPurchases,
     revenueUsd: digest.portfolioRevenueUsd,
+    totalActionsCompleted: digest.totalActionsCompleted,
     preview: text.slice(0, 1200),
   });
 }
