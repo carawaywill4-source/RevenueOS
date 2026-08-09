@@ -18,11 +18,11 @@ const RISK_RANK: Record<ActionRisk, number> = {
  */
 export const AUTONOMOUS_SAFE_TYPES = PERMISSIONLESS_ORGANIC_TYPES;
 
-/** Only actions that need a human identity, wallet, or legal say-so. */
-export const OWNER_GATE_TYPES = new Set([
-  ...OWNER_REQUIRED_TYPES,
-  "rewrite_page_copy", // brand voice — keep gated until copy limb is trusted
-]);
+/**
+ * Only actions that need a human identity, wallet, or legal say-so.
+ * Operator mandate: "no paid ads, no owner login" — everything else is safe.
+ */
+export const OWNER_GATE_TYPES = new Set([...OWNER_REQUIRED_TYPES]);
 
 /** Never autonomous — destructive or out of policy. */
 export const FORBIDDEN_TYPES = new Set([

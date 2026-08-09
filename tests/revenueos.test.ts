@@ -2339,6 +2339,475 @@ test("infrastructure-only zero-result cycle is stagnant without waiting for hour
   assert.match(verdict.reason, /Infrastructure-only|mutate/i);
 });
 
+test("pattern posteriors ban a mechanism after N attempts with zero signal", async () => {
+  const {
+    buildPatternPosteriors,
+    computePatternGate,
+    PATTERN_ATTEMPT_BUDGET,
+  } = await import("@revenueos/core");
+
+  const events = Array.from({ length: PATTERN_ATTEMPT_BUDGET }, (_, i) => ({
+    id: `e${i}`,
+    pursuitId: `p${i}`,
+    siteId: "raiseready",
+    eventType: "executed" as const,
+    detail: {
+      ok: true,
+      actionType: "publish_free_resource",
+      patternKey: "permissionless-free-resource",
+      actionClass: "production",
+    },
+    createdAt: new Date(Date.now() - (i + 1) * 60_000).toISOString(),
+  }));
+
+  const posteriors = buildPatternPosteriors({
+    events,
+    observation: {
+      observedAt: new Date().toISOString(),
+      money: {
+        revenueUsd: 0,
+        purchases: 0,
+        awaitingPayment: 0,
+        refunded: 0,
+        estimatedVariableCostUsd: 0,
+        estimatedProfitUsd: 0,
+        mrr: 0,
+        arr: 0,
+      },
+      funnel: {
+        steps: [],
+        largestDrop: null,
+        landingViews: 0,
+        checkouts: 0,
+        fulfillmentFailed: 0,
+      },
+      bottleneck: { level: 2, label: "no buyers", detail: "invisible" },
+      openExperimentIds: [],
+      errors: [],
+    },
+  });
+  const p = posteriors["permissionless-free-resource"];
+  assert.ok(p, "posterior recorded");
+  assert.equal(p.banned, true);
+  const gate = computePatternGate(posteriors);
+  assert.ok(gate.bannedPatterns.has("permissionless-free-resource"));
+  assert.ok(gate.bannedMechanisms.has("owned_content"));
+});
+
+test("banned patterns are dropped and banned mechanisms are demoted", async () => {
+  const { applyPatternGate } = await import("@revenueos/core");
+  const gate = {
+    bannedPatterns: new Set(["permissionless-free-resource"]),
+    bannedMechanisms: new Set(["owned_content" as const]),
+    reasons: { "permissionless-free-resource": "no signal" },
+  };
+  const kept = applyPatternGate({
+    gate,
+    opportunities: [
+      {
+        id: "a",
+        title: "another content page",
+        metric: "views",
+        category: "acquisition",
+        action: "publish",
+        expectedImpact: 8,
+        confidence: 0.6,
+        effort: 1,
+        score: 90,
+        safeActionType: "publish_comparison_page",
+        patternKey: "permissionless-comparison",
+      },
+      {
+        id: "b",
+        title: "same banned pattern",
+        metric: "views",
+        category: "acquisition",
+        action: "publish",
+        expectedImpact: 8,
+        confidence: 0.6,
+        effort: 1,
+        score: 95,
+        safeActionType: "publish_free_resource",
+        patternKey: "permissionless-free-resource",
+      },
+      {
+        id: "c",
+        title: "distribution",
+        metric: "urls",
+        category: "acquisition",
+        action: "ping",
+        expectedImpact: 6,
+        confidence: 0.55,
+        effort: 1,
+        score: 40,
+        safeActionType: "indexnow_submit",
+        patternKey: "indexnow-discovery",
+      },
+    ],
+  });
+  const keys = kept.map((o) => o.patternKey);
+  assert.ok(!keys.includes("permissionless-free-resource"));
+  const distribution = kept.find((o) => o.patternKey === "indexnow-discovery");
+  const bannedFamily = kept.find(
+    (o) => o.patternKey === "permissionless-comparison",
+  );
+  assert.ok(distribution);
+  assert.ok(bannedFamily);
+  assert.ok((distribution!.score ?? 0) > (bannedFamily!.score ?? 0));
+});
+
+test("mechanism diversity caps same-family enqueue and prefers unbanned", async () => {
+  const { enforceMechanismDiversity } = await import("@revenueos/core");
+  const opps = [
+    { id: "1", title: "content1", metric: "v", category: "acquisition", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 90, safeActionType: "publish_free_resource", patternKey: "p1" },
+    { id: "2", title: "content2", metric: "v", category: "acquisition", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 85, safeActionType: "publish_howto_cluster", patternKey: "p2" },
+    { id: "3", title: "content3", metric: "v", category: "acquisition", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 80, safeActionType: "publish_intent_page", patternKey: "p3" },
+    { id: "4", title: "content4", metric: "v", category: "acquisition", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 75, safeActionType: "publish_comparison_page", patternKey: "p4" },
+    { id: "5", title: "distribute", metric: "v", category: "acquisition", action: "x", expectedImpact: 6, confidence: 0.6, effort: 1, score: 50, safeActionType: "distribute_owned_urls", patternKey: "d1" },
+  ] as const;
+  const capped = enforceMechanismDiversity({
+    opportunities: opps.map((o) => ({ ...o })),
+    bannedMechanisms: new Set(["owned_content"]),
+    maxPerMechanism: 3,
+  });
+  const first = capped[0]!;
+  assert.equal(first.patternKey, "d1");
+  const contentCount = capped.filter(
+    (o) => (o.safeActionType ?? "").startsWith("publish_"),
+  ).length;
+  assert.ok(contentCount <= 3);
+});
+
+test("revenue priority boosts patterns with own commercial signal", async () => {
+  const {
+    applyRevenuePriority,
+    EMPTY_PORTFOLIO_SIGNAL,
+  } = await import("@revenueos/core");
+  const ownPosteriors: Record<string, any> = {
+    "proven-checkout": {
+      patternKey: "proven-checkout",
+      mechanism: "conversion_optimization",
+      attempts: 3,
+      distributionAttempts: 0,
+      productionAttempts: 0,
+      verifiedExposures: 12,
+      intents: 4,
+      commercialOutcomes: 2,
+      commercialScore: 60,
+      banned: false,
+      lastAttemptAt: new Date().toISOString(),
+      firstAttemptAt: new Date().toISOString(),
+    },
+  };
+  const scored = applyRevenuePriority({
+    opportunities: [
+      { id: "a", title: "proven", metric: "purchases", category: "conversion", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 10, safeActionType: "rewrite_page_copy", patternKey: "proven-checkout" } as any,
+      { id: "b", title: "unknown", metric: "views", category: "acquisition", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 90, safeActionType: "publish_free_resource", patternKey: "unknown-pattern" } as any,
+    ],
+    ownPosteriors,
+    portfolioSignal: EMPTY_PORTFOLIO_SIGNAL,
+    bannedMechanisms: new Set(),
+  });
+  assert.equal(scored[0]!.patternKey, "proven-checkout");
+});
+
+test("revenue priority transfers portfolio commercial signal across sites", async () => {
+  const {
+    applyRevenuePriority,
+    buildPortfolioSignal,
+  } = await import("@revenueos/core");
+  const portfolioSignal = buildPortfolioSignal({
+    perSitePosteriors: [
+      {
+        siteId: "raiseready",
+        posteriors: {
+          "outreach-A": {
+            patternKey: "outreach-A",
+            mechanism: "direct_outreach",
+            attempts: 3,
+            distributionAttempts: 0,
+            productionAttempts: 0,
+            verifiedExposures: 5,
+            intents: 2,
+            commercialOutcomes: 1,
+            commercialScore: 25,
+            banned: false,
+            lastAttemptAt: new Date().toISOString(),
+            firstAttemptAt: new Date().toISOString(),
+          } as any,
+        },
+      },
+    ],
+    excludeSiteId: "ledgerleaf",
+  });
+  const scored = applyRevenuePriority({
+    opportunities: [
+      { id: "a", title: "transferable", metric: "purchases", category: "acquisition", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 10, safeActionType: "cold_outreach", patternKey: "outreach-A" } as any,
+      { id: "b", title: "cold content", metric: "views", category: "acquisition", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 30, safeActionType: "publish_free_resource", patternKey: "cold-content" } as any,
+    ],
+    ownPosteriors: {},
+    portfolioSignal,
+    bannedMechanisms: new Set(),
+  });
+  assert.equal(scored[0]!.patternKey, "outreach-A");
+});
+
+test("portfolio allocator drops suspended sites and demotes exhausted ones", async () => {
+  const { rankPortfolioEffort, snapshotFromMetrics } = await import(
+    "@revenueos/core"
+  );
+  const alloc = rankPortfolioEffort([
+    snapshotFromMetrics({
+      siteId: "raiseready",
+      displayName: "raiseready",
+      sequenceIndex: 1,
+      revenueUsd: 0,
+      contributionProfitUsd: 0,
+      purchases: 0,
+      landingViews: 0,
+      activePursuits: 0,
+      waitingForEvidence: 0,
+      claimableBacklog: 2,
+    }),
+    snapshotFromMetrics({
+      siteId: "mendhaus",
+      displayName: "mendhaus",
+      sequenceIndex: 2,
+      revenueUsd: 0,
+      contributionProfitUsd: 0,
+      purchases: 0,
+      landingViews: 0,
+      activePursuits: 0,
+      waitingForEvidence: 0,
+      claimableBacklog: 2,
+      suspended: true,
+    }),
+    snapshotFromMetrics({
+      siteId: "closeshift",
+      displayName: "closeshift",
+      sequenceIndex: 3,
+      revenueUsd: 0,
+      contributionProfitUsd: 0,
+      purchases: 0,
+      landingViews: 0,
+      activePursuits: 0,
+      waitingForEvidence: 0,
+      claimableBacklog: 2,
+      bannedPatternCount: 6,
+    }),
+  ]);
+  assert.equal(alloc.effortOrder[0], "raiseready");
+  assert.equal(alloc.effortOrder[alloc.effortOrder.length - 1], "mendhaus");
+});
+
+test("beacon ingests page_view as verified_exposure and dedupes within window", async () => {
+  const { ingestBeaconEvent } = await import("@revenueos/core");
+  const events: any[] = [];
+  const store = {
+    listPursuitEvents: async () => events.slice(),
+    appendPursuitEvent: async (e: any) => {
+      events.push(e);
+    },
+  } as any;
+  const first = await ingestBeaconEvent({
+    event: {
+      kind: "page_view",
+      siteId: "raiseready",
+      url: "https://x.dev/topics/foo",
+      path: "/topics/foo",
+      ua: "Mozilla/5.0 real browser",
+      ip: "203.0.113.10",
+    },
+    store,
+  });
+  assert.equal(first.ok, true);
+  assert.equal((first as any).actionClass, "verified_exposure");
+  const dupe = await ingestBeaconEvent({
+    event: {
+      kind: "page_view",
+      siteId: "raiseready",
+      url: "https://x.dev/topics/foo",
+      path: "/topics/foo",
+      ua: "Mozilla/5.0 real browser",
+      ip: "203.0.113.10",
+    },
+    store,
+  });
+  assert.equal(dupe.ok, false);
+});
+
+test("beacon rejects bot user agents", async () => {
+  const { ingestBeaconEvent } = await import("@revenueos/core");
+  const store = { appendPursuitEvent: async () => {} } as any;
+  const r = await ingestBeaconEvent({
+    event: {
+      kind: "page_view",
+      siteId: "raiseready",
+      url: "x",
+      ua: "Googlebot/2.1 (+http://google.com/bot.html)",
+    },
+    store,
+  });
+  assert.equal(r.ok, false);
+});
+
+test("mechanism bandit picks proven mechanism with high probability", async () => {
+  const {
+    buildMechanismArms,
+    sampleMechanismRanking,
+  } = await import("@revenueos/core");
+  const ownPosteriors: Record<string, any> = {
+    "outreach-A": {
+      patternKey: "outreach-A",
+      mechanism: "direct_outreach",
+      attempts: 3,
+      distributionAttempts: 0,
+      productionAttempts: 0,
+      verifiedExposures: 8,
+      intents: 4,
+      commercialOutcomes: 2,
+      commercialScore: 60,
+      banned: false,
+      lastAttemptAt: null,
+      firstAttemptAt: null,
+    },
+    "content-B": {
+      patternKey: "content-B",
+      mechanism: "owned_content",
+      attempts: 10,
+      distributionAttempts: 0,
+      productionAttempts: 10,
+      verifiedExposures: 0,
+      intents: 0,
+      commercialOutcomes: 0,
+      commercialScore: 0,
+      banned: true,
+      lastAttemptAt: null,
+      firstAttemptAt: null,
+    },
+  };
+  const arms = buildMechanismArms({
+    ownPosteriors,
+    bannedMechanisms: new Set(["owned_content"]),
+  });
+  // Deterministic sampler for test — pull the same values so proven arm wins.
+  const rand = mulberry32(42);
+  let wins = 0;
+  for (let i = 0; i < 50; i++) {
+    const s = sampleMechanismRanking({ arms, rand });
+    if (s.best === "direct_outreach") wins += 1;
+  }
+  assert.ok(wins > 30, `direct_outreach should dominate; won ${wins}/50`);
+});
+
+function mulberry32(a: number) {
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+test("conversion lab injects offer/CTA/urgency when landing_views > 0", async () => {
+  const { proposeConversionExperiments } = await import("@revenueos/core");
+  const items = proposeConversionExperiments({
+    observation: {
+      observedAt: new Date().toISOString(),
+      money: {
+        revenueUsd: 0,
+        purchases: 0,
+        awaitingPayment: 0,
+        refunded: 0,
+        estimatedVariableCostUsd: 0,
+        estimatedProfitUsd: 0,
+        mrr: 0,
+        arr: 0,
+      },
+      funnel: {
+        steps: [],
+        largestDrop: null,
+        landingViews: 25,
+        checkouts: 3,
+        fulfillmentFailed: 0,
+      },
+      bottleneck: { level: 3, label: "funnel", detail: "no purchases" },
+      openExperimentIds: [],
+      errors: [],
+    } as any,
+  });
+  assert.ok(items.length >= 4);
+  const kinds = items.map((i) => i.patternKey!).join("|");
+  assert.ok(kinds.includes("conv:cta_directness"));
+  assert.ok(kinds.includes("conv:guarantee"));
+  assert.ok(kinds.includes("conv:urgency"));
+});
+
+test("conversion lab is silent when no verified traffic yet", async () => {
+  const { proposeConversionExperiments } = await import("@revenueos/core");
+  const items = proposeConversionExperiments({
+    observation: {
+      observedAt: new Date().toISOString(),
+      money: {
+        revenueUsd: 0,
+        purchases: 0,
+        awaitingPayment: 0,
+        refunded: 0,
+        estimatedVariableCostUsd: 0,
+        estimatedProfitUsd: 0,
+        mrr: 0,
+        arr: 0,
+      },
+      funnel: {
+        steps: [],
+        largestDrop: null,
+        landingViews: 0,
+        checkouts: 0,
+        fulfillmentFailed: 0,
+      },
+      bottleneck: { level: 2, label: "no buyers", detail: "invisible" },
+      openExperimentIds: [],
+      errors: [],
+    } as any,
+  });
+  assert.equal(items.length, 0);
+});
+
+test("concrete escalations propose specific providers with cost", async () => {
+  const { proposeUnlocksForBannedMechanisms } = await import("@revenueos/core");
+  const proposals = proposeUnlocksForBannedMechanisms({
+    bannedMechanisms: new Set(["owned_content", "owned_distribution"]),
+    siteId: "raiseready",
+  });
+  assert.ok(proposals.length >= 1);
+  assert.ok(proposals[0]!.providers.length >= 1);
+  assert.ok(typeof proposals[0]!.providers[0]!.costPerMonthUsd === "number");
+  // Owned content is banned → should NOT be top proposal
+  assert.notEqual(proposals[0]!.mechanism, "owned_content");
+});
+
+test("owner-blocked business is suspended and enqueue is skipped", async () => {
+  const { evaluateBusinessSuspension } = await import("@revenueos/core");
+  const v = evaluateBusinessSuspension({
+    context: {
+      siteId: "mendhaus",
+      displayName: "Mendhaus",
+      industry: "retail",
+      products: [],
+      funnelSteps: [],
+      brandVoice: "",
+      allowedChannels: [],
+      autonomousDailyCapUsd: 0,
+      timezone: "UTC",
+      constraints: ["OWNER_BLOCKED_FULFILLMENT"],
+    } as any,
+  });
+  assert.equal(v.suspended, true);
+  assert.ok(v.blockingConstraints.includes("OWNER_BLOCKED_FULFILLMENT"));
+});
+
 test("portfolio digest marks zero-action FCM cycle as FAILED", async () => {
   const {
     buildPortfolioDigest,
@@ -2374,3 +2843,765 @@ test("portfolio digest marks zero-action FCM cycle as FAILED", async () => {
   assert.match(portfolioDigestSubject(digest), /CYCLE FAILED/);
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Learning & self-improvement layer
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("knowledge-graph records and queries outcome edges", async () => {
+  const { recordOutcomeEdge, queryKnowledgeGraph, createFileExperimentStore } =
+    await import("@revenueos/core");
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-kg-"));
+  const store = createFileExperimentStore(dir);
+  await recordOutcomeEdge({
+    store,
+    edge: {
+      siteId: "raiseready",
+      segment: "small_biz_owner",
+      mechanism: "direct_outreach",
+      surface: "email",
+      outcome: "commercial",
+      revenueUsd: 199,
+      business: "raiseready",
+    },
+  });
+  await recordOutcomeEdge({
+    store,
+    edge: {
+      siteId: "raiseready",
+      segment: "small_biz_owner",
+      mechanism: "owned_content",
+      surface: "blog",
+      outcome: "verified_exposure",
+      revenueUsd: 0,
+      business: "raiseready",
+    },
+  });
+  const q = await queryKnowledgeGraph({
+    store,
+    siteId: "raiseready",
+    query: { segment: "small_biz_owner" },
+  });
+  assert.equal(q.edges.length, 2);
+  assert.equal(q.aggregate.commercialWins, 1);
+  assert.ok(q.aggregate.revenueUsd >= 199);
+  assert.equal(q.aggregate.topMechanisms[0]!.mechanism, "direct_outreach");
+});
+
+test("attribution-ml gives higher weight to more recent pursuits", async () => {
+  const { attributeSignalToPatterns } = await import("@revenueos/core");
+  const now = new Date("2026-06-01T12:00:00.000Z");
+  const events: any[] = [
+    // Old pursuit — 24h before signal.
+    {
+      id: "e1",
+      pursuitId: "p1",
+      siteId: "s",
+      eventType: "executed",
+      createdAt: "2026-05-31T11:00:00.000Z",
+      detail: { ok: true, patternKey: "old-pattern", actionType: "publish_intent_page" },
+    },
+    // Recent pursuit — 1h before signal.
+    {
+      id: "e2",
+      pursuitId: "p2",
+      siteId: "s",
+      eventType: "executed",
+      createdAt: "2026-06-01T10:30:00.000Z",
+      detail: { ok: true, patternKey: "recent-pattern", actionType: "publish_intent_page" },
+    },
+    // Beacon event that could be attributed to either.
+    {
+      id: "s1",
+      pursuitId: "beacon",
+      siteId: "s",
+      eventType: "beacon",
+      createdAt: "2026-06-01T11:30:00.000Z",
+      detail: { kind: "page_view", url: "https://x.example/t" },
+    },
+  ];
+  const records = attributeSignalToPatterns({ events, now, decayHalfLifeMs: 6 * 3_600_000 });
+  const byKey = new Map<string, number>();
+  for (const r of records) byKey.set(r.patternKey, (byKey.get(r.patternKey) ?? 0) + r.weight);
+  assert.ok(
+    (byKey.get("recent-pattern") ?? 0) > (byKey.get("old-pattern") ?? 0),
+    "recent pursuit must dominate weight",
+  );
+});
+
+test("anomaly-detector fires on traffic spike vs baseline", async () => {
+  const { detectStreamAnomalies } = await import("@revenueos/core");
+  const now = new Date("2026-06-08T12:00:00.000Z");
+  // 7 days of low baseline: 1 view/day.
+  const events: any[] = [];
+  for (let i = 1; i <= 7; i++) {
+    events.push({
+      id: `b${i}`,
+      pursuitId: "beacon",
+      siteId: "raiseready",
+      eventType: "beacon",
+      createdAt: new Date(now.getTime() - (i + 1) * 24 * 3_600_000).toISOString(),
+      detail: { kind: "page_view", url: "https://r.example/t" },
+    });
+  }
+  // Current 24h: 100 views — a huge spike.
+  for (let i = 0; i < 100; i++) {
+    events.push({
+      id: `c${i}`,
+      pursuitId: "beacon",
+      siteId: "raiseready",
+      eventType: "beacon",
+      createdAt: new Date(now.getTime() - (i + 1) * 60_000).toISOString(),
+      detail: { kind: "page_view", url: "https://r.example/t" },
+    });
+  }
+  const found = detectStreamAnomalies({ events, now });
+  const spike = found.find((a) => a.kind === "traffic_spike");
+  assert.ok(spike, "should detect traffic spike");
+  assert.ok((spike!.current ?? 0) > (spike!.baseline ?? 0));
+});
+
+test("self-improving-strategist samples different prompts under different priors", async () => {
+  const { selectStrategistPromptVersion } = await import("@revenueos/core");
+  // Deterministic PRNG so we can compare arms head-to-head.
+  const rand = mulberry32(7);
+  // Give v1_direct many wins, v2_socratic many losses — v1 should dominate.
+  const outcomes = [
+    ...Array.from({ length: 30 }, () => ({ versionId: "v1_direct", siteId: "s", ok: true, ts: "" })),
+    ...Array.from({ length: 30 }, () => ({ versionId: "v2_socratic", siteId: "s", ok: false, ts: "" })),
+  ] as any[];
+  let v1 = 0;
+  let v2 = 0;
+  for (let i = 0; i < 60; i++) {
+    const s = selectStrategistPromptVersion({ outcomes, rand });
+    if (s.version.id === "v1_direct") v1 += 1;
+    else if (s.version.id === "v2_socratic") v2 += 1;
+  }
+  assert.ok(v1 > v2, `v1_direct should dominate; v1=${v1} v2=${v2}`);
+  // With NO outcomes and a different seed, sampling must still choose from >=2 versions.
+  const seen = new Set<string>();
+  const rand2 = mulberry32(11);
+  for (let i = 0; i < 40; i++) {
+    const s = selectStrategistPromptVersion({ outcomes: [], rand: rand2 });
+    seen.add(s.version.id);
+  }
+  assert.ok(seen.size >= 2, "with no outcomes the sampler should explore multiple prompts");
+});
+
+test("ltv-cac-model ranks direct_outreach above owned_content when direct_outreach has commercial signal", async () => {
+  const { mechanismProfitabilityRanking } = await import("@revenueos/core");
+  const posteriors: any = {
+    "outreach-a": {
+      patternKey: "outreach-a",
+      mechanism: "direct_outreach",
+      attempts: 5,
+      distributionAttempts: 0,
+      productionAttempts: 0,
+      verifiedExposures: 4,
+      intents: 3,
+      commercialOutcomes: 2,
+      commercialScore: 60,
+      banned: false,
+      lastAttemptAt: null,
+      firstAttemptAt: null,
+    },
+    "content-a": {
+      patternKey: "content-a",
+      mechanism: "owned_content",
+      attempts: 20,
+      distributionAttempts: 0,
+      productionAttempts: 20,
+      verifiedExposures: 0,
+      intents: 0,
+      commercialOutcomes: 0,
+      commercialScore: 0,
+      banned: false,
+      lastAttemptAt: null,
+      firstAttemptAt: null,
+    },
+  };
+  const ranking = mechanismProfitabilityRanking({
+    posteriors,
+    context: {
+      siteId: "s",
+      displayName: "S",
+      industry: "saas",
+      products: [{ id: "p1", name: "core", priceUsd: 199, marginEstimate: 0.7 }],
+      funnelSteps: [],
+      brandVoice: "",
+      allowedChannels: [],
+      autonomousDailyCapUsd: 0,
+      timezone: "UTC",
+      constraints: [],
+    } as any,
+  });
+  assert.equal(ranking[0]!.mechanism, "direct_outreach");
+  const outreachIdx = ranking.findIndex((r) => r.mechanism === "direct_outreach");
+  const contentIdx = ranking.findIndex((r) => r.mechanism === "owned_content");
+  assert.ok(
+    outreachIdx < contentIdx,
+    `direct_outreach (idx ${outreachIdx}) must rank above owned_content (idx ${contentIdx})`,
+  );
+});
+
+test("compliance-guard rejects URL whose robots.txt disallows POST-like paths", async () => {
+  const { shouldAllowExternalContact } = await import("@revenueos/core");
+  const fetchImpl = (async (url: string) => {
+    if (url.endsWith("/robots.txt")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => "User-agent: *\nDisallow: /submit\n",
+      } as any;
+    }
+    return { ok: false, status: 404, text: async () => "" } as any;
+  }) as unknown as typeof fetch;
+  const verdict = await shouldAllowExternalContact({
+    targetUrl: "https://example.com/submit/form",
+    action: "http_post",
+    fetchImpl,
+    timeoutMs: 200,
+  });
+  assert.equal(verdict.allowed, false);
+  assert.ok(verdict.reasons.some((r) => r.startsWith("robots_disallow")));
+
+  const okVerdict = await shouldAllowExternalContact({
+    targetUrl: "https://example.com/open/path",
+    action: "http_post",
+    fetchImpl,
+    timeoutMs: 200,
+  });
+  assert.equal(okVerdict.allowed, true);
+});
+
+test("target-tracking sets aggressiveness=high when 24h in with <5% progress", async () => {
+  const {
+    progressTowardTarget,
+    aggressivenessDial,
+    TARGET_DAILY_PROFIT_USD_PER_BUSINESS,
+  } = await import("@revenueos/core");
+  const p = progressTowardTarget({
+    observation: { estimatedProfitUsd: 200, revenueUsd: 500 } as any,
+    hoursSinceStart: 24,
+    siteId: "raiseready",
+  });
+  assert.equal(p.targetProfitUsd, TARGET_DAILY_PROFIT_USD_PER_BUSINESS);
+  assert.ok(p.progressPercent < 5);
+  assert.equal(p.status, "behind");
+  const dial = aggressivenessDial({
+    progressPercent: p.progressPercent,
+    hoursSinceStart: p.hoursSinceStart,
+  });
+  assert.equal(dial.level, "high");
+  assert.ok(dial.concurrencyMultiplier >= 2);
+  assert.ok(dial.mechanismExplorationMultiplier >= 2);
+  assert.ok(dial.mutationFrequencyMultiplier >= 2);
+  // On-pace baseline case: no scaling.
+  const baseline = aggressivenessDial({ progressPercent: 60, hoursSinceStart: 12 });
+  assert.equal(baseline.level, "low");
+  assert.equal(baseline.concurrencyMultiplier, 1);
+});
+
+test("owner-dialog falls back deterministically without an OpenAI key", async () => {
+  const { handleOwnerMessage } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const r = await handleOwnerMessage({
+      message: "pause turnoverkit and prioritize raiseready",
+      state: {
+        activeBusinesses: [
+          { siteId: "turnoverkit", displayName: "TurnoverKit", revenueUsd: 0 },
+          { siteId: "raiseready", displayName: "RaiseReady", revenueUsd: 12 },
+        ],
+      },
+    });
+    assert.equal(r.source, "deterministic");
+    const ops = r.proposedChanges.map((c) => c.op);
+    assert.ok(ops.includes("pause_business"));
+    assert.ok(ops.includes("prioritize_business"));
+  } finally {
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+  }
+});
+
+test("knowledge-graph transferrableInsights carries lessons across sites", async () => {
+  const { recordOutcomeEdge, transferrableInsights, createFileExperimentStore } =
+    await import("@revenueos/core");
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-kg-transfer-"));
+  const store = createFileExperimentStore(dir);
+  await recordOutcomeEdge({
+    store,
+    edge: {
+      siteId: "listinglift",
+      business: "listinglift",
+      segment: "airbnb_hosts",
+      mechanism: "community_participation",
+      surface: "hostforum",
+      outcome: "commercial",
+      revenueUsd: 89,
+    },
+  });
+  await recordOutcomeEdge({
+    store,
+    edge: {
+      siteId: "listinglift",
+      business: "listinglift",
+      segment: "airbnb_hosts",
+      mechanism: "community_participation",
+      surface: "hostforum",
+      outcome: "intent",
+    },
+  });
+  const insights = await transferrableInsights({
+    store,
+    sourceSiteId: "listinglift",
+    targetSiteId: "turnoverkit",
+    minScore: 4,
+  });
+  assert.ok(insights.length >= 1);
+  assert.equal(insights[0]!.mechanism, "community_participation");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Executor layer: web-search / buyer-discovery / public-outreach / schema /
+// revenue-hunter / LLM strategist wiring
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Install a stub for global fetch that returns a canned OpenAI Responses API
+ * body for the given payload. Restores the original fetch on `restore()`.
+ */
+function stubOpenAIFetch(
+  responseFor: (body: {
+    model: string;
+    input: unknown;
+    text?: unknown;
+    tools?: unknown;
+  }) => unknown,
+) {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    if (typeof url === "string" && url.includes("api.openai.com")) {
+      calls += 1;
+      const body = init?.body ? JSON.parse(init.body as string) : {};
+      const data = responseFor(body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          output_text: typeof data === "string" ? data : JSON.stringify(data),
+          usage: { input_tokens: 10, output_tokens: 40 },
+        }),
+        text: async () => (typeof data === "string" ? data : JSON.stringify(data)),
+      } as any;
+    }
+    return originalFetch(url as any, init as any);
+  }) as any;
+  return {
+    get calls() {
+      return calls;
+    },
+    restore() {
+      globalThis.fetch = originalFetch;
+    },
+  };
+}
+
+test("llm-strategist returns empty list when OPENAI_API_KEY absent", async () => {
+  const { proposeLlmStrategies } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const res = await proposeLlmStrategies({
+      context: {
+        siteId: "raiseready",
+        displayName: "RaiseReady",
+        industry: "saas",
+        products: [
+          { id: "p1", name: "Kit", priceUsd: 29, marginEstimate: 0.9 },
+        ],
+        funnelSteps: [],
+        brandVoice: "",
+        allowedChannels: [],
+        autonomousDailyCapUsd: 0,
+        timezone: "UTC",
+        constraints: [],
+      } as any,
+      observation: {
+        observedAt: new Date().toISOString(),
+        money: {
+          revenueUsd: 0,
+          purchases: 0,
+          awaitingPayment: 0,
+          refunded: 0,
+          estimatedVariableCostUsd: 0,
+          estimatedProfitUsd: 0,
+          mrr: 0,
+          arr: 0,
+        },
+        funnel: {
+          steps: [],
+          largestDrop: null,
+          landingViews: 0,
+          checkouts: 0,
+          fulfillmentFailed: 0,
+        },
+        bottleneck: { level: 1, label: "n/a", detail: "" },
+        openExperimentIds: [],
+        errors: [],
+      } as any,
+      bannedMechanisms: new Set(),
+      bannedPatterns: new Set(),
+      patternPosteriors: {},
+    });
+    assert.equal(res.opportunities.length, 0);
+    assert.equal(res.hypotheses.length, 0);
+    assert.match(res.reason ?? "", /OPENAI_API_KEY/);
+  } finally {
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+  }
+});
+
+test("web-search parses OpenAI response correctly given mocked fetch", async () => {
+  const { queryWebForBuyingIntent } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "sk-test-1234567890123456789012345";
+  const stub = stubOpenAIFetch(() => ({
+    results: [
+      {
+        url: "https://forum.example.com/thread/1",
+        snippet: "how do I raise starting salary",
+        buyerSignal: "high",
+        angle: "point them to the negotiation kit",
+      },
+      {
+        url: "not-a-url",
+        snippet: "ignore me",
+        buyerSignal: "low",
+        angle: "n/a",
+      },
+    ],
+  }));
+  try {
+    const res = await queryWebForBuyingIntent({
+      topic: "salary negotiation",
+      industry: "career",
+      personas: ["knowledge worker"],
+      maxResults: 4,
+    });
+    assert.equal(res.ok, true);
+    assert.equal(res.results.length, 1);
+    assert.equal(res.results[0]!.buyerSignal, "high");
+    assert.match(res.results[0]!.url, /^https:\/\//);
+    assert.ok(stub.calls >= 1, "should call OpenAI at least once");
+  } finally {
+    stub.restore();
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+    else delete process.env.OPENAI_API_KEY;
+  }
+});
+
+test("buyer-discovery filters low-score leads", async () => {
+  const { discoverBuyers, filterLowScoreLeads } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "sk-test-1234567890123456789012345";
+  const stub = stubOpenAIFetch((body) => {
+    const msgs = ((body.input as any[]) ?? []).map((m) =>
+      (m.content ?? []).map((c: any) => c.text ?? "").join(" "),
+    );
+    const asStr = msgs.join(" ");
+    if (body.tools) {
+      // web_search call — return raw results.
+      return {
+        results: [
+          {
+            url: "https://forum.example.com/a",
+            snippet: "buyer surface",
+            buyerSignal: "high",
+            angle: "kit",
+          },
+        ],
+      };
+    }
+    // second (non-tools) call: return leads with mixed scores.
+    return {
+      leads: [
+        {
+          url: "https://forum.example.com/a",
+          surface: "forum thread",
+          segment: "seg1",
+          whyMatch: "buyer asking specifically about the product",
+          reachMethod: "public_form",
+          score: 82,
+        },
+        {
+          url: "https://blog.example.com/b",
+          surface: "blog comment",
+          segment: "seg2",
+          whyMatch: "tangential",
+          reachMethod: "blog_comment",
+          score: 12,
+        },
+      ],
+    };
+    void asStr;
+  });
+  try {
+    const res = await discoverBuyers({
+      topic: "salary",
+      productName: "RaiseReady",
+      productDescription: "salary negotiation kit",
+      minScore: 40,
+      maxLeads: 5,
+    });
+    assert.equal(res.ok, true);
+    assert.equal(res.leads.length, 1);
+    assert.equal(res.leads[0]!.url, "https://forum.example.com/a");
+    // Direct filter helper should agree.
+    const filtered = filterLowScoreLeads(
+      [
+        {
+          url: "https://a.example",
+          surface: "s",
+          segment: "seg",
+          whyMatch: "w",
+          reachMethod: "public_form",
+          score: 30,
+        },
+        {
+          url: "https://b.example",
+          surface: "s",
+          segment: "seg",
+          whyMatch: "w",
+          reachMethod: "public_form",
+          score: 70,
+        },
+      ],
+      40,
+    );
+    assert.equal(filtered.length, 1);
+    assert.equal(filtered[0]!.url, "https://b.example");
+  } finally {
+    stub.restore();
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+    else delete process.env.OPENAI_API_KEY;
+  }
+});
+
+test("public-outreach rejects when LLM says the message is templated", async () => {
+  const { draftOutreachMessage } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "sk-test-1234567890123456789012345";
+  const stub = stubOpenAIFetch(() => ({
+    subject: "Hello",
+    message:
+      "Hi there — we saw your site and thought you'd love our kit. Learn more today.",
+    templated: true,
+    refusalReason: "no personalization signal from surface",
+  }));
+  try {
+    const res = await draftOutreachMessage({
+      lead: {
+        url: "https://forum.example.com/a",
+        surface: "forum",
+        segment: "s",
+        whyMatch: "",
+        reachMethod: "public_form",
+        score: 55,
+      },
+      brand: {
+        displayName: "RaiseReady",
+        supportEmail: "hi@raiseready.example",
+        productName: "Kit",
+        productPriceUsd: 29,
+      },
+      appUrl: "https://raiseready.example",
+    });
+    assert.equal(res.ok, false);
+    assert.equal(res.templated, true);
+    assert.match(res.reason ?? "", /personalization|templated/i);
+  } finally {
+    stub.restore();
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+    else delete process.env.OPENAI_API_KEY;
+  }
+});
+
+test("schema-enrichment produces valid JSON-LD with Product + Offer types", async () => {
+  const { enrichPageSchema } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "sk-test-1234567890123456789012345";
+  const stub = stubOpenAIFetch(() => ({
+    metaTitle: "Best salary negotiation kit — RaiseReady",
+    metaDescription: "Concrete scripts and templates to raise your salary.",
+    faq: [
+      { q: "Does this work remote?", a: "Yes, all templates work over email." },
+      { q: "How long?", a: "Instant download after purchase." },
+      { q: "Refund?", a: "Full refund within 14 days." },
+    ],
+    howto: {
+      name: "Negotiate a raise in 3 steps",
+      steps: [
+        { name: "Prep", text: "Gather comp data" },
+        { name: "Ask", text: "Send the email template" },
+        { name: "Close", text: "Follow the response ladder" },
+      ],
+    },
+  }));
+  try {
+    const res = await enrichPageSchema({
+      brand: {
+        siteId: "raiseready",
+        displayName: "RaiseReady",
+        domain: "raiseready.example",
+        product: {
+          name: "Salary Negotiation Kit",
+          priceUsd: 29,
+          description: "scripts + templates",
+        },
+      },
+      slug: "how-to-negotiate-salary",
+      door: {
+        slug: "how-to-negotiate-salary",
+        title: "How to negotiate a higher salary",
+        intentQuery: "how to negotiate salary",
+        body: "Long body...",
+      },
+      appUrl: "https://raiseready.example",
+    });
+    assert.equal(res.ok, true);
+    // The output is a <script> tag wrapping a JSON array of schema.org nodes.
+    const inner = res.jsonLd.replace(/^<script[^>]*>/, "").replace(/<\/script>$/, "");
+    const nodes = JSON.parse(inner) as Array<Record<string, unknown>>;
+    assert.ok(Array.isArray(nodes));
+    const product = nodes.find((n) => n["@type"] === "Product");
+    assert.ok(product, "must include a Product node");
+    const offer = (product as any).offers;
+    assert.equal(offer["@type"], "Offer");
+    assert.equal(offer.priceCurrency, "USD");
+    assert.equal(String(offer.price), "29.00");
+    const faq = nodes.find((n) => n["@type"] === "FAQPage");
+    assert.ok(faq, "must include a FAQPage node");
+    assert.ok(res.meta.title.length > 0);
+  } finally {
+    stub.restore();
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+    else delete process.env.OPENAI_API_KEY;
+  }
+});
+
+test("revenue-hunter returns a focus site given portfolio snapshots", async () => {
+  const { huntPortfolioRevenue } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "sk-test-1234567890123456789012345";
+  const stub = stubOpenAIFetch(() => ({
+    focusSiteId: "raiseready",
+    mechanismToScale: "direct_outreach",
+    businessesToSuspendThisCycle: ["waitroom"],
+    portfolioInsight:
+      "RaiseReady has real intent signal; scale outreach to close the first sale.",
+  }));
+  try {
+    const snapshots = [
+      {
+        siteId: "raiseready",
+        displayName: "RaiseReady",
+        sequenceIndex: 1,
+        revenueUsd: 0,
+        contributionProfitUsd: 0,
+        purchases: 0,
+        landingViews: 42,
+        activePursuits: 3,
+        waitingForEvidence: 1,
+        claimableBacklog: 5,
+        firstCustomerMode: true,
+        profitPerVisitor: 0,
+        marginalEvProxy: 12,
+        learningValue: 10,
+        suspended: false,
+        bannedPatternCount: 0,
+      },
+      {
+        siteId: "waitroom",
+        displayName: "Waitroom",
+        sequenceIndex: 2,
+        revenueUsd: 0,
+        contributionProfitUsd: 0,
+        purchases: 0,
+        landingViews: 0,
+        activePursuits: 0,
+        waitingForEvidence: 0,
+        claimableBacklog: 0,
+        firstCustomerMode: true,
+        profitPerVisitor: 0,
+        marginalEvProxy: 4,
+        learningValue: 10,
+        suspended: false,
+        bannedPatternCount: 7,
+      },
+    ];
+    const verdict = await huntPortfolioRevenue({ snapshots });
+    assert.equal(verdict.focusSiteId, "raiseready");
+    assert.equal(verdict.mechanismToScale, "direct_outreach");
+    assert.deepEqual(verdict.businessesToSuspendThisCycle, ["waitroom"]);
+    assert.match(verdict.portfolioInsight, /RaiseReady/);
+    assert.ok(stub.calls >= 1);
+  } finally {
+    stub.restore();
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+    else delete process.env.OPENAI_API_KEY;
+  }
+});
+
+test("revenue-hunter falls back deterministically without an OpenAI key", async () => {
+  const { huntPortfolioRevenue } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const verdict = await huntPortfolioRevenue({
+      snapshots: [
+        {
+          siteId: "shopbeacon",
+          displayName: "ShopBeacon",
+          sequenceIndex: 1,
+          revenueUsd: 0,
+          contributionProfitUsd: 0,
+          purchases: 0,
+          landingViews: 60,
+          activePursuits: 2,
+          waitingForEvidence: 0,
+          claimableBacklog: 0,
+          firstCustomerMode: true,
+          profitPerVisitor: 0.05,
+          marginalEvProxy: 10,
+          learningValue: 10,
+          suspended: false,
+          bannedPatternCount: 0,
+        },
+        {
+          siteId: "bidbinder",
+          displayName: "BidBinder",
+          sequenceIndex: 2,
+          revenueUsd: 0,
+          contributionProfitUsd: 0,
+          purchases: 0,
+          landingViews: 0,
+          activePursuits: 0,
+          waitingForEvidence: 0,
+          claimableBacklog: 0,
+          firstCustomerMode: true,
+          profitPerVisitor: 0,
+          marginalEvProxy: 2,
+          learningValue: 10,
+          suspended: false,
+          bannedPatternCount: 0,
+        },
+      ],
+    });
+    assert.equal(verdict.focusSiteId, "shopbeacon");
+    assert.match(verdict.reason ?? "", /OPENAI_API_KEY|fallback/);
+  } finally {
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+  }
+});

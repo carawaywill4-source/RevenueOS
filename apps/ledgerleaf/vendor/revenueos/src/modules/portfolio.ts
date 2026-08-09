@@ -6,15 +6,21 @@ import type {
 /**
  * Portfolio operator: exploit winners, keep controlled exploration on weak/new.
  * Does not kill businesses — reorders attention.
+ *
+ * Sites with owner blockers ("suspended") drop to the bottom regardless of
+ * marginal EV — their acquisition budget is waste until the owner unblocks
+ * them. Sites with more banned mechanisms are also demoted: those businesses
+ * have proven RevenueOS cannot autonomously acquire customers there.
  */
 export function rankPortfolioEffort(
   businesses: PortfolioBusinessSnapshot[],
 ): PortfolioAllocation {
   const notes: string[] = [];
   const scored = businesses.map((b) => {
+    const suspended = Boolean(b.suspended);
+    const bannedCount = b.bannedPatternCount ?? 0;
     const hasRevenue = b.contributionProfitUsd > 0 || b.purchases > 0;
     const traction = hasRevenue ? 1.6 : 1;
-    // Keep exploring zero-customer sites, but not more than winners.
     const exploreFloor = b.firstCustomerMode ? 1.1 : 1;
     const intentSignal =
       b.landingViews > 0 && b.purchases === 0
@@ -22,6 +28,11 @@ export function rankPortfolioEffort(
         : 1;
     const starving =
       b.claimableBacklog === 0 && b.contributionProfitUsd < 10 ? 1.2 : 1;
+    // Each banned pattern reduces the site's remaining unbanned surface.
+    const mechanismPenalty =
+      bannedCount === 0 ? 1 : Math.max(0.25, 1 - bannedCount * 0.15);
+    // Suspended = essentially zero — do not spend autonomous budget here.
+    const suspensionPenalty = suspended ? 0.01 : 1;
     const score =
       (b.marginalEvProxy * 2 +
         b.learningValue +
@@ -31,15 +42,23 @@ export function rankPortfolioEffort(
       traction *
       exploreFloor *
       intentSignal *
-      starving;
-    return { siteId: b.siteId, score, hasRevenue, firstCustomerMode: b.firstCustomerMode };
+      starving *
+      mechanismPenalty *
+      suspensionPenalty;
+    return {
+      siteId: b.siteId,
+      score,
+      hasRevenue,
+      firstCustomerMode: b.firstCustomerMode,
+      suspended,
+    };
   });
   scored.sort((a, b) => b.score - a.score);
 
   // Controlled exploration: ensure at least 30% of top-N slots are zero-customer
   // businesses when any exist, so winners don't starve discovery.
-  const winners = scored.filter((s) => s.hasRevenue);
-  const explorers = scored.filter((s) => s.firstCustomerMode);
+  const winners = scored.filter((s) => s.hasRevenue && !s.suspended);
+  const explorers = scored.filter((s) => s.firstCustomerMode && !s.suspended);
   const effortOrder: string[] = [];
   let wi = 0;
   let ei = 0;
@@ -108,6 +127,8 @@ export function snapshotFromMetrics(input: {
   activePursuits: number;
   waitingForEvidence: number;
   claimableBacklog: number;
+  suspended?: boolean;
+  bannedPatternCount?: number;
 }): PortfolioBusinessSnapshot {
   const views = Math.max(input.landingViews, 0);
   const profitPerVisitor =

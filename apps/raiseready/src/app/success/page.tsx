@@ -1,6 +1,8 @@
 import { getStripe } from "@/lib/stripe";
 import { getPurchaseByToken, recordPurchase, newDownloadToken } from "@/lib/purchases";
 import { BRAND } from "@/lib/brand";
+import { ingestBeaconEvent } from "@revenueos/core";
+import { createAdapter } from "@/revenueos/adapter";
 
 export default async function SuccessPage({
   searchParams,
@@ -23,6 +25,25 @@ export default async function SuccessPage({
         createdAt: new Date().toISOString(),
         downloadToken: token,
       });
+      // Server-side beacon so the commercial event is captured even if the
+      // client never runs the script (bots, disabled JS, etc).
+      try {
+        const adapter = createAdapter();
+        await ingestBeaconEvent({
+          event: {
+            kind: "checkout_complete",
+            siteId: adapter.id,
+            url: `/success?session_id=${session.id}`,
+            path: "/success",
+            ua: "server",
+            meta: {
+              amountUsd: (session.amount_total ?? 0) / 100,
+              stripeSessionId: session.id,
+            },
+          },
+          store: adapter.getExperimentStore(),
+        });
+      } catch {}
     }
   }
   return (

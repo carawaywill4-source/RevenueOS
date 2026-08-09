@@ -625,6 +625,10 @@ export type PortfolioBusinessSnapshot = {
   profitPerVisitor: number;
   marginalEvProxy: number;
   learningValue: number;
+  /** Owner-blocker suspension state — do not spend autonomous budget here. */
+  suspended?: boolean;
+  /** Number of banned patterns for this site (surface exhaustion signal). */
+  bannedPatternCount?: number;
 };
 
 export type PortfolioAllocation = {
@@ -911,7 +915,8 @@ export type PursuitEventType =
   | "learned"
   | "replenished"
   | "failed"
-  | "done";
+  | "done"
+  | "beacon";
 
 /** Durable organic revenue work item — waiting jobs do not idle the operator. */
 export type PursuitJob = {

@@ -49,6 +49,15 @@ export * from "./modules/pursuit-engine";
 export * from "./modules/pursuit-plan";
 export * from "./modules/first-customer-mode";
 export * from "./modules/stagnation";
+export * from "./modules/action-class";
+export * from "./modules/pattern-posterior";
+export * from "./modules/mechanism-diversity";
+export * from "./modules/business-suspension";
+export * from "./modules/revenue-priority";
+export * from "./modules/beacon";
+export * from "./modules/mechanism-bandit";
+export * from "./modules/conversion-lab";
+export * from "./modules/concrete-escalations";
 export * from "./modules/portfolio";
 export * from "./modules/portfolio-digest";
 export * from "./modules/permissionless";
@@ -62,3 +71,22 @@ export * from "./memory/industry";
 export * from "./memory/site";
 export * from "./memory/portable";
 export * from "./memory/similarity";
+export * from "./modules/knowledge-graph";
+export * from "./modules/attribution-ml";
+export {
+  detectAnomalies as detectStreamAnomalies,
+  type StreamAnomaly,
+  type StreamAnomalyKind,
+} from "./modules/anomaly-detector";
+export * from "./modules/self-improving-strategist";
+export * from "./modules/ltv-cac-model";
+export * from "./modules/compliance-guard";
+export * from "./modules/owner-dialog";
+export * from "./modules/target-tracking";
+export * from "./modules/openai-client";
+export * from "./modules/llm-strategist";
+export * from "./modules/web-search";
+export * from "./modules/buyer-discovery";
+export * from "./modules/public-outreach";
+export * from "./modules/schema-enrichment";
+export * from "./modules/revenue-hunter";

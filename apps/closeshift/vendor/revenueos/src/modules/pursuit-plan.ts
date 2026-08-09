@@ -50,6 +50,32 @@ import {
   mutateOpportunitiesAfterStagnation,
   type StagnationVerdict,
 } from "./stagnation";
+import {
+  applyPatternGate,
+  buildPatternPosteriors,
+  computePatternGate,
+  type PatternGate,
+  type PatternPosteriorMap,
+} from "./pattern-posterior";
+import { proposeLlmStrategies } from "./llm-strategist";
+import { enforceMechanismDiversity } from "./mechanism-diversity";
+import {
+  applyRevenuePriority,
+  EMPTY_PORTFOLIO_SIGNAL,
+  type PortfolioSignal,
+} from "./revenue-priority";
+import {
+  applyMechanismBandit,
+  buildMechanismArms,
+  sampleMechanismRanking,
+  type MechanismSample,
+} from "./mechanism-bandit";
+import { proposeConversionExperiments } from "./conversion-lab";
+import { proposeUnlocksForBannedMechanisms } from "./concrete-escalations";
+import {
+  evaluateBusinessSuspension,
+  type SuspensionVerdict,
+} from "./business-suspension";
 import { filterTransferableLessons } from "../memory/similarity";
 import { newId } from "../ledger/store";
 import type {
@@ -101,6 +127,17 @@ export type PlanAndEnqueueResult = {
   firstCustomerMode: FirstCustomerMode;
   replenishedEmptyQueue: boolean;
   stagnation?: StagnationVerdict;
+  patternPosteriors?: PatternPosteriorMap;
+  patternGate?: PatternGate;
+  suspension?: SuspensionVerdict;
+  mechanismsExhausted?: boolean;
+  mechanismBandit?: {
+    ranking: Array<{ mechanism: string; sample: number }>;
+    best: string | null;
+  };
+  unlockProposals?: ReturnType<typeof proposeUnlocksForBannedMechanisms>;
+  /** Portfolio insight sentence returned by the LLM strategist this cycle. */
+  llmInsight?: string;
 };
 
 /**
@@ -109,7 +146,15 @@ export type PlanAndEnqueueResult = {
  */
 export async function planAndEnqueuePursuits(
   adapter: SiteAdapter,
-  opts: { maxEnqueue?: number; now?: Date } = {},
+  opts: {
+    maxEnqueue?: number;
+    now?: Date;
+    /**
+     * Cross-portfolio commercial signal aggregated from OTHER sites — the
+     * revenue-priority scorer uses this to transfer proven mechanisms.
+     */
+    portfolioSignal?: PortfolioSignal;
+  } = {},
 ): Promise<PlanAndEnqueueResult> {
   const now = opts.now ?? new Date();
   const store = adapter.getExperimentStore();
@@ -270,13 +315,103 @@ export async function planAndEnqueuePursuits(
     observation,
   });
 
+  // Suspension: owner-blocked businesses do not consume experimentation budget.
+  const suspension = evaluateBusinessSuspension({ context });
+
   // Stagnation: identical zero-result cycles must mutate strategy, not repeat.
+  // Look back far enough to reach the ATTEMPT budget under fast-cycle timing.
   const recentEvents = store.listPursuitEvents
     ? await store.listPursuitEvents(context.siteId, {
-        since: new Date(now.getTime() - 3 * 3_600_000).toISOString(),
-        limit: 240,
+        since: new Date(now.getTime() - 12 * 3_600_000).toISOString(),
+        limit: 500,
       })
     : [];
+
+  // Pattern posteriors: any pattern that has attempted PATTERN_ATTEMPT_BUDGET
+  // times with zero verified_exposure/intent/commercial signal is BANNED and
+  // cannot be re-enqueued. This is a law, not a preference.
+  const patternPosteriors = buildPatternPosteriors({
+    events: recentEvents,
+    observation,
+    now,
+  });
+  const patternGate = computePatternGate(patternPosteriors);
+
+  // LLM strategist — propose new acquisition hypotheses grounded in the
+  // current state, pattern posteriors, and pattern gate. Guarded so a network
+  // hiccup can never break the planner: on any failure we fall back to the
+  // static catalog. Injected BEFORE the pattern gate so the gate uniformly
+  // filters both static and LLM-proposed opportunities.
+  let llmInsight: string | undefined;
+  try {
+    const llmStrategy = await proposeLlmStrategies({
+      context,
+      observation,
+      bannedMechanisms: patternGate.bannedMechanisms,
+      bannedPatterns: patternGate.bannedPatterns,
+      patternPosteriors,
+      portfolioSignal: opts.portfolioSignal,
+      now,
+    });
+    if (llmStrategy.opportunities.length > 0) {
+      opportunities = [...opportunities, ...llmStrategy.opportunities].sort(
+        (a, b) => b.score - a.score,
+      );
+    }
+    llmInsight = llmStrategy.portfolioInsight;
+  } catch {
+    // LLM path is best-effort; the deterministic path still runs.
+  }
+
+  if (patternGate.bannedPatterns.size > 0) {
+    opportunities = applyPatternGate({ opportunities, gate: patternGate });
+  }
+
+  // Revenue-priority scoring: rank by evidence of contribution to revenue.
+  // Own commercial > own intent > own verified_exposure > portfolio commercial
+  // transfer > everything else. Production activity earns ZERO boost. This is
+  // the single most important line separating "activity" from "pursuit".
+  opportunities = applyRevenuePriority({
+    opportunities,
+    ownPosteriors: patternPosteriors,
+    portfolioSignal: opts.portfolioSignal ?? EMPTY_PORTFOLIO_SIGNAL,
+    bannedMechanisms: patternGate.bannedMechanisms,
+  });
+
+  // Conversion Lab: once verified traffic exists but no purchases, publishing
+  // more content is strictly wrong. Inject offer/CTA/urgency/guarantee tests.
+  const conversionOpps = proposeConversionExperiments({ observation });
+  if (conversionOpps.length > 0) {
+    // Reuse the existing governor scoring by treating conv opps as scored
+    // opportunities with high base score to jump ahead.
+    for (const co of conversionOpps) {
+      opportunities.push({ ...co, score: 100 });
+    }
+    opportunities.sort((a, b) => b.score - a.score);
+  }
+
+  // Thompson-sampling mechanism bandit — makes each cycle GENUINELY different
+  // by sampling from a posterior over mechanism classes, so we don't keep
+  // running the same ordering every hour.
+  const arms = buildMechanismArms({
+    ownPosteriors: patternPosteriors,
+    portfolioSignal: opts.portfolioSignal,
+    bannedMechanisms: patternGate.bannedMechanisms,
+  });
+  const banditSample = sampleMechanismRanking({ arms });
+  opportunities = applyMechanismBandit({
+    opportunities,
+    sample: banditSample,
+  });
+
+  // Force mechanism diversity — a failed mechanism family cannot be replaced by
+  // another opportunity from the same family.
+  opportunities = enforceMechanismDiversity({
+    opportunities,
+    bannedMechanisms: patternGate.bannedMechanisms,
+    maxPerMechanism: 3,
+  });
+
   const priorFingerprints = fingerprintsFromEvents(recentEvents, {
     purchases: observation.money.purchases,
     revenueUsd: observation.money.revenueUsd,
@@ -363,19 +498,72 @@ export async function planAndEnqueuePursuits(
     existing = released;
   }
 
-  const enqueued = enqueuePursuitsFromOpportunities({
-    siteId: context.siteId,
-    opportunities,
-    hypotheses,
-    existing,
-    maxEnqueue:
-      opts.maxEnqueue ??
-      Math.max(
-        replenishedEmptyQueue ? 14 : 8,
-        ambition.concurrentBets * 2,
-      ),
-    now,
-  });
+  // Suspended businesses do not enqueue any new autonomous work — their owner
+  // blocker makes further production actions waste. The scheduler still ticks
+  // to close waiting jobs and honor stagnation cleanup.
+  const enqueued = suspension.suspended
+    ? []
+    : enqueuePursuitsFromOpportunities({
+        siteId: context.siteId,
+        opportunities,
+        hypotheses,
+        existing,
+        maxEnqueue:
+          opts.maxEnqueue ??
+          Math.max(
+            replenishedEmptyQueue ? 14 : 8,
+            ambition.concurrentBets * 2,
+          ),
+        now,
+      });
+
+  // Escalate: if we have opportunities but none survive the pattern gate +
+  // mechanism cap, autonomous acquisition on this site is exhausted. Instead
+  // of a soft "keep trying," emit a concrete list of provider unlocks with
+  // specific costs and expected revenue impact.
+  const mechanismsExhausted =
+    !suspension.suspended &&
+    enqueued.length === 0 &&
+    opportunities.length === 0 &&
+    patternGate.bannedPatterns.size > 0 &&
+    store.appendPursuitEvent !== undefined;
+  let unlockProposals:
+    | ReturnType<typeof proposeUnlocksForBannedMechanisms>
+    | undefined;
+  if (mechanismsExhausted) {
+    unlockProposals = proposeUnlocksForBannedMechanisms({
+      bannedMechanisms: patternGate.bannedMechanisms,
+      siteId: context.siteId,
+      observation: {
+        landingViews: observation.funnel.landingViews,
+        purchases: observation.money.purchases,
+      },
+    });
+    if (store.appendPursuitEvent) {
+      await store.appendPursuitEvent({
+        id: newId("pevt"),
+        pursuitId: "mechanisms-exhausted",
+        siteId: context.siteId,
+        eventType: "failed",
+        detail: {
+          reason: "permissionless_reach_exhausted",
+          bannedPatterns: [...patternGate.bannedPatterns],
+          bannedMechanisms: [...patternGate.bannedMechanisms],
+          proposedUnlocks: unlockProposals.map((u) => ({
+            mechanism: u.mechanism,
+            desiredAction: u.desiredAction,
+            expectedValueUsd: u.expectedValueUsd,
+            providers: u.providers.map((p) => ({
+              name: p.name,
+              costPerMonthUsd: p.costPerMonthUsd,
+              setupTime: p.setupTime,
+            })),
+          })),
+        },
+        createdAt: now.toISOString(),
+      });
+    }
+  }
 
   for (const job of enqueued) {
     if (store.savePursuit) await store.savePursuit(job);
@@ -388,6 +576,7 @@ export async function planAndEnqueuePursuits(
         detail: {
           title: job.title,
           actionType: job.actionType,
+          patternKey: job.patternKey,
           firstCustomerMode: firstCustomerMode.active,
           replenish: replenishedEmptyQueue,
         },
@@ -405,6 +594,19 @@ export async function planAndEnqueuePursuits(
     firstCustomerMode,
     replenishedEmptyQueue,
     stagnation,
+    patternPosteriors,
+    patternGate,
+    suspension,
+    mechanismsExhausted,
+    mechanismBandit: {
+      ranking: banditSample.ranking.map((r) => ({
+        mechanism: r.mechanism,
+        sample: Number(r.sample.toFixed(3)),
+      })),
+      best: banditSample.best,
+    },
+    unlockProposals,
+    llmInsight,
   };
 }
 
@@ -420,6 +622,8 @@ export async function runPursuitTick(
     maxEnqueue?: number;
     skipEnqueue?: boolean;
     now?: Date;
+    /** Cross-portfolio commercial signal from other sites — transfer boost. */
+    portfolioSignal?: PortfolioSignal;
   } = {},
 ): Promise<{
   plan: PlanAndEnqueueResult;
@@ -437,11 +641,15 @@ export async function runPursuitTick(
       firstCustomerMode: evaluateFirstCustomerMode(observation),
       replenishedEmptyQueue: false,
       stagnation: undefined,
+      patternPosteriors: undefined,
+      patternGate: undefined,
+      suspension: undefined,
     };
   } else {
     plan = await planAndEnqueuePursuits(adapter, {
       maxEnqueue: opts.maxEnqueue,
       now: opts.now,
+      portfolioSignal: opts.portfolioSignal,
     });
   }
 

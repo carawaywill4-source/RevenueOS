@@ -305,10 +305,13 @@ export async function advancePursuit(input: {
     }
 
     const result = await adapter.execute(action);
+    const { classifyExecutionActionClass } = await import("./action-class");
     await recordEvent(store, job, "executed", {
       ok: result.ok,
       detail: result.detail,
       actionType: action.type,
+      patternKey: job.patternKey,
+      actionClass: classifyExecutionActionClass(action.type),
     });
 
     if (store.saveExposure) {

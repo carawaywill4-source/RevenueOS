@@ -48,22 +48,37 @@ export async function GET(request: Request) {
     firstCustomerMode: plan.firstCustomerMode.active,
     firstCustomerStage: plan.firstCustomerMode.stage,
   });
+  const suspended = Boolean(plan.suspension?.suspended);
+  const mechanismsExhausted = Boolean(plan.mechanismsExhausted);
+  const bannedPatterns = plan.patternGate
+    ? [...plan.patternGate.bannedPatterns]
+    : [];
+  const bannedMechanisms = plan.patternGate
+    ? [...plan.patternGate.bannedMechanisms]
+    : [];
+
   const cycleFailed =
-    durableLedger === "ephemeral" ||
-    (plan.firstCustomerMode.active &&
-      report.actionsCompleted === 0 &&
-      drain.executed === 0) ||
-    Boolean(plan.stagnation?.systemFailure);
+    !suspended &&
+    (durableLedger === "ephemeral" ||
+      (plan.firstCustomerMode.active &&
+        report.actionsCompleted === 0 &&
+        drain.executed === 0) ||
+      Boolean(plan.stagnation?.systemFailure));
 
   return NextResponse.json({
     ok: !cycleFailed,
     site: adapter.id,
     mode: "persistent_pursuit",
     durableLedger,
+    suspended,
+    suspensionReasons: plan.suspension?.reasons ?? [],
+    mechanismsExhausted,
     firstCustomerMode: plan.firstCustomerMode.active,
     firstCustomerStage: plan.firstCustomerMode.stage,
     replenishedEmptyQueue: plan.replenishedEmptyQueue,
     enqueued: plan.enqueuedCount,
+    bannedPatterns,
+    bannedMechanisms,
     stagnation: plan.stagnation
       ? {
           stagnant: plan.stagnation.stagnant,
@@ -75,11 +90,15 @@ export async function GET(request: Request) {
       : null,
     drain,
     actionsCompleted: report.actionsCompleted,
-    cycleStatus: cycleFailed
-      ? plan.stagnation?.systemFailure
-        ? "stagnant"
-        : "failed"
-      : "ok",
+    cycleStatus: suspended
+      ? "suspended"
+      : mechanismsExhausted
+        ? "mechanisms_exhausted"
+        : cycleFailed
+          ? plan.stagnation?.systemFailure
+            ? "stagnant"
+            : "failed"
+          : "ok",
     ownerReportPreview: formatOwnerReport(report).slice(0, 500),
   });
 }

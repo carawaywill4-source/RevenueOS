@@ -12,6 +12,14 @@ import {
   type IntentDoor,
 } from "./permissionless-doors";
 import { listPublishedDoors, pingIndexNow, publishNextDiscoveryDoor } from "./operator-limbs";
+import {
+  queryWebForBuyingIntent,
+  queryCompetitors,
+  discoverBuyers,
+  executePublicOutreach,
+  enrichPageSchema,
+  type DurableBuyerLead,
+} from "@revenueos/core";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -60,6 +68,13 @@ export function listPermissionlessSafeActions(): SafeAction[] {
     { type: "refresh_discovery_door", risk: "safe", description: "Re-distribute door" },
     { type: "feature_product", risk: "safe", description: "Feature primary offer" },
     { type: "market_research", risk: "safe", description: "Public web research" },
+    { type: "web_research", risk: "safe", description: "LLM+web buyer/competitor scan" },
+    { type: "buyer_discovery", risk: "safe", description: "Find external surfaces where buyers gather" },
+    { type: "public_form_outreach", risk: "safe", description: "Personalized public form submission" },
+    { type: "directory_submit", risk: "safe", description: "Public directory listing submission" },
+    { type: "syndicate_content", risk: "safe", description: "Publish content to public syndication hubs" },
+    { type: "schema_enrichment", risk: "safe", description: "Generate JSON-LD (Product/FAQ/HowTo) for topic pages" },
+    { type: "llm_hypothesize", risk: "safe", description: "LLM strategist proposes acquisition hypotheses" },
   ];
 }
 
@@ -165,6 +180,59 @@ async function pingPublicSitemaps(appUrl: string) {
   return { ok: true, detail: `Sitemap ping ${sitemap} → ${results.join(", ")}` };
 }
 
+async function buyerLeadsPath(rootDir: string) {
+  return path.join(dataRoot(rootDir), "buyer-leads.json");
+}
+
+async function loadBuyerLeads(rootDir: string): Promise<DurableBuyerLead[]> {
+  try {
+    const raw = await readFile(await buyerLeadsPath(rootDir), "utf8");
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? (arr as DurableBuyerLead[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveBuyerLeads(rootDir: string, leads: DurableBuyerLead[]) {
+  const file = await buyerLeadsPath(rootDir);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify(leads, null, 2));
+}
+
+async function schemaEnrichmentPath(rootDir: string, slug: string) {
+  return path.join(dataRoot(rootDir), "schema", `${slug}.json`);
+}
+
+async function saveSchemaEnrichment(input: {
+  rootDir: string;
+  slug: string;
+  jsonLd: string;
+  meta: { title: string; description: string };
+}) {
+  const file = await schemaEnrichmentPath(input.rootDir, input.slug);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(
+    file,
+    JSON.stringify({ jsonLd: input.jsonLd, meta: input.meta }, null, 2),
+  );
+}
+
+export async function readSchemaEnrichment(
+  rootDir: string,
+  slug: string,
+): Promise<{ jsonLd: string; meta: { title: string; description: string } } | null> {
+  try {
+    const raw = await readFile(await schemaEnrichmentPath(rootDir, slug), "utf8");
+    return JSON.parse(raw) as {
+      jsonLd: string;
+      meta: { title: string; description: string };
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function distributeAll(input: {
   brand: BrandConfig;
   appUrl: string;
@@ -235,6 +303,202 @@ export async function executePermissionlessAction(input: {
       return {
         ok: true,
         detail: `Featured ${brand.product.name} at $${brand.product.priceUsd} on owned surfaces`,
+      };
+    case "web_research": {
+      const q = await queryWebForBuyingIntent({
+        topic: brand.product.intentKeywords.slice(0, 3).join(" "),
+        industry: brand.industry,
+        personas: [brand.product.audience],
+        maxResults: 6,
+      });
+      if (!q.ok) {
+        return { ok: false, detail: `web_research skipped: ${q.reason ?? "unknown"}` };
+      }
+      const c = await queryCompetitors({
+        product: brand.product.name,
+        priceUsd: brand.product.priceUsd,
+        industry: brand.industry,
+      });
+      const outFile = path.join(dataRoot(rootDir), "web-research-latest.json");
+      await mkdir(path.dirname(outFile), { recursive: true });
+      await writeFile(
+        outFile,
+        JSON.stringify(
+          {
+            at: new Date().toISOString(),
+            buyingIntent: q.results,
+            competitors: c.ok ? c.competitors : [],
+            competitorReason: c.ok ? undefined : c.reason,
+          },
+          null,
+          2,
+        ),
+      );
+      return {
+        ok: true,
+        detail: `web_research: ${q.results.length} buying-intent surfaces, ${c.ok ? c.competitors.length : 0} competitors → ${outFile}`,
+      };
+    }
+    case "buyer_discovery": {
+      const res = await discoverBuyers({
+        topic: brand.product.intentKeywords.slice(0, 3).join(" "),
+        industry: brand.industry,
+        personas: [brand.product.audience],
+        productName: brand.product.name,
+        productDescription: brand.product.description,
+        maxLeads: 8,
+        minScore: 40,
+      });
+      if (!res.ok) {
+        return { ok: false, detail: `buyer_discovery skipped: ${res.reason ?? "unknown"}` };
+      }
+      const existing = await loadBuyerLeads(rootDir);
+      const merged = [...res.leads, ...existing].reduce<DurableBuyerLead[]>(
+        (acc, l) => {
+          if (acc.some((x) => x.url === l.url)) return acc;
+          acc.push(l);
+          return acc;
+        },
+        [],
+      );
+      await saveBuyerLeads(rootDir, merged.slice(0, 200));
+      return {
+        ok: true,
+        detail: `buyer_discovery: +${res.leads.length} new leads (${merged.length} total, ≥40 score)`,
+      };
+    }
+    case "public_form_outreach": {
+      const leads = await loadBuyerLeads(rootDir);
+      const next = leads.find((l) => l.reachMethod === "public_form" || l.reachMethod === "blog_comment");
+      if (!next) {
+        return { ok: false, detail: "public_form_outreach: no buyer leads stored yet" };
+      }
+      const result = await executePublicOutreach({
+        lead: next,
+        brand: {
+          displayName: brand.displayName,
+          supportEmail: brand.supportEmail,
+          productName: brand.product.name,
+          productPriceUsd: brand.product.priceUsd,
+          productDescription: brand.product.description,
+          brandVoice: brand.brandVoice,
+        },
+        appUrl,
+      });
+      const remaining = leads.filter((l) => l.url !== next.url);
+      await saveBuyerLeads(rootDir, remaining);
+      if (!result.ok) {
+        return { ok: false, detail: `public_form_outreach failed: ${result.detail}` };
+      }
+      return {
+        ok: true,
+        detail: `public_form_outreach: ${result.detail}`,
+        url: result.distributionEvent?.url,
+      };
+    }
+    case "directory_submit": {
+      const leads = await loadBuyerLeads(rootDir);
+      const next = leads.find((l) => l.reachMethod === "directory_submit");
+      if (!next) {
+        return { ok: false, detail: "directory_submit: no directory leads stored" };
+      }
+      const result = await executePublicOutreach({
+        lead: next,
+        brand: {
+          displayName: brand.displayName,
+          supportEmail: brand.supportEmail,
+          productName: brand.product.name,
+          productPriceUsd: brand.product.priceUsd,
+          productDescription: brand.product.description,
+          brandVoice: brand.brandVoice,
+        },
+        appUrl,
+      });
+      const remaining = leads.filter((l) => l.url !== next.url);
+      await saveBuyerLeads(rootDir, remaining);
+      if (!result.ok) {
+        return { ok: false, detail: `directory_submit failed: ${result.detail}` };
+      }
+      return {
+        ok: true,
+        detail: `directory_submit: ${result.detail}`,
+        url: result.distributionEvent?.url,
+      };
+    }
+    case "syndicate_content": {
+      const leads = await loadBuyerLeads(rootDir);
+      const next = leads.find((l) => l.reachMethod === "newsletter_submit");
+      if (!next) {
+        return { ok: false, detail: "syndicate_content: no newsletter leads stored" };
+      }
+      const result = await executePublicOutreach({
+        lead: next,
+        brand: {
+          displayName: brand.displayName,
+          supportEmail: brand.supportEmail,
+          productName: brand.product.name,
+          productPriceUsd: brand.product.priceUsd,
+          productDescription: brand.product.description,
+          brandVoice: brand.brandVoice,
+        },
+        appUrl,
+      });
+      const remaining = leads.filter((l) => l.url !== next.url);
+      await saveBuyerLeads(rootDir, remaining);
+      if (!result.ok) {
+        return { ok: false, detail: `syndicate_content failed: ${result.detail}` };
+      }
+      return {
+        ok: true,
+        detail: `syndicate_content: ${result.detail}`,
+        url: result.distributionEvent?.url,
+      };
+    }
+    case "schema_enrichment": {
+      const doors = expandPermissionlessDoors(brand);
+      const cursor = await loadCursor(rootDir);
+      const door = doors[cursor.nextIndex % Math.max(doors.length, 1)];
+      if (!door) {
+        return { ok: false, detail: "schema_enrichment: no doors to enrich" };
+      }
+      const res = await enrichPageSchema({
+        brand: {
+          siteId: brand.siteId,
+          displayName: brand.displayName,
+          domain: brand.domain,
+          supportEmail: brand.supportEmail,
+          product: {
+            name: brand.product.name,
+            priceUsd: brand.product.priceUsd,
+            description: brand.product.description,
+            bullets: brand.product.bullets,
+          },
+        },
+        slug: door.slug,
+        door: {
+          slug: door.slug,
+          title: door.title,
+          intentQuery: door.intentQuery,
+          body: door.body,
+        },
+        appUrl,
+      });
+      await saveSchemaEnrichment({
+        rootDir,
+        slug: door.slug,
+        jsonLd: res.jsonLd,
+        meta: res.meta,
+      });
+      return {
+        ok: true,
+        detail: `schema_enrichment: ${door.slug} → JSON-LD + meta persisted${res.reason ? " (" + res.reason + ")" : ""}`,
+        url: `${appUrl.replace(/\/$/, "")}/topics/${door.slug}`,
+      };
+    }
+    case "llm_hypothesize":
+      return {
+        ok: true,
+        detail: "llm_hypothesize is proposed via strategist; executor is a no-op ack",
       };
     default:
       return { ok: false, detail: `Unsupported permissionless action ${actionType}` };

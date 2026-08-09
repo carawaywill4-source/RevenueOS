@@ -3,6 +3,7 @@ import {
   buildFunnel,
   largestDrop,
   moneyFromCounts,
+  summarizeBeaconEvents,
   type SiteAdapter,
   type SafeAction,
 } from "@revenueos/core";
@@ -73,11 +74,26 @@ export function createAdapter(): SiteAdapter {
       const stats = await purchaseStats();
       const fees = stats.revenueUsd * 0.029 + stats.purchases * 0.3;
       const profit = Math.max(0, stats.revenueUsd - fees);
-      // Do not fabricate funnel traffic — fake views force FCM into the wrong
-      // stage and make IndexNow loops look like qualified-visit progress.
+      // Read real signal from the first-party beacon ledger. If the beacon has
+      // recorded page_view / cta_click / checkout_start events, those are
+      // authoritative — no fabrication.
+      let beaconViews = 0;
+      let beaconIntents = 0;
+      try {
+        if (store.listPursuitEvents) {
+          const windowStart = new Date(Date.now() - 3_600_000).toISOString();
+          const beaconEvents = await store.listPursuitEvents(BRAND.siteId, {
+            since: windowStart,
+            limit: 500,
+          });
+          const summary = summarizeBeaconEvents(beaconEvents);
+          beaconViews = summary.verifiedExposures;
+          beaconIntents = summary.intents;
+        }
+      } catch {}
       const events = {
-        landing_view: 0,
-        checkout_started: 0,
+        landing_view: beaconViews,
+        checkout_started: beaconIntents,
         purchase_completed: stats.purchases,
       };
       const steps = buildFunnel(
