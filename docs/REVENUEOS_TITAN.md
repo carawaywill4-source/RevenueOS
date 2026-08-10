@@ -83,6 +83,18 @@ Fails if TITAN redesigns, spawns businesses, changes price from two visitors, id
 cd packages/revenueos && npx tsx --test src/titan/titan.test.ts
 ```
 
+## CORTEX (epistemic substrate)
+
+See [`REVENUEOS_TITAN_CORTEX.md`](REVENUEOS_TITAN_CORTEX.md) and [`TITAN_CORTEX_INTEGRATION_MAP.md`](TITAN_CORTEX_INTEGRATION_MAP.md).
+
+CORTEX preserves FACT ≠ BELIEF ≠ FORECAST, compiles smallest high-value context, detects knowledge gaps, and advises TITAN without becoming a second CEO.
+
+## Paid Capital Engine (capability only — live OFF)
+
+See [`REVENUEOS_PAID_CAPITAL.md`](REVENUEOS_PAID_CAPITAL.md).
+
+Portfolio-wide ≤5% of eligible settled capital/day is a **ceiling**, never a target. Stripe is treasury evidence, not an ad wallet. APEX proposes; TITAN’s deterministic governor authorizes; adapters refuse live spend until the owner explicitly enables live execution and credentials are connected.
+
 ## Definition of success
 
 Not “actions completed.” Outcomes, evidence, and learning velocity. Every month RevenueOS must become better at operating businesses — not merely busier.

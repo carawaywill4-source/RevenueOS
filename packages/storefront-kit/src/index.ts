@@ -5,3 +5,4 @@ export * from "./canonical-urls";
 export * from "./operator-limbs";
 export * from "./permissionless-doors";
 export * from "./permissionless-operator";
+export * from "./design-themes";

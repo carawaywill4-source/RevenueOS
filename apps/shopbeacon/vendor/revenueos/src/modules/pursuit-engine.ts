@@ -264,6 +264,36 @@ export async function advancePursuit(input: {
       return job;
     }
 
+    // OpenAI degraded: skip generative limbs without burning the job as FAILED
+    // forever — cool and retry later; non-LLM commercial work continues.
+    try {
+      const { isOpenAIActionDegraded, getOpenAICapabilityStatus } = await import(
+        "./openai-client"
+      );
+      if (job.actionType && isOpenAIActionDegraded(job.actionType)) {
+        const cap = getOpenAICapabilityStatus();
+        const coolMs = 15 * 60_000;
+        job = {
+          ...job,
+          state: "EXECUTE",
+          lastError: `DEGRADED openai:${cap.code} — ${cap.note}`,
+          notBefore: new Date(now.getTime() + coolMs).toISOString(),
+          leaseOwner: null,
+          leaseUntil: null,
+          workSummary: `Deferred ${job.actionType} (OpenAI ${cap.code})`,
+        };
+        await store.savePursuit?.(job);
+        await recordEvent(store, job, "failed", {
+          reason: job.lastError,
+          degraded: true,
+          openai: cap,
+        });
+        return job;
+      }
+    } catch {
+      // capability probe must never block execution
+    }
+
     const action: SafeAction = {
       ...match,
       payload: {
