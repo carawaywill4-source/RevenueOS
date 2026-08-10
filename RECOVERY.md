@@ -1,7 +1,7 @@
 # RevenueOS Recovery + Native Platform
 
-Last updated: 2026-08-10T19:20:00Z  
-Mode: **STAGE 1 COMPLETE** — Local Postgres + RevenueOS.Data foundation (no cutover)
+Last updated: 2026-08-10T19:15:00Z  
+Mode: **STAGE 2 BLOCKED** — awaiting direct Supabase PostgreSQL credentials (no cutover)
 
 ## Pass condition (long-term)
 
@@ -131,22 +131,70 @@ Data (Postgres) · Storage · SiteVault · Host · Config · Observability
 
 ---
 
-# STAGE 2 — SMALLEST NEXT OPERATION (do not start until instructed)
+# STAGE 2 — VERIFIED SUPABASE → LOCAL COPY
 
-**Verified Supabase export → restore into RevenueOS Postgres → verify (no cutover).**
+## Status: BLOCKED (2026-08-10)
 
-Exact first operation:
+Attempted Stage 2. **Stopped before any dump/restore.**  
+Production remains on Supabase. Local Stage 1 Postgres untouched by import. No cutover.
 
-1. Using existing RevenueOS credentials, open a **direct PostgreSQL connection** to the Supabase project (session/pooler URL already in env if present — prefer `DATABASE_URL` / `SUPABASE_DB_URL` / service connection string; **not** flaky REST dump APIs).
-2. If direct PG credentials are missing/insufficient → **stop and ask** (only blocker).
-3. `pg_dump` **only RevenueOS-owned schemas/tables** (the `revenueos_*` set + any confirmed app tables Core needs) — exclude Supabase-internal (`auth`, `storage`, `realtime`, `supabase_*`).
-4. Store dump under `~/.revenueos/backups/` with checksum.
-5. Validate dump (list tables / restore dry-check).
-6. Restore into dedicated RevenueOS Postgres (separate schema or import DB — **not** overwriting production Supabase).
-7. Verify: schema, row counts, important-record spot checks.
-8. **Still no cutover** — Core keeps writing to Supabase until a later dual-write stage.
+### Blocker — direct PostgreSQL credentials missing
 
-Do **not** begin Stage 2 until explicitly told.
+What exists locally (REST only):
+
+| Credential | Present? | Notes |
+|------------|----------|-------|
+| `SUPABASE_URL` | yes | project `buvfllemxdvmwzhvfori` (live memory) |
+| `SUPABASE_SERVICE_ROLE_KEY` | yes | PostgREST only — **cannot** `pg_dump` |
+| `DATABASE_URL` / `SUPABASE_DB_URL` / `DIRECT_URL` / `POSTGRES_URL` | **no** | searched root `.env*`, `services/operator/.env`, `.env.portfolio`, process env, `~/.revenueos` |
+| `PGHOST` / `PGUSER` / `PGPASSWORD` | **no** | |
+| `SUPABASE_ACCESS_TOKEN` | **no** | not usable as substitute for Stage 2 direct dump policy |
+
+**Need from you (one of):**
+
+1. **Preferred:** Supabase **Database connection string** for project `buvfllemxdvmwzhvfori`  
+   - Direct: `db.<ref>.supabase.co:5432` (best for dump), or  
+   - Session mode pooler URI that allows `pg_dump`  
+   - Put in gitignored env as `DATABASE_URL` or `SUPABASE_DB_URL` (do not paste password into chat if you can write the file yourself)
+2. **Or:** Database password + host/port/user/db name for that project so I can assemble the URL locally without logging it
+
+Will **not** improvise REST/PostgREST table dumps for Stage 2.
+
+### Draft export manifest (from code inventory — NOT yet verified against live `information_schema`)
+
+Source: `services/operator` + claims + prior RECOVERY B1. Live schema compare requires direct PG.
+
+| Domain | Candidate table(s) | Notes |
+|--------|-------------------|-------|
+| experiments / brain / portfolio / claims fallback / owner controls | `revenueos_experiments` | Document catch-all; critical |
+| pursuits / job-like queue | `revenueos_pursuits` | |
+| events / activity | `revenueos_pursuit_events` | |
+| lessons / learning | `revenueos_lessons` | |
+| scorecards | `revenueos_scorecards` | |
+| leases | `revenueos_leases` | |
+| attributions | `revenueos_attributions` | |
+| planner / history | `revenueos_planner_runs` | |
+| cycle reports | `revenueos_cycle_reports` | |
+| exposures | `revenueos_exposures` | |
+| discovery | `revenueos_discovery_doors` | |
+| capability gaps | `revenueos_capability_gaps` | |
+| channels | `revenueos_channels` | |
+| claims (native) | `revenueos_operator_claims` | May be **absent** (document-mode today) — confirm live |
+
+**Exclude unless proven required:** `auth.*`, `storage.*`, `realtime.*`, `supabase_functions.*`, `extensions`, vault, etc.
+
+**Final export manifest** = draft above ∩ tables that exist in live `public` after connectivity works. Will record PASS/FAIL verification table then.
+
+### Stage 2 progress checklist
+
+- [ ] Direct Supabase Postgres connect (`select 1`)
+- [ ] Live schema ∩ draft → final export manifest
+- [ ] `pg_dump` + checksum → `~/.revenueos/backups/`
+- [ ] Restore into local RevenueOS Postgres (no overwrite of Stage 1 infra metadata)
+- [ ] Row-count / schema / critical-record verification
+- [ ] RevenueOS.Data local reads + harmless local txn write/rollback
+- [ ] Postgres restart durability
+- [x] **No cutover** (still true)
 
 ---
 
@@ -156,8 +204,9 @@ Do **not** begin Stage 2 until explicitly told.
 - Portfolio builds / 50-business loads
 - Parallel Vercel redeploys (except sequential emergency cron kill if still firing)
 - Queue + scheduler + host + browser in the same batch
-- Begin Stage 2 without instruction
+- Begin Stage 3
+- REST-based “export” as substitute for verified `pg_dump`
 
 ## Current step
 
-**STAGE 1 COMPLETE. STOPPED.** Await instruction to begin Stage 2 (verified export/import only).
+**STAGE 2 BLOCKED.** Provide direct Postgres credentials for `buvfllemxdvmwzhvfori`, then instruct to resume Stage 2 only.
