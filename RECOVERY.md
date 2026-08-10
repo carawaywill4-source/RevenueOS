@@ -1,7 +1,7 @@
 # RevenueOS Recovery + Native Platform
 
-Last updated: 2026-08-10T20:05:00Z  
-Mode: **STEP 11 TOOLING CHECKPOINT — real import approved, cutover still blocked**
+Last updated: 2026-08-10T20:04:00Z  
+Mode: **STEP 11 REAL IMPORT + NATIVE TEST PASS — live cutover still blocked**
 
 ## Ultimate pass condition
 
@@ -227,6 +227,85 @@ Provenance tags on import: `SUPABASE_LEGACY` | `LOCAL_LEDGER` | `ENGINE_CHECKPOI
 
 ---
 
+# STEP 11 — REAL ALLOWLISTED IMPORT (COMPLETE)
+
+Command: `REVENUEOS_PG_VERSION=17 npm run db -- platform-import`  
+Report: `~/.revenueos/backups/platform-import-real-2026-08-10T20-03-41-867Z.json`  
+Checkpoint: `platformImportReal=PASS`
+
+### Actual imported counts (= collect projections; delta 0)
+
+| Table | Actual |
+|-------|-------:|
+| `ros_businesses` | 50 |
+| `ros_experiments` | 19,224 |
+| `ros_events` | 170,540 |
+| `ros_pursuits` | 23,729 |
+| `ros_leases` | 812 |
+| `ros_lessons` | 249 |
+| `ros_scorecards` | 76 |
+| `ros_channels` | 1,488 |
+| `ros_activity` | 4,108 |
+| `ros_portfolio_state` | 1 |
+| `ros_config_meta` (scheduler) | 1 |
+| `ros_claims` | 0 |
+
+Vs Step-10 dry-run snapshot: higher by local ledger growth between runs (e.g. experiments 19,152→19,224; pursuits 23,484→23,729; activity 3,884→4,108). Real-import collect vs write: **exact match**.
+
+| Metric | Value |
+|--------|------:|
+| duplicates resolved | 200 |
+| conflicts | **0** |
+| newer-local replacements | 4 |
+| unknown ownership | **0** |
+
+### Mendhaus isolation proof
+
+- `mh_*` tables in Core: **none**
+- `mh_customers` / `mh_orders` / commerce tables: **absent**
+- 11 historical Supabase-only site_ids: present as platform learning rows, **not** as active `ros_businesses`
+- InvoiceChaser: biz=1, exp=51, pursuits=83, events=2000, activity=84
+
+### Native-only TEST Core
+
+Command: `npm run db -- native-core-test`  
+Report: `~/.revenueos/backups/native-core-test-2026-08-10T20-03-50-582Z.json`
+
+| Check | Result |
+|-------|--------|
+| Native-only Core | **PASS** |
+| Brain cycle (test write/read) | **PASS** |
+| Postgres restart + restore | **PASS** (`DB_HEALTHY`, 50 businesses, checkpoint+scheduler restored) |
+| Supabase network calls observed | **NO** |
+| Live LaunchAgent changed | **NO** |
+
+### Authority status
+
+```
+NATIVE POSTGRES = populated + verified replacement (ready to become LIVE authority)
+LIVE REVENUEOS CORE / LaunchAgent = UNCHANGED (still file-ledger / stale Supabase config path)
+```
+
+---
+
+# FINAL SUPABASE CUTOVER PROCEDURE (DO NOT RUN YET)
+
+Exact sequence when approved:
+
+1. Backup native PG: `npm run db -- backup pre-cutover`
+2. Re-run `platform-import` if local ledgers advanced materially since last import
+3. Re-run `native-core-test` → must PASS
+4. Point **test** operator boot at native only (`REVENUEOS_DATA_PROVIDER=postgres`, `SUPABASE=DISABLED`, alternate port) for soak
+5. Update LaunchAgent plist / operator env: `REVENUEOS_DATA_PROVIDER=postgres`, `REVENUEOS_DATABASE_URL=…55432…`; remove Supabase URL/key from Core boot path
+6. Restart LaunchAgent once; verify health + 50 businesses + ticks write to `ros_*`
+7. Confirm zero Supabase REST from Core process
+8. Only then disable/remove Supabase project credentials from RevenueOS Core secrets
+9. Vercel migration remains a later step
+
+**Do not perform steps 5–8 until explicitly approved.**
+
+---
+
 # PRIOR FOUNDATION (still valid)
 
 | Item | Status |
@@ -235,10 +314,11 @@ Provenance tags on import: `SUPABASE_LEGACY` | `LOCAL_LEDGER` | `ENGINE_CHECKPOI
 | Stage 2 `revenueos_*` dump/restore/checksum | Done — **reinterpret as misplaced platform slice** |
 | Ownership forensics | Done |
 | Step 10 platform-import dry-run | **PASS** |
-| Step 11 migration 0002 + import tooling | **in progress** |
+| Step 11 migration 0002 + import tooling | **PASS** (commit `9c5a657`) |
+| Step 11 real import + native test | **PASS** |
 | `buvfl…` in Core `.env` | Stale config; not Mendhaus; not authority |
 | Mac Core current writes | Local ledgers (platform) while configured Supabase path fails |
 
 ## Current step
 
-Tooling checkpoint → real allowlisted import → native-only test Core → **STOP (no live cutover)**.
+**STOPPED after Step 11.** Native Postgres is ready to become LIVE authority. Awaiting approval for Supabase cutover. No Vercel work yet.
