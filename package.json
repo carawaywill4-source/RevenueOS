@@ -17,6 +17,8 @@
     "operator:start": "npm --workspace @revenueos/operator-service run start",
     "operator:deploy": "npm --workspace @revenueos/operator-service run deploy",
     "operator:test": "npm --workspace @revenueos/operator-service run test",
+    "hosting:start": "npm --workspace @revenueos/hosting-plane run start",
+    "hosting:dev": "npm --workspace @revenueos/hosting-plane run dev",
     "sidecar:start": "npm --workspace @revenueos/browser-sidecar run start",
     "sidecar:dev": "npm --workspace @revenueos/browser-sidecar run dev",
     "sidecar:cli": "npm --workspace @revenueos/browser-sidecar run cli --",
@@ -27,9 +29,9 @@
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
-    "@supabase/supabase-js": "^2.109.0",
     "@revenueos/core": "file:packages/revenueos",
     "@revenueos/storefront-kit": "file:packages/storefront-kit",
+    "@supabase/supabase-js": "^2.109.0",
     "docx": "^9.7.1",
     "lucide-react": "^1.29.0",
     "next": "16.3.0",
@@ -42,14 +44,14 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
-    "tailwindcss": "^4",
+    "tailwindcss": "^4.3.3",
     "tsx": "^4.23.10",
     "typescript": "^5"
   }

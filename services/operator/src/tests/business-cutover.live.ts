@@ -190,15 +190,6 @@ async function main() {
       }),
   });
 
-  const tick1 = await runOperatorTick({
-    businessId: SITE,
-    adapter,
-    tickBudgetMs: 180_000,
-    maxJobsPerTick: 6,
-    logger: (level, event, fields) =>
-      console.log(level, event, JSON.stringify(fields ?? {}).slice(0, 300)),
-  });
-
   const bookkeeping = new Set([
     "scorecard_snapshot",
     "indexnow_submit",
@@ -206,18 +197,51 @@ async function main() {
     "sitemap_ping",
   ]);
   const sinceExec = new Date(Date.now() - 20 * 60_000).toISOString();
-  const recentEvents = store.listPursuitEvents
+  const isStrong = (ev: {
+    eventType?: string;
+    detail?: { ok?: boolean; actionType?: string };
+  }) =>
+    ev.eventType === "executed" &&
+    ev.detail?.ok === true &&
+    /publish|discovery_attack|directory|gumroad|youtube|distribute|outreach|gbp|nextdoor|bing|feature_product/i.test(
+      String(ev.detail?.actionType ?? ""),
+    ) &&
+    !bookkeeping.has(String(ev.detail?.actionType ?? ""));
+
+  // When OpenAI is degraded, the first drain may only defer generative jobs.
+  // Retry ticks so the brain can still pick non-LLM commercial limbs.
+  let tick1 = await runOperatorTick({
+    businessId: SITE,
+    adapter,
+    tickBudgetMs: 180_000,
+    maxJobsPerTick: 8,
+    logger: (level, event, fields) =>
+      console.log(level, event, JSON.stringify(fields ?? {}).slice(0, 300)),
+  });
+  let recentEvents = store.listPursuitEvents
     ? await store.listPursuitEvents(SITE, { since: sinceExec, limit: 120 })
     : [];
-  const strong = recentEvents.find(
-    (ev) =>
-      ev.eventType === "executed" &&
-      ev.detail?.ok === true &&
-      /publish|discovery_attack|directory|gumroad|youtube|distribute|outreach|gbp|nextdoor|bing|feature_product/i.test(
-        String(ev.detail?.actionType ?? ""),
-      ) &&
-      !bookkeeping.has(String(ev.detail?.actionType ?? "")),
-  );
+  let strong = recentEvents.find(isStrong);
+  for (let attempt = 2; !strong && attempt <= 4; attempt++) {
+    step("COMMERCIAL_DRAIN_RETRY", {
+      attempt,
+      openai: getOpenAICapabilityStatus().status,
+      priorExecuted: tick1.drain.executed,
+      priorEnqueued: tick1.plan.enqueuedCount,
+    });
+    tick1 = await runOperatorTick({
+      businessId: SITE,
+      adapter,
+      tickBudgetMs: 180_000,
+      maxJobsPerTick: 10,
+      logger: (level, event, fields) =>
+        console.log(level, event, JSON.stringify(fields ?? {}).slice(0, 300)),
+    });
+    recentEvents = store.listPursuitEvents
+      ? await store.listPursuitEvents(SITE, { since: sinceExec, limit: 160 })
+      : [];
+    strong = recentEvents.find(isStrong);
+  }
   if (!strong) {
     step("EXISTING_REVENUEOS_BRAIN_SELECTED_ACTION", {
       ok: tick1.ok,
@@ -253,6 +277,31 @@ async function main() {
     url: chosenUrl,
     fcm: tick1.plan.firstCustomerMode,
   });
+
+  const pursuitBefore = await client
+    .from("revenueos_experiments")
+    .select("id,status,updated_at,document")
+    .eq("id", `ros:pursuit:${chosenJobId}`)
+    .maybeSingle();
+  const priorLifecycle = recentEvents.filter(
+    (ev) =>
+      ev.pursuitId === chosenJobId &&
+      (ev.eventType === "claimed" ||
+        ev.eventType === "enqueued" ||
+        ev.eventType === "planned") &&
+      Date.parse(String(ev.createdAt ?? 0)) <=
+        Date.parse(String(strong.createdAt ?? Date.now())),
+  );
+  step("ACTION_PERSISTED_BEFORE_EXECUTION", {
+    pursuitPresent: Boolean(pursuitBefore.data),
+    pursuitStatus: pursuitBefore.data?.status ?? null,
+    priorLifecycleEvents: priorLifecycle.map((e) => e.eventType).slice(0, 6),
+    ok: Boolean(pursuitBefore.data) || priorLifecycle.length > 0,
+  });
+  if (!pursuitBefore.data && priorLifecycle.length === 0) {
+    throw new Error("STOP: action was not persisted before/during execution");
+  }
+
   step("ACTION_DURABLY_QUEUED_AND_EXECUTED", {
     jobId: chosenJobId,
     actionType: chosenType,

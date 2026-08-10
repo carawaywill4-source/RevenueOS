@@ -19,6 +19,7 @@ import type {
   SiteAdapter,
 } from "@revenueos/core";
 import type { PortfolioSignal } from "@revenueos/core";
+import { noteSubsystemTicks } from "./runtime-heartbeat.js";
 
 export type BusinessRuntimeStatus = {
   siteId: string;
@@ -32,6 +33,7 @@ export type BusinessRuntimeStatus = {
   lastError: string | null;
   claimedUntil: string | null;
   nextEligibleAt: string | null;
+  commerciallyPaused?: boolean;
 };
 
 export type SchedulerConfig = {
@@ -40,6 +42,10 @@ export type SchedulerConfig = {
   createClaim: (business: OperatorBusinessManifest) => Promise<string | null>;
   releaseClaim: (business: OperatorBusinessManifest) => Promise<void>;
   portfolioSignal?: () => PortfolioSignal | undefined;
+  /** When true, renew claim but skip commercial tick (queues/learning retained). */
+  isCommerciallyPaused?: (siteId: string) => boolean;
+  /** Reduce per-business interval for owner-prioritized businesses (ms). */
+  prioritizeIntervalBoostMs?: (siteId: string) => number;
   /** Max concurrent business ticks in-flight. */
   maxConcurrency?: number;
   /** Minimum ms between two ticks for the same business. */
@@ -110,6 +116,30 @@ export class PortfolioScheduler {
     return [...this.status.values()];
   }
 
+  /** Hot-add a business without restarting already-running loops. */
+  addBusiness(business: OperatorBusinessManifest): boolean {
+    if (this.status.has(business.siteId)) return false;
+    this.config.businesses.push(business);
+    this.status.set(business.siteId, {
+      siteId: business.siteId,
+      displayName: business.displayName,
+      ticks: 0,
+      lastTickAt: null,
+      lastOk: null,
+      lastDurationMs: null,
+      lastExecuted: null,
+      lastEnqueued: null,
+      lastError: null,
+      claimedUntil: null,
+      nextEligibleAt: null,
+    });
+    this.tasks.push(this.runBusiness(business));
+    this.config.logger("info", "operator.scheduler.business_added", {
+      siteId: business.siteId,
+    });
+    return true;
+  }
+
   async start(): Promise<void> {
     for (const business of this.config.businesses) {
       this.tasks.push(this.runBusiness(business));
@@ -148,18 +178,36 @@ export class PortfolioScheduler {
             lastError: "claim_denied",
           });
         } else {
-          this.updateStatus(business.siteId, { claimedUntil: claim });
-          const adapter = await this.config.createAdapter(business);
-          const tick = await runOperatorTick({
-            businessId: business.siteId,
-            adapter,
-            portfolioSignal: this.config.portfolioSignal?.(),
-            tickBudgetMs: this.config.tickBudgetMs,
-            maxJobsPerTick: this.config.maxJobsPerTick,
-            skipEnqueue: this.config.skipEnqueue === true,
-            logger: log,
+          const paused =
+            this.config.isCommerciallyPaused?.(business.siteId) === true;
+          this.updateStatus(business.siteId, {
+            claimedUntil: claim,
+            commerciallyPaused: paused,
           });
-          this.recordTick(business.siteId, tick);
+          if (paused) {
+            // Keep Mac ownership; do not erase queues or learning.
+            log("info", "operator.scheduler.commercially_paused", {
+              siteId: business.siteId,
+            });
+            this.updateStatus(business.siteId, {
+              lastError: null,
+              lastOk: true,
+              lastExecuted: 0,
+              lastEnqueued: 0,
+            });
+          } else {
+            const adapter = await this.config.createAdapter(business);
+            const tick = await runOperatorTick({
+              businessId: business.siteId,
+              adapter,
+              portfolioSignal: this.config.portfolioSignal?.(),
+              tickBudgetMs: this.config.tickBudgetMs,
+              maxJobsPerTick: this.config.maxJobsPerTick,
+              skipEnqueue: this.config.skipEnqueue === true,
+              logger: log,
+            });
+            this.recordTick(business.siteId, tick);
+          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -173,9 +221,11 @@ export class PortfolioScheduler {
       }
 
       if (this.config.signal.aborted) break;
-      const nextAt = new Date(Date.now() + minInterval).toISOString();
+      const boost = this.config.prioritizeIntervalBoostMs?.(business.siteId) ?? 0;
+      const wait = Math.max(5_000, minInterval - boost);
+      const nextAt = new Date(Date.now() + wait).toISOString();
       this.updateStatus(business.siteId, { nextEligibleAt: nextAt });
-      await sleepInterruptible(minInterval, this.config.signal);
+      await sleepInterruptible(wait, this.config.signal);
     }
   }
 
@@ -188,6 +238,12 @@ export class PortfolioScheduler {
       lastExecuted: tick.drain.executed,
       lastEnqueued: tick.plan.enqueuedCount,
       lastError: tick.errorMessage ?? null,
+    });
+    noteSubsystemTicks({
+      titan: tick.titan,
+      apex: tick.apex,
+      nexus: tick.nexus,
+      drainExecuted: tick.drain.executed,
     });
   }
 

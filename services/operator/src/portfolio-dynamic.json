@@ -1,0 +1,20 @@
+[
+  {
+    "siteId": "scopeguard",
+    "displayName": "ScopeGuard",
+    "industry": "freelancer_contracts",
+    "brandVoice": "direct, protective, no-nonsense",
+    "appUrl": "https://scopeguard-rho-jade.vercel.app",
+    "product": {
+      "id": "scopeguard-pack",
+      "name": "Freelance SOW & Change-Order Pack",
+      "priceUsd": 45,
+      "marginEstimate": 0.94,
+      "audience": "solo freelancers losing money to scope creep"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 110
+  }
+]

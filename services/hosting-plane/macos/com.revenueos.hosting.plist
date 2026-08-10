@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  RevenueOS Hosting Plane — independent of RevenueOSCore.
+  Storefronts keep serving if Core / Cursor die.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.revenueos.hosting</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>__TSX__</string>
+    <string>__INDEX__</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__HOSTING_DIR__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__PATH__</string>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>HOSTING_RUNTIME</key>
+    <string>process</string>
+    <key>HOSTING_PLANE_PORT</key>
+    <string>8090</string>
+    <key>HOSTING_PLANE_BIND</key>
+    <string>127.0.0.1</string>
+    <key>REVENUEOS_REPO_ROOT</key>
+    <string>__REPO__</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/RevenueOS/hosting.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/RevenueOS/hosting.stderr.log</string>
+</dict>
+</plist>

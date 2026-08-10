@@ -9,6 +9,10 @@
 
 import type { OperatorBusinessManifest } from "./operator-adapter";
 import { getOpenAICapabilityStatus, callOpenAI, hasOpenAIKey, DEFAULT_MODELS } from "./openai-client";
+import {
+  evaluateReferenceProof,
+  forgeStopCreatingNewBusinesses,
+} from "../forge/reference-proof";
 
 export type PortfolioLifecycle =
   | "idea"
@@ -139,6 +143,13 @@ export type RetirementDecision = {
   at: string;
 };
 
+export type PortfolioArchitectEvent = {
+  at: string;
+  kind: string;
+  summary: string;
+  siteId?: string;
+};
+
 export type PortfolioArchitectState = {
   safety: PortfolioArchitectSafety;
   ownerPolicy: OwnerPortfolioPolicy;
@@ -154,13 +165,6 @@ export type PortfolioArchitectState = {
   }>;
   events: PortfolioArchitectEvent[];
   updatedAt: string;
-};
-
-export type PortfolioArchitectEvent = {
-  at: string;
-  kind: string;
-  summary: string;
-  siteId?: string;
 };
 
 export type PortfolioArchitectInput = {
@@ -182,6 +186,15 @@ export type PortfolioArchitectInput = {
   ownerPolicy?: Partial<OwnerPortfolioPolicy>;
   /** Cap how many new opportunities to mint this cycle. */
   maxNewOpportunities?: number;
+  /**
+   * FORGE reference-proof inputs (ScopeGuard lab).
+   * When absent, treated as unproven → FORGE constitution blocks new creation.
+   */
+  referenceProof?: {
+    premium_bar_passed?: boolean;
+    independent_company_test?: boolean;
+    stranger_purchases?: number;
+  };
 };
 
 const FORBIDDEN_MARKETS =
@@ -507,6 +520,14 @@ export function discoverOpportunities(
 ): BusinessOpportunity[] {
   const safety = { ...DEFAULT_ARCHITECT_SAFETY, ...input.safety };
   const policy = { ...DEFAULT_OWNER_PORTFOLIO_POLICY, ...input.ownerPolicy };
+  const forgeProof = evaluateReferenceProof({
+    premium_bar_passed: input.referenceProof?.premium_bar_passed ?? false,
+    independent_company_test: input.referenceProof?.independent_company_test ?? false,
+    stranger_purchases: input.referenceProof?.stranger_purchases ?? 0,
+  });
+  if (forgeStopCreatingNewBusinesses(forgeProof)) {
+    return [];
+  }
   if (!safety.autonomousBusinessDiscovery || policy.stopCreatingNewBusinesses || safety.stopCreatingNewBusinesses) {
     return [];
   }

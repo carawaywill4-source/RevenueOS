@@ -1,17 +1,21 @@
 import type { OperatorBusinessManifest } from "@revenueos/core";
+import { readFileSync, existsSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * Portfolio manifest for the persistent operator.
  *
- * These ten businesses currently ship as separate Vercel apps under
- * `apps/*`. The persistent operator schedules pursuit ticks against them
- * via a portable Supabase-backed adapter — no per-app runtime required.
+ * Static digital businesses ship under `apps/*`. Autonomously launched
+ * businesses are appended via portfolio-dynamic.json (preserved learning;
+ * never a memory reset of the static ten).
  *
  * The `businessModel`, `priceBand`, and `considerationLevel` fields feed
  * the transferable-lessons memory. Keep them stable — changing them will
  * decouple a business from its prior learning history.
  */
-export const PORTFOLIO: OperatorBusinessManifest[] = [
+
+const STATIC_PORTFOLIO: OperatorBusinessManifest[] = [
   {
     siteId: "raiseready",
     displayName: "RaiseReady",
@@ -194,6 +198,40 @@ export const PORTFOLIO: OperatorBusinessManifest[] = [
   },
 ];
 
+function loadDynamic(): OperatorBusinessManifest[] {
+  try {
+    const p = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "portfolio-dynamic.json",
+    );
+    if (!existsSync(p)) return [];
+    const raw = JSON.parse(readFileSync(p, "utf8")) as OperatorBusinessManifest[];
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Live view — always merges static + durable dynamic registry. */
+export function getPortfolio(): OperatorBusinessManifest[] {
+  const dyn = loadDynamic();
+  const seen = new Set(STATIC_PORTFOLIO.map((b) => b.siteId));
+  return [...STATIC_PORTFOLIO, ...dyn.filter((b) => !seen.has(b.siteId))];
+}
+
+/** @deprecated prefer getPortfolio() — kept for existing imports */
+export const PORTFOLIO: OperatorBusinessManifest[] = getPortfolio();
+
 export function findBusiness(siteId: string): OperatorBusinessManifest | undefined {
-  return PORTFOLIO.find((b) => b.siteId === siteId);
+  return getPortfolio().find((b) => b.siteId === siteId);
+}
+
+export function registerDynamicBusiness(manifest: OperatorBusinessManifest): void {
+  const p = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "portfolio-dynamic.json",
+  );
+  const existing = loadDynamic().filter((b) => b.siteId !== manifest.siteId);
+  existing.push(manifest);
+  writeFileSync(p, JSON.stringify(existing, null, 2) + "\n");
 }

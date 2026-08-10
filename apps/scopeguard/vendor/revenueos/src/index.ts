@@ -111,3 +111,7 @@ export * from "./modules/exploration-floor";
 export * from "./modules/operator-claims";
 export * from "./modules/agent-executors";
 export * from "./modules/portfolio-architect";
+export * from "./apex";
+export * from "./forge";
+export * from "./titan";
+export * from "./nexus";

@@ -1,0 +1,45 @@
+# Example VPS hosting plane layout.
+# RevenueOSCore (Mac) remains the control plane; this compose is the hosting plane.
+#
+#   docker compose -f services/hosting-plane/templates/docker-compose.hosting.yml up -d
+#
+# Sites are started by DeploymentManager (docker runtime), not listed here.
+# Caddy reads the generated Caddyfile from HOSTING_DATA_DIR/gateway.
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ${HOSTING_DATA_DIR:-./.data/hosting-plane}/gateway/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    network_mode: host
+
+  hosting-plane:
+    image: node:20-bookworm-slim
+    working_dir: /repo/services/hosting-plane
+    command: ["npx", "tsx", "src/index.ts"]
+    restart: unless-stopped
+    environment:
+      REVENUEOS_REPO_ROOT: /repo
+      HOSTING_DATA_DIR: /data
+      HOSTING_PLANE_PORT: "8090"
+      HOSTING_PLANE_BIND: "0.0.0.0"
+      HOSTING_RUNTIME: docker
+      HOSTING_PLANE_TOKEN: ${HOSTING_PLANE_TOKEN}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+    volumes:
+      - ../../..:/repo
+      - ${HOSTING_DATA_DIR:-../../../.data/hosting-plane}:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8090:8090"
+
+volumes:
+  caddy_data:
+  caddy_config:

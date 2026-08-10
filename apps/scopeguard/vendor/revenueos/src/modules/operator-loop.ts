@@ -14,6 +14,12 @@
  */
 
 import type { SiteAdapter } from "../adapters/types";
+import { runApexCycle } from "../apex/cycle";
+import type { ApexCycleResult } from "../apex/types";
+import { runNexusCycle } from "../nexus/organism";
+import type { NexusCycleResult } from "../nexus/organism";
+import { runTitanCycle } from "../titan/executive-loop";
+import type { TitanCycleResult } from "../titan/types";
 import { runPursuitTick } from "./pursuit-plan";
 import type { PortfolioSignal } from "./revenue-priority";
 import type { PlanAndEnqueueResult } from "./pursuit-plan";
@@ -48,6 +54,12 @@ export type OperatorTickResult = {
   durationMs: number;
   plan: PlanAndEnqueueResult;
   drain: DrainResult;
+  /** APEX acquisition intelligence for this tick (optional if cycle errors). */
+  apex?: ApexCycleResult;
+  /** TITAN executive truth / recommendation (Phase 1 — no high-impact execution). */
+  titan?: TitanCycleResult;
+  /** NEXUS coordination / governance for this tick. */
+  nexus?: NexusCycleResult;
   errorMessage?: string;
 };
 
@@ -132,6 +144,78 @@ export async function runOperatorTick(input: {
       portfolioSignal: input.portfolioSignal,
       now: startedAt,
     });
+    // APEX wraps the tick with acquisition intelligence — never replaces planner.
+    let apex: ApexCycleResult | undefined;
+    try {
+      apex = await runApexCycle({
+        adapter: input.adapter,
+        observation: plan.observation,
+      });
+      log("info", "apex.cycle.done", {
+        businessId: input.businessId,
+        bottleneck: apex.bottleneck,
+        authorized: apex.decision?.authorized,
+        action: apex.decision?.selected_action,
+        traceId: apex.trace_id,
+      });
+    } catch (apexErr) {
+      log("warn", "apex.cycle.error", {
+        businessId: input.businessId,
+        message:
+          apexErr instanceof Error ? apexErr.message : String(apexErr),
+      });
+    }
+    // TITAN consumes APEX + FORGE truth; Phase 1 recommends only.
+    let titan: TitanCycleResult | undefined;
+    try {
+      titan = await runTitanCycle({
+        adapter: input.adapter,
+        apex: apex ?? null,
+        persist: true,
+      });
+      log("info", "titan.cycle.done", {
+        businessId: input.businessId,
+        constraint: titan.constraints.primary,
+        favor: titan.decision.resource_allocation,
+        decision: titan.decision.decision,
+        confidence: titan.decision.confidence,
+        executionAuthority: titan.execution_authority,
+      });
+    } catch (titanErr) {
+      log("warn", "titan.cycle.error", {
+        businessId: input.businessId,
+        message:
+          titanErr instanceof Error ? titanErr.message : String(titanErr),
+      });
+    }
+    // NEXUS coordinates — does not replace TITAN/APEX/FORGE intelligence.
+    let nexus: NexusCycleResult | undefined;
+    try {
+      const hourPulse = plan.observation?.hourPulse;
+      nexus = await runNexusCycle({
+        adapter: input.adapter,
+        apex: apex ?? null,
+        titan: titan ?? null,
+        hourRevenueUsd: hourPulse?.revenueUsd ?? 0,
+        hourVisitors: hourPulse?.landingViews ?? 0,
+        persist: true,
+      });
+      log("info", "nexus.cycle.done", {
+        businessId: input.businessId,
+        mode: nexus.mode,
+        objective: nexus.portfolio_objective,
+        constraint: nexus.binding_constraint,
+        favor: nexus.resource_favor,
+        revenueUsd: nexus.hourly_check.revenue_usd,
+        visitors: nexus.hourly_check.visitors,
+      });
+    } catch (nexusErr) {
+      log("warn", "nexus.cycle.error", {
+        businessId: input.businessId,
+        message:
+          nexusErr instanceof Error ? nexusErr.message : String(nexusErr),
+      });
+    }
     const finishedAt = new Date();
     const result: OperatorTickResult = {
       ok: true,
@@ -141,6 +225,9 @@ export async function runOperatorTick(input: {
       durationMs: finishedAt.getTime() - startedAt.getTime(),
       plan,
       drain,
+      apex,
+      titan,
+      nexus,
     };
     log("info", "operator.tick.done", {
       businessId: input.businessId,
@@ -151,6 +238,10 @@ export async function runOperatorTick(input: {
       stillWaiting: drain.stillWaiting,
       firstCustomerMode: plan.firstCustomerMode?.active,
       suspended: plan.suspension?.suspended ?? false,
+      apexBottleneck: apex?.bottleneck,
+      titanConstraint: titan?.constraints.primary,
+      titanFavor: titan?.decision.resource_allocation,
+      nexusConstraint: nexus?.binding_constraint,
     });
     return result;
   } catch (error) {

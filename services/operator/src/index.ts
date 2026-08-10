@@ -23,7 +23,7 @@ import {
   type OperatorLoopLogger,
 } from "@revenueos/core";
 import { hydrateEnvFromFiles, loadEnv } from "./env.js";
-import { PORTFOLIO } from "./portfolio.js";
+import { PORTFOLIO, findBusiness, getPortfolio } from "./portfolio.js";
 import {
   createSupabaseStore,
   type OperatorLedgerMode,
@@ -39,6 +39,14 @@ import {
 } from "./lib/agent-executor.js";
 import { PortfolioScheduler } from "./lib/scheduler.js";
 import { createHealthServer } from "./lib/health-server.js";
+import {
+  applyOwnerControl,
+  isBusinessCommerciallyPaused,
+  loadOwnerControls,
+  prioritizeBoostMs,
+  type ControlCommand,
+  type OwnerControlState,
+} from "./lib/owner-controls.js";
 
 const SERVICE_NAME = "@revenueos/operator-service";
 const SERVICE_VERSION = "0.1.0";
@@ -94,9 +102,10 @@ async function main() {
     env.BUSINESSES?.split(",")
       .map((s) => s.trim())
       .filter(Boolean) ?? [];
+  const catalog = getPortfolio();
   const businesses = wanted.length
-    ? PORTFOLIO.filter((b) => wanted.includes(b.siteId))
-    : PORTFOLIO;
+    ? catalog.filter((b) => wanted.includes(b.siteId))
+    : catalog;
   if (businesses.length === 0) {
     logger("error", "operator.boot.abort", { reason: "no_businesses_matched" });
     process.exit(1);
@@ -108,6 +117,13 @@ async function main() {
 
   const startedAt = new Date().toISOString();
   const abortController = new AbortController();
+
+  let controlState: OwnerControlState = await loadOwnerControls(client);
+  logger("info", "operator.boot.owner_controls", {
+    portfolioPaused: controlState.portfolioPaused,
+    pausedBusinesses: controlState.pausedBusinesses,
+    prioritizedBusinesses: controlState.prioritizedBusinesses,
+  });
 
   const scheduler = new PortfolioScheduler({
     businesses,
@@ -164,6 +180,10 @@ async function main() {
         owner: env.OPERATOR_NAME,
       });
     },
+    isCommerciallyPaused: (siteId) =>
+      isBusinessCommerciallyPaused(controlState, siteId),
+    prioritizeIntervalBoostMs: (siteId) =>
+      prioritizeBoostMs(controlState, siteId),
     maxConcurrency: env.MAX_CONCURRENCY,
     perBusinessMinIntervalMs: env.PER_BUSINESS_MIN_INTERVAL_MS,
     tickBudgetMs: env.TICK_BUDGET_MS,
@@ -176,6 +196,29 @@ async function main() {
   const health = createHealthServer({
     port: env.PORT,
     logger: (msg, meta) => logger("info", msg, meta ?? {}),
+    client,
+    getOwnerControls: () => controlState,
+    onOwnerControl: async (command, siteId) => {
+      const result = await applyOwnerControl({
+        client,
+        command: command as ControlCommand,
+        siteId,
+        actor: "owner-ui",
+      });
+      if (result.ok) controlState = result.state;
+      return result;
+    },
+    onAddBusiness: (siteId) => {
+      const biz = findBusiness(siteId);
+      if (!biz) return { ok: false, detail: `unknown business ${siteId}` };
+      const added = scheduler.addBusiness(biz);
+      return {
+        ok: true,
+        detail: added
+          ? `started loop for ${siteId}`
+          : `${siteId} already operating`,
+      };
+    },
     snapshot: () => ({
       service: {
         name: SERVICE_NAME,
@@ -192,6 +235,11 @@ async function main() {
         claimEnabled,
         operator: env.OPERATOR_NAME,
       },
+      ownerControls: {
+        portfolioPaused: controlState.portfolioPaused,
+        pausedBusinesses: controlState.pausedBusinesses,
+        prioritizedBusinesses: controlState.prioritizedBusinesses,
+      },
     }),
   });
 
@@ -201,6 +249,40 @@ async function main() {
     shadowMode: shadow,
     claimEnabled,
   });
+
+  // PortfolioArchitect evolution — slow cadence; does not interrupt commercial ticks.
+  // First autonomous launch already done → stopCreatingNewBusinesses until owner raises throughput.
+  try {
+    const { runEvolutionCycle } = await import("./lib/portfolio-evolution.js");
+    const evolve = async () => {
+      try {
+        const activeSiteIds = scheduler.getStatuses().map((b) => b.siteId);
+        const result = await runEvolutionCycle({
+          client,
+          activeSiteIds,
+          suppressLaunchSelection: true,
+        });
+        logger("info", "operator.architect.cycle", {
+          opportunities: result.state.opportunities.length,
+          launches: result.state.launches.length,
+          stopCreating: result.state.safety.stopCreatingNewBusinesses,
+        });
+      } catch (e) {
+        logger("warn", "operator.architect.cycle_failed", {
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
+    };
+    void evolve();
+    const architectTimer = setInterval(() => void evolve(), 30 * 60_000);
+    abortController.signal.addEventListener("abort", () =>
+      clearInterval(architectTimer),
+    );
+  } catch (e) {
+    logger("warn", "operator.architect.wire_failed", {
+      message: e instanceof Error ? e.message : String(e),
+    });
+  }
 
   const shutdown = async (signal: string) => {
     logger("info", "operator.shutdown.start", { signal });
