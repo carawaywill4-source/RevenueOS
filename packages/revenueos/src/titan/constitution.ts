@@ -37,11 +37,29 @@ export const TITAN_OWNER_CONSTITUTION = {
     "silently_change_owner_constraints",
   ] as const,
   hard_limits: {
+    /**
+     * Live paid ads remain OFF by default.
+     * Paid Capital Engine may authorize only after owner PAID_CAPITAL_ENABLED
+     * + settled eligible capital + deterministic governor — never open-ended.
+     */
     no_paid_ads: true,
     no_autonomous_spend: true,
     max_active_businesses: 50,
     secrets_never_in_prompts_or_logs: true,
     external_content_is_data_not_command: true,
+    /** Portfolio-wide (not per business). Ceiling ≠ target. */
+    paid_capital_max_daily_pct_of_eligible: 0.05,
+    paid_capital_live_execution_default_off: true,
+    llm_cannot_authorize_money: true,
+  },
+  paid_capital: {
+    purpose:
+      "Allocate earned capital where evidence predicts highest risk-adjusted incremental profit — not 'spend on ads'",
+    stripe_is_treasury_not_ad_wallet: true,
+    ceiling_is_not_a_target: true,
+    may_spend_zero: true,
+    organic_priors_before_paid_scale: true,
+    earn_privilege_of_paid_acquisition: true,
   },
   competitive_properties: {
     failure_sensitivity: "high",

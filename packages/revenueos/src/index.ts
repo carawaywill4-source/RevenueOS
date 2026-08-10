@@ -114,3 +114,4 @@ export * from "./modules/portfolio-architect";
 export * from "./apex";
 export * from "./forge";
 export * from "./titan";
+export * from "./nexus";

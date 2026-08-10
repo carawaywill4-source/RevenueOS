@@ -11,3 +11,5 @@ export * from "./injection-defense";
 export * from "./situation-room";
 export * from "./executive-loop";
 export * from "./progress-skepticism";
+export * from "./paid-capital";
+export * from "./cortex";

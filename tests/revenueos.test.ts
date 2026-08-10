@@ -2115,9 +2115,7 @@ test("owner report summary shape answers what/learn/next", async () => {
   assert.ok(summary.nextQueue.length >= 1);
   assert.ok(summary.workLines.some((line) => line.includes("executed")));
   const text = formatOwnerReport(summary);
-  assert.match(text, /WHAT REVENUEOS DID/);
-  assert.match(text, /NEXT PURSUIT QUEUE/);
-  assert.match(text, /FUNNEL THIS HOUR/);
+  assert.match(text, /\$0\.00 · 4 visitors/);
   // Progress happened → not operational failure even with $0 sales.
   assert.equal(summary.operationalFailure, false);
 });

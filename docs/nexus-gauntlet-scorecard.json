@@ -1,0 +1,195 @@
+{
+  "suite": "REVENUEOS_NEXUS_GAUNTLET",
+  "generated_at": "2026-08-10T04:10:00.000Z",
+  "note": "SKIPPED ≠ PASS. External/live items require owner infra.",
+  "results": [
+    {
+      "level": 1,
+      "name": "STATIC_TYPECHECK_NEXUS_PACKAGE",
+      "status": "PASS",
+      "evidence": "packages/revenueos tsc --noEmit clean after NEXUS"
+    },
+    {
+      "level": 2,
+      "name": "UNIT_NEXUS_TITAN_CORTEX_PAID_CAPITAL",
+      "status": "PASS",
+      "evidence": "node --test nexus + titan + cortex + paid-capital — all green"
+    },
+    {
+      "level": 3,
+      "name": "PROPERTY_IDEMPOTENCY_LOCKS_POLICY",
+      "status": "PASS",
+      "evidence": "nexus.test.ts idempotency, locks, kill switches, paid ads deny"
+    },
+    {
+      "level": 4,
+      "name": "CONTRACT_OWNERSHIP_WIRED",
+      "status": "PASS",
+      "evidence": "operator-loop runs APEX→TITAN→NEXUS; ownership map in NexusCycleResult"
+    },
+    {
+      "level": 5,
+      "name": "CONCURRENCY_DOUBLE_MUTATION",
+      "status": "PASS",
+      "evidence": "idempotency + work claim serialize same resource"
+    },
+    {
+      "level": 6,
+      "name": "RACE_STALE_COMMAND",
+      "status": "PASS",
+      "evidence": "STATE_CHANGED_REPLAN when world_version diverges"
+    },
+    {
+      "level": 7,
+      "name": "FINANCIAL_STRIPE_LIVE",
+      "status": "SKIPPED_EXTERNAL_DEPENDENCY",
+      "evidence": "requires live Stripe webhook + test mode stranger charge"
+    },
+    {
+      "level": 8,
+      "name": "BUSINESS_LIFECYCLE_FULL_SIM",
+      "status": "DEGRADED",
+      "evidence": "lifecycle transitions unit-tested; full discover→retire sim not yet endurance-run"
+    },
+    {
+      "level": 9,
+      "name": "FIFTY_BUSINESS_LOAD",
+      "status": "SKIPPED",
+      "evidence": "simulation harness not executed this build"
+    },
+    {
+      "level": 10,
+      "name": "APEX_FAST_ACQUISITION",
+      "status": "PASS",
+      "evidence": "existing APEX cycle + TITAN favors APEX under weak signal"
+    },
+    {
+      "level": 11,
+      "name": "FORGE_DEPLOY_ROLLBACK",
+      "status": "SKIPPED_EXTERNAL_DEPENDENCY",
+      "evidence": "hosting plane progressive delivery not proven this session"
+    },
+    {
+      "level": 12,
+      "name": "TITAN_CONSTRAINT_TESTS",
+      "status": "PASS",
+      "evidence": "titan.test.ts FIRST–FOURTH + progress skepticism"
+    },
+    {
+      "level": 13,
+      "name": "CORTEX_EPISTEMIC",
+      "status": "PASS",
+      "evidence": "cortex.test.ts poison/authority/gaps"
+    },
+    {
+      "level": 14,
+      "name": "SYSTEM_CONFLICT",
+      "status": "PASS",
+      "evidence": "conflict matrix landing vs product; retirement block; coordinate pricing"
+    },
+    {
+      "level": 15,
+      "name": "MODEL_FAILURE",
+      "status": "SKIPPED",
+      "evidence": "deterministic NEXUS/CapitalGovernor path exists; full LLM kill not run"
+    },
+    {
+      "level": 16,
+      "name": "CORE_RESTART",
+      "status": "SKIPPED",
+      "evidence": "lease expiry unit path present; process kill/restart not run"
+    },
+    {
+      "level": 17,
+      "name": "MAC_DISCONNECT",
+      "status": "SKIPPED_EXTERNAL_DEPENDENCY",
+      "evidence": "requires independent hosting plane verification"
+    },
+    {
+      "level": 18,
+      "name": "DATABASE_FAILURE",
+      "status": "SKIPPED",
+      "evidence": "not simulated this session"
+    },
+    {
+      "level": 19,
+      "name": "HOST_FAILURE",
+      "status": "SKIPPED_EXTERNAL_DEPENDENCY",
+      "evidence": "storefront process kill not run"
+    },
+    {
+      "level": 20,
+      "name": "BAD_DEPLOYMENT_ROLLBACK",
+      "status": "SKIPPED_EXTERNAL_DEPENDENCY",
+      "evidence": "hosting rollback proof required before LIVE claim"
+    },
+    {
+      "level": 21,
+      "name": "BROWSER_E2E",
+      "status": "SKIPPED",
+      "evidence": "Playwright suite not executed this session"
+    },
+    {
+      "level": 22,
+      "name": "VISUAL",
+      "status": "SKIPPED",
+      "evidence": "not run"
+    },
+    {
+      "level": 23,
+      "name": "ACCESSIBILITY",
+      "status": "SKIPPED",
+      "evidence": "not run"
+    },
+    {
+      "level": 24,
+      "name": "SECURITY_ASVS",
+      "status": "DEGRADED",
+      "evidence": "policy/injection/kill-switch unit coverage only"
+    },
+    {
+      "level": 25,
+      "name": "AGENT_SECURITY",
+      "status": "PASS",
+      "evidence": "CORTEX/TITAN injection tests + cortex no commercial execution"
+    },
+    {
+      "level": 26,
+      "name": "RESOURCE_EXHAUSTION",
+      "status": "SKIPPED",
+      "evidence": "not simulated"
+    },
+    {
+      "level": 27,
+      "name": "RUNAWAY_AI",
+      "status": "DEGRADED",
+      "evidence": "idempotency + kill switches; dedicated runaway breaker sim partial"
+    },
+    {
+      "level": 28,
+      "name": "PAID_CAPITAL_CEILING",
+      "status": "PASS",
+      "evidence": "paid-capital.test.ts 5% ceiling + adapter refuses live"
+    },
+    {
+      "level": 29,
+      "name": "REPLAY",
+      "status": "SKIPPED",
+      "evidence": "event ledger rebuild counts only"
+    },
+    {
+      "level": 30,
+      "name": "OVERNIGHT_ENDURANCE",
+      "status": "SKIPPED",
+      "evidence": "requires unattended staging run"
+    }
+  ],
+  "go_live_blockers_open": [
+    "independent hosting plane rollback proof",
+    "live Stripe stranger checkout recognition",
+    "browser E2E critical path",
+    "core restart + mac disconnect proof",
+    "REVENUEOS_MODE=LIVE requires owner enable after blockers clear"
+  ],
+  "hourly_check": "revenue + visitors only"
+}

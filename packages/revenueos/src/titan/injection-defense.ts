@@ -14,10 +14,12 @@ export type ExternalContentClassification = {
 
 const INJECTION_PATTERNS: RegExp[] = [
   /ignore\s+(all\s+)?(your\s+)?instructions/i,
+  /ignore\s+(all\s+)?(revenueos\s+)?rules/i,
   /disregard\s+(your\s+)?(previous|prior)\s+(instructions|rules)/i,
   /you\s+are\s+now\s+/i,
   /reveal\s+(your\s+)?(secrets|credentials|api\s*keys?)/i,
   /send\s+(me\s+)?(the\s+)?(secrets?|credentials|api\s*keys?)/i,
+  /send\s+.{0,40}(stripe|secret|private)\s*keys?/i,
   /exfiltrat/i,
   /override\s+(owner\s+)?constitution/i,
   /change\s+(spending|budget|paid\s+ads)\s+rules/i,
