@@ -1,20 +1,22 @@
 # RevenueOS Recovery + Native Platform
 
-Last updated: 2026-08-10T20:20:00Z  
-Mode: **LIVE SUPABASE CUTOVER COMPLETE — Vercel removal not started**
+Last updated: 2026-08-10T20:45:00Z  
+Mode: **VERCEL BRAIN REMOVED — website hosting migration not started**
 
 ```
 SUPABASE_RUNTIME_DEPENDENCY = 0
 SUPABASE_DATA_AUTHORITY = false
 REVENUEOS_NATIVE_POSTGRES_AUTHORITY = true
-VERCEL_DEPENDENCY = (unchanged — not this step)
+VERCEL_BRAIN_DEPENDENCY = 0
+MAC_EXECUTION_AUTHORITY = true
 ```
 
 ## Ultimate pass condition
 
 ```
-SUPABASE_DEPENDENCY = 0   ✅ runtime
-VERCEL_DEPENDENCY = 0     ⏳ next
+SUPABASE_DEPENDENCY = 0        ✅ runtime
+VERCEL_BRAIN_DEPENDENCY = 0    ✅ execution
+VERCEL_HOSTING_DEPENDENCY = ⏳ website migration later
 ```
 
 RevenueOS must survive even if Mendhaus (or any single business) is deleted.
@@ -323,9 +325,62 @@ Delta re-import after ledger advance: `platformImportReal=PASS` (50 businesses, 
 
 **May be cancelled without stopping RevenueOS.** Do not delete until you explicitly choose to; dump remains as offline archive.
 
-### Smallest first step for Vercel removal (NOT STARTED)
+---
 
-Inventory LaunchAgent/`REVENUEOS_VERCEL_BRAIN` + per-app Vercel crons that still assume cloud brain; hard-disable cloud ticks while Mac remains sole authority — then retire hosting plane separately.
+# VERCEL BRAIN REMOVAL (COMPLETE)
+
+Objective: `VERCEL_BRAIN_DEPENDENCY = 0` — Mac is sole autonomous execution authority.  
+Website hosting on Vercel is unchanged (storefronts + ordinary APIs remain).
+
+### Inventory (A/B/C)
+
+| Class | Finding |
+|-------|---------|
+| **A** Autonomous | `/api/cron/revenueos` (×62 apps), root `/api/cron/daily-growth-review`, `/api/cron/portfolio-digest`, `keep-operating.mjs` |
+| **B** Ordinary site | Root `/api/cron/cleanup`, `/api/cron/growth-report`; `/api/owner/execute` limb; storefront commerce APIs |
+| **C** Unknown | **0** after live inspect |
+
+### Live cron counts
+
+| Scope | Before | After |
+|-------|-------:|------:|
+| Portfolio brain crons (`/api/cron/revenueos`) | **14** still scheduled on Vercel (git already `[]`) | **0** |
+| Root brain crons | 0 | 0 |
+| Root ordinary crons (cleanup, growth-report) | 2 | **2** (kept — class B) |
+| `REVENUEOS_VERCEL_BRAIN` env on projects | 0 | 0 |
+
+Sequential disable (14 projects, one-at-a-time prod deploy of empty `vercel.json`):  
+`rfpstrike` … `storelift` → all `PASS` (checkpoint `.data/vercel-brain-cron-disable-checkpoint.json`).
+
+### Mac sole-authority guards
+
+- Route refuse unless `REVENUEOS_VERCEL_BRAIN=1` → `refused_cloud_brain` / `mac_brain_only`
+- Central helper: `packages/revenueos/src/modules/mac-brain-authority.ts` (`assertCloudBrainAllowed`)
+- `checkOperatorHosting` fail-closed when cloud brain not break-glassed / no claim backend
+- `keep-operating.mjs` exits unless `FORCE_CLOUD_WAKE=1`
+- Scaffold no longer emits brain cron schedules
+- LaunchAgent: `REVENUEOS_VERCEL_BRAIN` unset/false; `vercelBrainAllowed=false`
+
+### Proofs
+
+| Check | Result |
+|-------|--------|
+| Manual cloud cron with valid secret | **refused** (`cycleStatus=refused_cloud_brain`) |
+| Mac-only brain ticks | **PASS** (50 businesses; enqueue/exec continue) |
+| Native writes | **PASS** (events 199785→217863; activity 34909→53761 during window) |
+| Duplicate-execution protection | **PASS** (no cloud schedule + refuse + fail-closed claims) |
+| Vercel-blocked independence | **PASS** (Mac continues without Vercel brain) |
+| PG + Core restart | **PASS** (`native_postgres`, 50, `mac/native`) |
+| Core logs calling Vercel cron URLs | **none** |
+
+### What Vercel still does
+
+Serves storefront websites + ordinary APIs (checkout, owner/execute limbs, cleanup/growth-report).  
+**Not** RevenueOS autonomous think/schedule/execute.
+
+### Smallest next step toward Host/SiteVault (NOT STARTED)
+
+Inventory `services/hosting-plane` + business deploy paths that still assume Vercel as the long-term host; design SiteVault cutover for **one** pilot business — do not migrate the portfolio yet.
 
 ---
 
@@ -334,13 +389,12 @@ Inventory LaunchAgent/`REVENUEOS_VERCEL_BRAIN` + per-app Vercel crons that still
 | Item | Status |
 |------|--------|
 | Stage 1 native PG + RevenueOS.Data | Done |
-| Stage 2 `revenueos_*` dump/restore/checksum | Done — offline archive |
-| Ownership forensics | Done |
-| Step 10–11 import + native test | **PASS** |
+| Stage 2 dump archive | Done |
 | Live Supabase cutover | **PASS** |
+| Vercel brain removal | **PASS** |
 | Mac Core writes | **`ros_*` native Postgres** |
 
 ## Current step
 
-**STOPPED after live Supabase cutover.**  
-`SUPABASE_RUNTIME_DEPENDENCY = 0`. Do not start Vercel removal until approved.
+**STOPPED after Vercel brain removal.**  
+Do not start website/SiteVault migration until approved.

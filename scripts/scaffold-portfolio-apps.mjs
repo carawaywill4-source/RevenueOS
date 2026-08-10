@@ -135,7 +135,8 @@ export default config;
     path.join(dir, "vercel.json"),
     JSON.stringify(
       {
-        crons: [{ path: "/api/cron/revenueos", schedule: "*/15 * * * *" }],
+        // Mac Core is sole RevenueOS brain — never schedule cloud ticks.
+        crons: [],
       },
       null,
       2,
@@ -807,9 +808,11 @@ export function createAdapter(): SiteAdapter {
     path.join(dir, "src/app/api/cron/revenueos/route.ts"),
     `import { NextResponse } from "next/server";
 import {
+  assertCloudBrainAllowed,
   buildOwnerReportSummary,
   formatOwnerReport,
   runPursuitTick,
+  checkOperatorHosting,
 } from "@revenueos/core";
 import { createAdapter } from "@/revenueos/adapter";
 
@@ -826,7 +829,22 @@ export async function GET(request: Request) {
   if (!authorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const gate = assertCloudBrainAllowed();
+  if (!gate.allowed) {
+    return NextResponse.json(gate.body);
+  }
   const adapter = createAdapter();
+  const host = await checkOperatorHosting(adapter.id);
+  if (host.hosted) {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      site: adapter.id,
+      mode: "hosted_by_operator",
+      cycleStatus: "hosted_by_operator",
+      host,
+    });
+  }
   const { plan, drain } = await runPursuitTick(adapter, {
     budgetMs: 45_000,
     maxJobs: 8,

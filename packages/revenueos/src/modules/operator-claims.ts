@@ -98,10 +98,24 @@ export async function checkOperatorHosting(
   if (env.REVENUEOS_OPERATOR_HOSTED === "1") {
     return { hosted: true, reason: "env_flag" };
   }
+  // Mac is sole execution authority. Without an explicit cloud-brain break-glass,
+  // treat the site as hosted so legacy Vercel paths cannot claim work.
+  if (env.REVENUEOS_VERCEL_BRAIN !== "1") {
+    return {
+      hosted: true,
+      reason: "env_flag",
+      owner: "mac_sole_authority",
+    };
+  }
   const url = env.SUPABASE_URL?.replace(/\/$/, "");
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
-    return { hosted: false, reason: "no_supabase" };
+    // FAIL CLOSED — missing claim backend must not wake cloud brain.
+    return {
+      hosted: true,
+      reason: "env_flag",
+      owner: "no_supabase_fail_closed",
+    };
   }
   try {
     const native = await fetchNativeClaim(url, key, siteId);

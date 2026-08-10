@@ -109,6 +109,7 @@ export * from "./modules/operator-loop";
 export * from "./modules/free-listings";
 export * from "./modules/exploration-floor";
 export * from "./modules/operator-claims";
+export * from "./modules/mac-brain-authority";
 export * from "./modules/agent-executors";
 export * from "./modules/portfolio-architect";
 export * from "./apex";

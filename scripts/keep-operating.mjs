@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 /**
- * 24/7 RevenueOS operator — always trying to make money.
+ * LEGACY — cloud wake loop. DISABLED by default.
  *
- * Runs forever (until killed). Drains pursuits across the portfolio
- * continuously. Brief pause only when every site has zero executable work.
+ * Mac LaunchAgent (com.revenueos.core) is the sole RevenueOS brain.
+ * This script must not call Vercel /api/cron/revenueos in normal operation.
  *
- * Usage:
- *   node scripts/keep-operating.mjs
- *   node scripts/keep-operating.mjs --hours 8   # optional timebox
+ * Break-glass only:
+ *   FORCE_CLOUD_WAKE=1 node scripts/keep-operating.mjs
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -15,6 +14,14 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
+
+if (process.env.FORCE_CLOUD_WAKE !== "1") {
+  console.error(
+    "[keep-operating] REFUSED — Mac Core is sole RevenueOS authority.\n" +
+      "Set FORCE_CLOUD_WAKE=1 only for explicit break-glass (still blocked by REVENUEOS_VERCEL_BRAIN≠1 on routes).",
+  );
+  process.exit(2);
+}
 
 function parseEnv(filePath) {
   const out = {};
