@@ -1,212 +1,161 @@
 # RevenueOS Recovery + Native Platform
 
-Last updated: 2026-08-10T19:15:00Z  
-Mode: **STAGE 2 BLOCKED** — awaiting direct Supabase PostgreSQL credentials (no cutover)
+Last updated: 2026-08-10T19:25:00Z  
+Mode: **STAGE 2 BLOCKED** — awaiting direct Supabase PostgreSQL credentials
 
-## Pass condition (long-term)
+## Ultimate pass condition
 
-If Vercel and Supabase credentials disappeared, **RevenueOS Core would continue functioning**.
+```
+SUPABASE_DEPENDENCY = 0
+VERCEL_DEPENDENCY = 0
+```
+
+After Mac reboot with Supabase + Vercel blocked: Postgres starts → Supervisor → queue/scheduler/workers/Browser/Host → real brain cycle → public proof business stays up.  
+If RevenueOS contacts Supabase or Vercel during that test → find and remove the dependency.
+
+**Stripe / AI / DNS / search / external sites** may remain as tools. They must not own RevenueOS state or runtime.
 
 ## Priority (binding)
 
-**RevenueOS native infrastructure first.** Businesses wait. Vercel/Supabase migration before the 50-business portfolio.
+**RevenueOS infrastructure independence #1.** No 50-business portfolio work. Microscopic stages only.
 
 ---
 
-# Decisions locked (2026-08-10)
+# FINAL END STATE (HARD CUT — not dual-provider)
+
+```
+Internet → DNS → RevenueOS Host → SiteVault businesses
+                ↓
+         RevenueOS Runtime
+         ├── Supervisor
+         ├── Scheduler
+         ├── Durable Queue
+         ├── Brain / Browser / Build Workers
+         ├── Business Processes
+         ├── Resource Governor
+         └── Activity/Monitoring
+                ↓
+         Native PostgreSQL + Durable Storage
+
+Mac App → control UI only (closing app must NOT stop Core)
+```
+
+| System | Final role |
+|--------|------------|
+| Supabase | **ZERO** — extract data once, then remove URL/keys/adapter/runtime after cutover + independence test |
+| Vercel | **ZERO** — extract source/domain config temporarily; then no cron, functions, hosting, deploys, env, API |
+| Dual-write | **Forbidden as permanent design.** Allowed only as a short verification tool if absolutely necessary during cutover |
+
+Supabase’s **only** remaining purpose: **safe data extraction.** Do not delete the Supabase project until verified migration + independence. Do not design around keeping it.
+
+---
+
+# Decisions locked
 
 | Topic | Decision |
 |-------|----------|
-| Postgres runtime | **Native** on Mac. Docker is **not** permanent always-on runtime. Docker only if a trusted migration utility absolutely requires it temporarily. |
-| Postgres major | **15** (conda-forge `postgresql=15.18` installed under `~/.revenueos/pg-prefix`; Supabase-compatible class — no blind major upgrade) |
-| Install path | Prefer system Homebrew `/opt/homebrew` when present; else **user-local micromamba/conda-forge** (no sudo). Not Docker. |
-| Host proof | **Local hostname only** first |
-| Supabase backup | Direct verified DB export later; never delete/modify source |
-| Stripe | Test-mode browser OK; no real charges |
-| Vercel | Pause nonessential; only sequential emergency cron shutdown |
+| Postgres | Native Mac (conda-forge PG15 under `~/.revenueos`; not Docker runtime) |
+| Host proof | Local hostname first, then public domain |
+| Export | Direct PostgreSQL `pg_dump` only — **not** service-role REST as dump substitute |
+| Stripe | Test-mode browser OK; no real charges for infra tests |
+| Portfolio | Frozen until proof business fully exits Vercel |
 
 ---
 
-# Prior migration phases
+# Completed so far
 
-| Phase | Result |
+| Stage | Result |
 |-------|--------|
-| 1 | Mapped Vercel brain execution |
-| 2 | Disabled cloud brain crons + hard-refuse; ~60 storefront redeploys still queued (paused) |
-| 3 | Mac Core authoritative: LaunchAgent, scheduler, checkpoint, watchdog |
-| Design | Native platform architecture documented |
-| **Stage 1** | **Local Postgres + RevenueOS.Data + dual adapters** ← *this checkpoint* |
+| Prior Vercel brain disable | Code refuse + emptied crons; ~60 prod redeploys still queued (paused) |
+| Mac Core authority | LaunchAgent, scheduler, checkpoint, watchdog |
+| **Stage 1** | Native Postgres + `RevenueOS.Data` + temporary Supabase/Postgres adapters — default still Supabase until Stage 3 |
+| **Stage 2 start** | **BLOCKED** — no `DATABASE_URL` / direct DB password locally |
 
-**Frozen:** 50-business portfolio build/deploy.
-
----
-
-# STAGE 1 — DONE (2026-08-10)
-
-## What shipped
-
-```
-RevenueOS Core (unchanged production path)
-        ↓
-RevenueOS.Data   (@revenueos/data)
-     ↙        ↘
-Supabase      Native Postgres
-(adapter)     (adapter)     ← new dedicated cluster
-```
-
-| Piece | Location |
-|-------|----------|
-| Domain interface | `packages/revenueos-data/src/interface.ts` |
-| Types (businesses, pursuits, events, lessons, experiments, claims, leases, scorecards, portfolio, jobs, activity, releases, health, config) | `packages/revenueos-data/src/types.ts` |
-| Health states + bounded retry | `packages/revenueos-data/src/health.ts` → `DB_HEALTHY` / `DB_DEGRADED` / `DB_UNAVAILABLE` / `DB_RECOVERING` |
-| Native Postgres adapter | `packages/revenueos-data/src/adapters/postgres.ts` |
-| Supabase adapter | `packages/revenueos-data/src/adapters/supabase.ts` |
-| Factory (`REVENUEOS_DATA_PROVIDER`) | `packages/revenueos-data/src/create.ts` — **default remains supabase** |
-| Infra CLI | `services/revenueos-infra` → `npm run db -- …` |
-| Baseline schema | `services/revenueos-infra/migrations/0001_baseline.sql` (`ros_*` tables) |
-
-## CLI surface (owned)
-
-```bash
-npm run db -- prepare    # install/prepare native PG 15
-npm run db -- start
-npm run db -- stop
-npm run db -- restart
-npm run db -- health
-npm run db -- migrate    # advisory-locked
-npm run db -- backup [label]
-npm run db -- restore <file>
-npm run db -- info
-```
-
-## Dedicated layout (not system Postgres)
-
-| Path | Role |
-|------|------|
-| `~/.revenueos/pg-prefix` | PostgreSQL 15 binaries (conda-forge) |
-| `~/.revenueos/pg/data` | Dedicated data directory |
-| `~/.revenueos/pg/runtime` | Unix sockets |
-| `~/.revenueos/config/database.json` | Managed config metadata |
-| `~/.revenueos/backups` | `pg_dump` output |
-| Port **55432** | Local-only listen (`127.0.0.1`) |
-| DB/user `revenueos` | Dedicated role/database |
-
-## Proofs completed
-
-- [x] Native PostgreSQL starts (`pg_ctl`)
-- [x] Health check accepts connections
-- [x] Migrations execute (`0001_baseline.sql`)
-- [x] Test data write/read inside transaction via `RevenueOS.Data`
-- [x] PostgreSQL restart → adapter reconnects → state remains
-- [x] Supabase adapter still implements interface (health + experiments read)
-- [x] **No production data cutover**
-- [x] **No Supabase source delete/modify**
-- [x] Default provider remains Supabase (production path intact)
-
-## Resilience (Stage 1)
-
-- Bounded exponential backoff (`withRetry`, max 5, capped delay)
-- Health states for Supervisor
-- Migration advisory lock (`pg_advisory_lock`)
-- Transaction boundaries on Postgres adapter (`BEGIN`/`COMMIT`/`ROLLBACK`)
-- Temporary DB unavailability must not kill Core (health returns degraded/unavailable; no tight infinite loop)
-
-## Mac restart (target — not fully wired in Stage 1)
-
-Eventually: LaunchAgent → Postgres available → Supervisor → scheduler/queue/workers/SiteVault.  
-Stage 1 provides `db start/health` primitives the Supervisor will call later. **UI does not own lifecycle.**
+**Frozen:** 50-business build/deploy.
 
 ---
 
-# A–G (dependency maps + architecture)
+# Ordered stages (execute; do not redesign)
 
-Prior maps remain valid: Vercel class-A mostly refused; Supabase still production truth; Mac Core authoritative; proof business = **ScopeGuard**; Host = local hostname first.
+| Stage | Goal | Dependency flag |
+|-------|------|-----------------|
+| **2** | Verified Supabase → local Postgres **copy** + verify | — |
+| **3** | Controlled Supabase **cutover** → native-only R/W → independence test → remove Supabase config/creds/adapter after rollback window | `SUPABASE_DEPENDENCY = 0` |
+| **4** | Cut Vercel **execution** (cron/ticks → Scheduler/Queue/Workers); refuse cloud autonomy | `VERCEL_EXECUTION_DEPENDENCY = 0` |
+| **5** | SiteVault (owned source/releases per business) | — |
+| **6** | RevenueOS Host (Caddy under Core; routing/TLS/processes) | — |
+| **7** | **One** proof business full Vercel exit (ScopeGuard) | — |
+| **8** | Portfolio Vercel exit **one business at a time** | — |
+| **9** | Remove Vercel tokens/projects/cron/deploy code/fallbacks | `VERCEL_DEPENDENCY = 0` |
+| **Decommission** | Report only — do **not** auto-delete Supabase/Vercel accounts until approved | — |
 
-Architecture target unchanged:
-
-```
-Supervisor → Resource Governor → Scheduler → Durable Queue → Workers
-Data (Postgres) · Storage · SiteVault · Host · Config · Observability
-```
-
----
-
-# STAGE 2 — VERIFIED SUPABASE → LOCAL COPY
-
-## Status: BLOCKED (2026-08-10)
-
-Attempted Stage 2. **Stopped before any dump/restore.**  
-Production remains on Supabase. Local Stage 1 Postgres untouched by import. No cutover.
-
-### Blocker — direct PostgreSQL credentials missing
-
-What exists locally (REST only):
-
-| Credential | Present? | Notes |
-|------------|----------|-------|
-| `SUPABASE_URL` | yes | project `buvfllemxdvmwzhvfori` (live memory) |
-| `SUPABASE_SERVICE_ROLE_KEY` | yes | PostgREST only — **cannot** `pg_dump` |
-| `DATABASE_URL` / `SUPABASE_DB_URL` / `DIRECT_URL` / `POSTGRES_URL` | **no** | searched root `.env*`, `services/operator/.env`, `.env.portfolio`, process env, `~/.revenueos` |
-| `PGHOST` / `PGUSER` / `PGPASSWORD` | **no** | |
-| `SUPABASE_ACCESS_TOKEN` | **no** | not usable as substitute for Stage 2 direct dump policy |
-
-**Need from you (one of):**
-
-1. **Preferred:** Supabase **Database connection string** for project `buvfllemxdvmwzhvfori`  
-   - Direct: `db.<ref>.supabase.co:5432` (best for dump), or  
-   - Session mode pooler URI that allows `pg_dump`  
-   - Put in gitignored env as `DATABASE_URL` or `SUPABASE_DB_URL` (do not paste password into chat if you can write the file yourself)
-2. **Or:** Database password + host/port/user/db name for that project so I can assemble the URL locally without logging it
-
-Will **not** improvise REST/PostgREST table dumps for Stage 2.
-
-### Draft export manifest (from code inventory — NOT yet verified against live `information_schema`)
-
-Source: `services/operator` + claims + prior RECOVERY B1. Live schema compare requires direct PG.
-
-| Domain | Candidate table(s) | Notes |
-|--------|-------------------|-------|
-| experiments / brain / portfolio / claims fallback / owner controls | `revenueos_experiments` | Document catch-all; critical |
-| pursuits / job-like queue | `revenueos_pursuits` | |
-| events / activity | `revenueos_pursuit_events` | |
-| lessons / learning | `revenueos_lessons` | |
-| scorecards | `revenueos_scorecards` | |
-| leases | `revenueos_leases` | |
-| attributions | `revenueos_attributions` | |
-| planner / history | `revenueos_planner_runs` | |
-| cycle reports | `revenueos_cycle_reports` | |
-| exposures | `revenueos_exposures` | |
-| discovery | `revenueos_discovery_doors` | |
-| capability gaps | `revenueos_capability_gaps` | |
-| channels | `revenueos_channels` | |
-| claims (native) | `revenueos_operator_claims` | May be **absent** (document-mode today) — confirm live |
-
-**Exclude unless proven required:** `auth.*`, `storage.*`, `realtime.*`, `supabase_functions.*`, `extensions`, vault, etc.
-
-**Final export manifest** = draft above ∩ tables that exist in live `public` after connectivity works. Will record PASS/FAIL verification table then.
-
-### Stage 2 progress checklist
-
-- [ ] Direct Supabase Postgres connect (`select 1`)
-- [ ] Live schema ∩ draft → final export manifest
-- [ ] `pg_dump` + checksum → `~/.revenueos/backups/`
-- [ ] Restore into local RevenueOS Postgres (no overwrite of Stage 1 infra metadata)
-- [ ] Row-count / schema / critical-record verification
-- [ ] RevenueOS.Data local reads + harmless local txn write/rollback
-- [ ] Postgres restart durability
-- [x] **No cutover** (still true)
+After Stage 2 is **100% PASS**, proceed to Stage 3 cutover without waiting indefinitely on Supabase as production. Still: small operations, checkpoint between stages.
 
 ---
 
-# DO NOT DO
+# STAGE 1 — DONE (summary)
 
-- Data cutover / delete Supabase
-- Portfolio builds / 50-business loads
-- Parallel Vercel redeploys (except sequential emergency cron kill if still firing)
-- Queue + scheduler + host + browser in the same batch
-- Begin Stage 3
-- REST-based “export” as substitute for verified `pg_dump`
+- CLI: `npm run db -- prepare|start|stop|restart|health|migrate|backup|restore`
+- Package: `@revenueos/data` (domain repos + health states + adapters)
+- Local cluster: `~/.revenueos/pg/*`, port `55432`
+- Supabase adapter is **temporary migration scaffolding**, not the end state
+
+---
+
+# STAGE 2 — VERIFIED COPY (current)
+
+## Status: BLOCKED
+
+Rechecked credentials after architecture correction: **still missing.**  
+Stopped before dump/restore. Production unchanged. No cutover.
+
+### Blocker
+
+| Credential | Present? |
+|------------|----------|
+| `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` | yes (REST only — insufficient) |
+| `DATABASE_URL` / `SUPABASE_DB_URL` / `DIRECT_URL` / `PG*` | **no** |
+
+**Need:** direct Postgres connection for project `buvfllemxdvmwzhvfori` in gitignored env as `DATABASE_URL` or `SUPABASE_DB_URL` (prefer `db.<ref>.supabase.co:5432`). Prefer you write the file so the password never enters chat.
+
+### Draft export manifest (code inventory — finalize against live schema once connected)
+
+`revenueos_experiments`, `revenueos_pursuits`, `revenueos_pursuit_events`, `revenueos_lessons`, `revenueos_scorecards`, `revenueos_leases`, `revenueos_attributions`, `revenueos_planner_runs`, `revenueos_cycle_reports`, `revenueos_exposures`, `revenueos_discovery_doors`, `revenueos_capability_gaps`, `revenueos_channels`, `revenueos_operator_claims` (if exists).
+
+Exclude Supabase internals (`auth`, `storage`, `realtime`, …) unless proven required.
+
+### Stage 2 checklist → then Stage 3
+
+- [ ] Direct PG `select 1`
+- [ ] Final export manifest vs `information_schema`
+- [ ] `pg_dump` + checksum → `~/.revenueos/backups/` (not in git)
+- [ ] Restore → native Postgres
+- [ ] Schema / counts / constraints / sequences / critical records
+- [ ] `RevenueOS.Data` native reads + local txn write/rollback (not to Supabase)
+- [ ] Postgres restart persistence
+- [ ] Checkpoint
+- [ ] **If 100% PASS → Stage 3 controlled cutover** (pause mutations → final delta → switch R/W native → cycle → block Supabase → prove continue)
+
+---
+
+# STAGE 3 — CUT SUPABASE (queued; do not start until Stage 2 PASS)
+
+Pause mutation workers → final delta → verify → native reads/writes only → real cycle writes **only** native → restart PG + Core → **intentionally block Supabase** → Core continues → remove config/creds → deprecate adapter after rollback backup window → `SUPABASE_DEPENDENCY = 0`.
+
+---
+
+# DO NOT DO (now)
+
+- Portfolio / 50-business builds
+- Large parallel ops
+- REST dump as substitute for `pg_dump`
+- Permanent dual-write design
+- Delete Supabase/Vercel projects before independence + decommission report
+- Begin Stage 3/4+ before Stage 2 PASS
+- Redesign architecture again
 
 ## Current step
 
-**STAGE 2 BLOCKED.** Provide direct Postgres credentials for `buvfllemxdvmwzhvfori`, then instruct to resume Stage 2 only.
+**STAGE 2 BLOCKED on direct DB access.**  
+Architecture correction recorded: **hard cut** to zero Supabase and zero Vercel.  
+When `DATABASE_URL` / `SUPABASE_DB_URL` is in place, resume **Stage 2 only**, then Stage 3 on 100% verify PASS.
