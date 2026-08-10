@@ -70,34 +70,116 @@ export async function publishNextDiscoveryDoor(input: {
   };
 }
 
+/**
+ * IndexNow is distribution infrastructure — never block publish/discovery when
+ * it fails. Bound retries for 429 and cool off the host so we don't hammer.
+ */
+const indexNowCooldownUntil = new Map<string, number>();
+
+export type IndexNowCapabilityStatus = {
+  status: "ok" | "degraded" | "unavailable";
+  reason: string | null;
+  cooldownHosts: string[];
+};
+
+export function getIndexNowCapabilityStatus(): IndexNowCapabilityStatus {
+  const now = Date.now();
+  const cooling = [...indexNowCooldownUntil.entries()]
+    .filter(([, until]) => until > now)
+    .map(([host]) => host);
+  if (!process.env.INDEXNOW_KEY && !process.env.MENDHAUS_INDEXNOW_KEY) {
+    return {
+      status: "unavailable",
+      reason: "INDEXNOW_KEY not set",
+      cooldownHosts: cooling,
+    };
+  }
+  if (cooling.length) {
+    return {
+      status: "degraded",
+      reason: "IndexNow rate-limited; other acquisition channels continue",
+      cooldownHosts: cooling,
+    };
+  }
+  return { status: "ok", reason: null, cooldownHosts: [] };
+}
+
 export async function pingIndexNow(input: {
   url: string;
   appUrl: string;
-}): Promise<{ ok: boolean; detail: string }> {
+}): Promise<{ ok: boolean; detail: string; degraded?: boolean }> {
   const key = process.env.INDEXNOW_KEY || process.env.MENDHAUS_INDEXNOW_KEY;
   if (!key) {
-    return { ok: false, detail: "INDEXNOW_KEY not set — distribution logged only" };
+    return {
+      ok: false,
+      detail: "INDEXNOW_KEY not set — distribution logged only",
+      degraded: true,
+    };
   }
+  let host: string;
   try {
-    const host = new URL(input.appUrl).host;
-    const endpoint = "https://api.indexnow.org/indexnow";
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify({
-        host,
-        key,
-        keyLocation: `${input.appUrl.replace(/\/$/, "")}/${key}.txt`,
-        urlList: [input.url],
-      }),
-    });
-    if (res.ok || res.status === 202) {
-      return { ok: true, detail: `IndexNow ${res.status}` };
-    }
-    return { ok: false, detail: `IndexNow HTTP ${res.status}` };
-  } catch (e) {
-    return { ok: false, detail: (e as Error).message };
+    host = new URL(input.appUrl).host;
+  } catch {
+    return { ok: false, detail: "IndexNow: invalid appUrl", degraded: true };
   }
+
+  const coolUntil = indexNowCooldownUntil.get(host) ?? 0;
+  if (Date.now() < coolUntil) {
+    return {
+      ok: false,
+      detail: `IndexNow cooldown until ${new Date(coolUntil).toISOString()} — publish continues without ping`,
+      degraded: true,
+    };
+  }
+
+  const endpoint = "https://api.indexnow.org/indexnow";
+  const payload = {
+    host,
+    key,
+    keyLocation: `${input.appUrl.replace(/\/$/, "")}/${key}.txt`,
+    urlList: [input.url],
+  };
+
+  const maxAttempts = 2;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (res.ok || res.status === 202) {
+        return { ok: true, detail: `IndexNow ${res.status}` };
+      }
+      if (res.status === 429) {
+        // Bound backoff: 10m then 30m on repeated hits
+        const coolMs = attempt === 1 ? 10 * 60_000 : 30 * 60_000;
+        indexNowCooldownUntil.set(host, Date.now() + coolMs);
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 1_500 * attempt));
+          continue;
+        }
+        return {
+          ok: false,
+          detail: `IndexNow HTTP 429 — cooling ${Math.round(coolMs / 60_000)}m; other channels unaffected`,
+          degraded: true,
+        };
+      }
+      return { ok: false, detail: `IndexNow HTTP ${res.status}`, degraded: true };
+    } catch (e) {
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 1_000 * attempt));
+        continue;
+      }
+      return {
+        ok: false,
+        detail: (e as Error).message,
+        degraded: true,
+      };
+    }
+  }
+  return { ok: false, detail: "IndexNow exhausted retries", degraded: true };
 }
 
 export function siteOpportunitiesFromBrand(brand: BrandConfig) {

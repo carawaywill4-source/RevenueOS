@@ -45,11 +45,17 @@ const schema = z.object({
     .string()
     .optional()
     .transform((v) => v === "1" || v === "true"),
-  MAX_CONCURRENCY: z.coerce.number().default(3),
-  PER_BUSINESS_MIN_INTERVAL_MS: z.coerce.number().default(30_000),
-  TICK_BUDGET_MS: z.coerce.number().default(180_000),
-  MAX_JOBS_PER_TICK: z.coerce.number().default(24),
-  CLAIM_LEASE_MS: z.coerce.number().default(5 * 60_000),
+  /** Shared worker pool size — isolate failures; keep Mac responsive. */
+  MAX_CONCURRENCY: z.coerce.number().default(2),
+  /**
+   * Continuous operation floor between ticks for one business.
+   * Not hourly cron — opportunities/cooldowns still gate inside the brain.
+   */
+  PER_BUSINESS_MIN_INTERVAL_MS: z.coerce.number().default(45_000),
+  TICK_BUDGET_MS: z.coerce.number().default(120_000),
+  MAX_JOBS_PER_TICK: z.coerce.number().default(8),
+  /** Lease heartbeat window; Core renews each tick while running. */
+  CLAIM_LEASE_MS: z.coerce.number().default(10 * 60_000),
   BUSINESSES: z
     .string()
     .optional()

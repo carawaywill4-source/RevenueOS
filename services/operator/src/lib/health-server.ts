@@ -10,6 +10,7 @@
  */
 
 import http from "node:http";
+import { getOpenAICapabilityStatus } from "@revenueos/core";
 import type { BusinessRuntimeStatus } from "./scheduler.js";
 
 export type StatusSnapshotProvider = () => {
@@ -26,6 +27,7 @@ export type StatusSnapshotProvider = () => {
     claimEnabled: boolean;
     operator: string;
   };
+  capabilities?: Record<string, unknown>;
 };
 
 async function fetchStripeMoney(): Promise<Record<string, unknown>> {
@@ -105,8 +107,22 @@ export function createHealthServer(input: {
         return;
       }
       const snap = input.snapshot();
+      const openai = getOpenAICapabilityStatus();
+      const body = {
+        ...snap,
+        capabilities: {
+          ...(snap.capabilities ?? {}),
+          openai,
+          revenueosStatus:
+            openai.status === "ok" ? "operating" : "needs_attention",
+          revenueosNote:
+            openai.status === "ok"
+              ? "Full generative + commercial limbs available"
+              : openai.note,
+        },
+      };
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(snap, null, 2));
+      res.end(JSON.stringify(body, null, 2));
       return;
     }
     if (req.method === "GET" && url.pathname === "/money") {

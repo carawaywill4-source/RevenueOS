@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "tsx --test src/tests/*.test.ts",
     "smoke:shadow": "tsx src/tests/shadow-tick.smoke.ts",
+    "cutover": "tsx src/tests/business-cutover.live.ts",
     "deploy": "fly deploy",
     "deploy:setup": "fly launch --copy-config --no-deploy"
   },
