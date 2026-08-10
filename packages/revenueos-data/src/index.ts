@@ -12,6 +12,7 @@ export {
   withRetry,
 } from "./health.js";
 export { createPostgresData } from "./adapters/postgres.js";
+export { createLegacyCopyData } from "./adapters/legacy-copy.js";
 export {
   createSupabaseData,
   type SupabaseDataConfig,

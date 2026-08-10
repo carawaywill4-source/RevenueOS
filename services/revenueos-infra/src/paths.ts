@@ -30,7 +30,8 @@ export type RevenueOsPaths = {
  */
 export function resolvePaths(env: NodeJS.ProcessEnv = process.env): RevenueOsPaths {
   const home = env.REVENUEOS_HOME ?? path.join(homedir(), ".revenueos");
-  const pgVersion = env.REVENUEOS_PG_VERSION ?? "15";
+  // Default 17 — matches current Supabase source major used for Stage 2 restore.
+  const pgVersion = env.REVENUEOS_PG_VERSION ?? "17";
   const port = Number(env.REVENUEOS_PG_PORT ?? "55432");
   const database = env.REVENUEOS_PG_DATABASE ?? "revenueos";
   const user = env.REVENUEOS_PG_USER ?? "revenueos";
