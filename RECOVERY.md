@@ -1,7 +1,7 @@
 # RevenueOS Recovery + Native Platform
 
-Last updated: 2026-08-10T19:55:00Z  
-Mode: **DATA OWNERSHIP FORENSICS COMPLETE — no merge / no cutover**
+Last updated: 2026-08-10T20:05:00Z  
+Mode: **STEP 11 TOOLING CHECKPOINT — real import approved, cutover still blocked**
 
 ## Ultimate pass condition
 
@@ -134,15 +134,96 @@ Optional staging schema during import: `import_mendhaus_platform.revenueos_*` (r
 
 ---
 
-# SMALLEST SAFE NEXT STEP (no merge execution yet — await instruction)
+# STEP 10 — PLATFORM IMPORT DRY-RUN (COMPLETE)
 
-1. **Inventory-only export plan file** listing exact extract predicates:  
-   `revenueos_*` from retained dump → staging → `ros_*` mapping rules +  
-   local ledger/checkpoint → `ros_*` with **newer-wins** dedupe.
-2. Explicit allowlist: platform tables only; denylist: `mh_*`.
-3. Dry-run row counts per business before any write.
+Command: `REVENUEOS_PG_VERSION=17 npm run db -- platform-import-dry-run`  
+Tooling: `services/revenueos-infra/src/platform-import-dryrun.ts`  
+Report: `~/.revenueos/backups/platform-import-dryrun-2026-08-10T19-55-58-304Z.json`  
+Checkpoint: `platformImportDryRun=PASS` in `~/.revenueos/backups/stage2-checkpoint.json`
 
-**Do not merge yet. Do not cut Supabase. Do not start Vercel migration.**
+| Rule | Applied |
+|------|---------|
+| Destructive writes | **false** |
+| Live Core cutover | **false** |
+| Supabase shutdown | **not done** |
+| `mh_*` denylist | Never scanned / never imported |
+| Newer local wins | Yes (4 replacements) |
+| Provenance | Every candidate tagged `supabase_platform_slice` / `local_ledger` / `engine_checkpoint` |
+
+### Discovered by source
+
+| Source | Records |
+|--------|--------:|
+| Supabase platform slice (`revenueos_*` in local PG) | 107,976 |
+| Local ledgers (50 sites) | 111,924 |
+| Engine checkpoint (+ business registry) | 51 |
+
+### Classification
+
+| Class | Count |
+|-------|------:|
+| platform | 219,241 |
+| platform_tenant | 244 |
+| mixed → platform extracted | 449 |
+| mixed → excluded (Mendhaus-site lessons) | 17 |
+| Mendhaus-only (`mh_*`) excluded | 0 (denylist; never ingested) |
+| unknown / unclassifiable | **0** |
+| duplicates (same stable ID) | 200 |
+| content conflicts (same ID, different hash, no newer winner) | 0 |
+| newer-local replacements | 4 |
+
+### Projected `ros_*` counts (after dedupe / newer-wins)
+
+| Table | Projected |
+|-------|----------:|
+| `ros_businesses` | 50 |
+| `ros_leases` | 810 |
+| `ros_experiments` | 19,152 |
+| `ros_events` | 170,540 |
+| `ros_pursuits` | 23,484 |
+| `ros_lessons` | 249 |
+| `ros_scorecards` | 76 |
+| `ros_channels` | 1,488 |
+| `ros_activity` | 3,884 |
+| `ros_portfolio_state` | 1 |
+
+### Business coverage
+
+- Expected portfolio: **50** — all represented (`missing: []`)
+- Extra historical site_ids from Supabase slice only: 11 (`resumeforge`, `mendhaus`, `depositproof`, `bidbinder`, `closeshift`, `waitroom`, `raiseready`, `shopbeacon`, `turnoverkit`, `ledgerleaf`, `listinglift`) — classified as platform history, not current portfolio gaps
+
+### Gate
+
+```
+gate.pass = true
+unknownCount = 0
+allExpectedBusinessesRepresented = true
+blockers = []
+```
+
+### Pre-import requirements
+
+1. ~~Add migration `0002_ros_channels.sql`~~ **DONE** (applied + `migration-0002.test.ts` PASS)
+2. ~~Human approval~~ **DONE** (real import approved 2026-08-10)
+
+---
+
+# STEP 11 — REAL IMPORT TOOLING CHECKPOINT
+
+Committed before write:
+
+| Artifact | Role |
+|----------|------|
+| `migrations/0002_ros_channels.sql` | `ros_channels` + `provenance` columns |
+| `src/platform-import-core.ts` | Shared allowlisted collector (denies `mh_*`) |
+| `src/platform-import-dryrun.ts` | Dry-run reporter |
+| `src/platform-import-real.ts` | Real import writer (no LaunchAgent cutover) |
+| `src/native-core-test.ts` | Native-only TEST Core (Supabase disabled) |
+| CLI | `platform-import` / `native-core-test` |
+
+Provenance tags on import: `SUPABASE_LEGACY` | `LOCAL_LEDGER` | `ENGINE_CHECKPOINT` | `SCHEDULER_CHECKPOINT`.
+
+**Live LaunchAgent unchanged. Supabase not shut down. Vercel not started.**
 
 ---
 
@@ -152,9 +233,12 @@ Optional staging schema during import: `import_mendhaus_platform.revenueos_*` (r
 |------|--------|
 | Stage 1 native PG + RevenueOS.Data | Done |
 | Stage 2 `revenueos_*` dump/restore/checksum | Done — **reinterpret as misplaced platform slice** |
+| Ownership forensics | Done |
+| Step 10 platform-import dry-run | **PASS** |
+| Step 11 migration 0002 + import tooling | **in progress** |
 | `buvfl…` in Core `.env` | Stale config; not Mendhaus; not authority |
 | Mac Core current writes | Local ledgers (platform) while configured Supabase path fails |
 
 ## Current step
 
-**STOPPED after ownership forensics.** Awaiting approval to implement the allowlisted extract/import plan (still no cutover).
+Tooling checkpoint → real allowlisted import → native-only test Core → **STOP (no live cutover)**.

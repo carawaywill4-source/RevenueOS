@@ -17,6 +17,9 @@ import {
   stage2RestartProof,
   writeStage2Checkpoint,
 } from "./stage2-verify.js";
+import { runPlatformImportDryRun } from "./platform-import-dryrun.js";
+import { runPlatformImportReal } from "./platform-import-real.js";
+import { runNativeCoreTest } from "./native-core-test.js";
 
 function usage(): never {
   console.log(`RevenueOS infra
@@ -33,6 +36,9 @@ Usage:
   revenueos db stage2-export        Dump RevenueOS tables from SUPABASE_DB_URL
   revenueos db stage2-probe         Local RevenueOS.Data txn probe (no Supabase writes)
   revenueos db stage2-restart-proof Restart local PG and verify migrated state
+  revenueos db platform-import-dry-run   Allowlisted platform merge DRY-RUN (no writes)
+  revenueos db platform-import           REAL allowlisted import into ros_* (no live cutover)
+  revenueos db native-core-test          Native-only TEST Core (Supabase disabled)
   revenueos db info                 Show paths / binaries
 
 Environment:
@@ -114,6 +120,27 @@ async function main(): Promise<void> {
       await stage2RestartProof();
       writeStage2Checkpoint({ restartProof: "PASS" });
       break;
+    case "platform-import-dry-run": {
+      const { reportPath, ok } = await runPlatformImportDryRun();
+      writeStage2Checkpoint({
+        platformImportDryRun: ok ? "PASS" : "FAIL",
+        platformImportDryRunReport: reportPath,
+      });
+      if (!ok) process.exit(2);
+      break;
+    }
+    case "platform-import": {
+      const { reportPath, ok } = await runPlatformImportReal();
+      console.log("[import] done", { reportPath, ok });
+      if (!ok) process.exit(2);
+      break;
+    }
+    case "native-core-test": {
+      const { reportPath, ok } = await runNativeCoreTest();
+      console.log("[native-test] done", { reportPath, ok });
+      if (!ok) process.exit(2);
+      break;
+    }
     default:
       usage();
   }
