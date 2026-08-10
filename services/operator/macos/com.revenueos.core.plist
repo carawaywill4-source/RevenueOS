@@ -23,6 +23,12 @@
     <string>__PATH__</string>
     <key>NODE_ENV</key>
     <string>production</string>
+    <key>REVENUEOS_MAC_BRAIN</key>
+    <string>1</string>
+    <key>REVENUEOS_MODE</key>
+    <string>LIVE</string>
+    <key>REVENUEOS_VERCEL_BRAIN</key>
+    <string>0</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>

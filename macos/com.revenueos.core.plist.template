@@ -23,6 +23,12 @@
       <string>production</string>
       <key>OPERATOR_NAME</key>
       <string>mac-core</string>
+      <key>REVENUEOS_MAC_BRAIN</key>
+      <string>1</string>
+      <key>REVENUEOS_MODE</key>
+      <string>LIVE</string>
+      <key>REVENUEOS_VERCEL_BRAIN</key>
+      <string>0</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>

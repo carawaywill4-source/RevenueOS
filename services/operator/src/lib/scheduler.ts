@@ -92,6 +92,9 @@ export class PortfolioScheduler {
   private readonly status = new Map<string, BusinessRuntimeStatus>();
   private readonly semaphore: Semaphore;
   private readonly tasks: Promise<void>[] = [];
+  private onStatusPersist: ((statuses: BusinessRuntimeStatus[]) => void) | null =
+    null;
+  private persistTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly config: SchedulerConfig) {
     this.semaphore = new Semaphore(config.maxConcurrency ?? 3);
@@ -110,6 +113,28 @@ export class PortfolioScheduler {
         nextEligibleAt: null,
       });
     }
+  }
+
+  /** Wire durable checkpoint writer (throttled). */
+  setStatusPersist(
+    fn: ((statuses: BusinessRuntimeStatus[]) => void) | null,
+  ): void {
+    this.onStatusPersist = fn;
+  }
+
+  /** Restore scheduling fields after LaunchAgent restart. */
+  hydrateFromStatuses(rows: BusinessRuntimeStatus[]): number {
+    let n = 0;
+    for (const row of rows) {
+      if (!this.status.has(row.siteId)) continue;
+      this.status.set(row.siteId, {
+        ...this.status.get(row.siteId)!,
+        ...row,
+        claimedUntil: null,
+      });
+      n += 1;
+    }
+    return n;
   }
 
   getStatuses(): BusinessRuntimeStatus[] {
@@ -197,16 +222,38 @@ export class PortfolioScheduler {
             });
           } else {
             const adapter = await this.config.createAdapter(business);
-            const tick = await runOperatorTick({
-              businessId: business.siteId,
-              adapter,
-              portfolioSignal: this.config.portfolioSignal?.(),
-              tickBudgetMs: this.config.tickBudgetMs,
-              maxJobsPerTick: this.config.maxJobsPerTick,
-              skipEnqueue: this.config.skipEnqueue === true,
-              logger: log,
-            });
-            this.recordTick(business.siteId, tick);
+            const budget = this.config.tickBudgetMs ?? 120_000;
+            // Hard ceiling so a hung Supabase/network call cannot hold a
+            // concurrency slot forever and starve the portfolio overnight.
+            const watchdogMs = Math.max(budget + 90_000, 180_000);
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            try {
+              if (this.config.signal.aborted) break;
+              const tick = await Promise.race([
+                runOperatorTick({
+                  businessId: business.siteId,
+                  adapter,
+                  portfolioSignal: this.config.portfolioSignal?.(),
+                  tickBudgetMs: this.config.tickBudgetMs,
+                  maxJobsPerTick: this.config.maxJobsPerTick,
+                  skipEnqueue: this.config.skipEnqueue === true,
+                  logger: log,
+                  signal: this.config.signal,
+                }),
+                new Promise<never>((_, reject) => {
+                  timer = setTimeout(() => {
+                    reject(
+                      new Error(
+                        `tick_watchdog_timeout after ${watchdogMs}ms`,
+                      ),
+                    );
+                  }, watchdogMs);
+                }),
+              ]);
+              this.recordTick(business.siteId, tick);
+            } finally {
+              if (timer) clearTimeout(timer);
+            }
           }
         }
       } catch (error) {
@@ -215,7 +262,11 @@ export class PortfolioScheduler {
           siteId: business.siteId,
           message,
         });
-        this.updateStatus(business.siteId, { lastError: message });
+        this.updateStatus(business.siteId, {
+          lastError: message,
+          lastOk: false,
+          lastTickAt: new Date().toISOString(),
+        });
       } finally {
         release?.();
       }
@@ -251,6 +302,20 @@ export class PortfolioScheduler {
     const existing = this.status.get(siteId);
     if (!existing) return;
     this.status.set(siteId, { ...existing, ...patch });
+    this.schedulePersist();
+  }
+
+  private schedulePersist() {
+    if (!this.onStatusPersist) return;
+    if (this.persistTimer) return;
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      try {
+        this.onStatusPersist?.(this.getStatuses());
+      } catch {
+        // persistence must never take down the scheduler
+      }
+    }, 2_000);
   }
 }
 

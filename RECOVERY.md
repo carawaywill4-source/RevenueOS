@@ -1,6 +1,6 @@
 # RevenueOS Crash Recovery + Mac Migration Log
 
-Last updated: 2026-08-10T18:35:00Z
+Last updated: 2026-08-10T18:52:00Z
 
 ## Original objective (PRIORITY)
 
@@ -15,51 +15,55 @@ Last updated: 2026-08-10T18:35:00Z
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| **1** | Map cloud autonomous execution | **DONE** (`5d6a06c`) |
-| **2** | Disable cloud brain (crons + hard refuse); keep storefronts | **DONE (local + critical prod)** — remaining storefront redeploys queued |
-| **3** | Mac engine authoritative | NEXT |
-| **4** | E2E proof (tick, durable state, kill/restart, Vercel not brain) | PENDING |
+| **1** | Map cloud autonomous execution | **DONE** |
+| **2** | Disable cloud brain (crons + hard refuse) | **DONE** (remaining storefront redeploys queued) |
+| **3** | Mac engine authoritative | **DONE** (checkpoint + supervision + authority) |
+| **4** | E2E proof (tick, durable state, kill/restart, Vercel not brain) | NEXT |
 | **5** | STOP — no 50-business build | PENDING |
 
 ---
 
-# PHASE 2 — DISABLE CLOUD BRAIN (checkpoint)
+# PHASE 3 — MAC ENGINE AUTHORITATIVE (checkpoint)
 
-## What changed
+## Already present (reused)
+- LaunchAgent `com.revenueos.core` with **KeepAlive** (auto-restart)
+- Portfolio scheduler + semaphore concurrency + per-business isolation (`try/catch` per tick)
+- Tick watchdog (hung tick cannot hold slot forever)
+- Heartbeats on `:8080`
+- Local file ledger when Supabase REST hangs (Phase 2-era degraded path)
 
-### Root TributeReady (PROD LIVE)
-- `vercel.json`: removed `/api/cron/daily-growth-review` (minute hunt) and `/api/cron/portfolio-digest` (hourly orchestration).
-- Kept only: `/api/cron/cleanup` (daily) + `/api/cron/growth-report` (weekly).
-- Routes hard-refuse autonomy unless `REVENUEOS_VERCEL_BRAIN=1` (never set in prod):
-  - `src/app/api/cron/daily-growth-review/route.ts` → `refused_cloud_brain`
-  - `src/app/api/cron/portfolio-digest/route.ts` → `refused_cloud_orchestration`
-- `tsconfig.json`: exclude `tests`/`services`/… so root deploy typecheck doesn’t pull operator tests.
-- **Deployed:** `dpl_AQwa8NyNTN5DZewSFxNyiLQfd7ct` → https://tributeready.org
-- **Proof:** `vercel cron ls` on tributeready → **only cleanup + growth-report** (no minute brain).
+## What Phase 3 added
+1. **`engine-checkpoint.ts`** — durable `.data/operator-engine-checkpoint.json` (authority=mac); throttled persist; restore `nextEligibleAt` / last tick stats on boot (leases re-acquired).
+2. **Scheduler** — `setStatusPersist` / `hydrateFromStatuses`; watchdog retained; removed per-tick AbortSignal listener leak.
+3. **`index.ts`** — declares `REVENUEOS_MAC_BRAIN=1`, process-level uncaught/rejection logging (no process death from one failure), `/status.engine` block:
+   - `authority: "mac"`, `macBrain`, `vercelBrainAllowed`, checkpoint path/time, concurrency limits, `supervision: launchd_keepalive`
+4. **LaunchAgent plist** (+ template) — env `REVENUEOS_MAC_BRAIN=1`, `REVENUEOS_MODE=LIVE`, `REVENUEOS_VERCEL_BRAIN=0`
 
-### All storefront apps (LOCAL + partial PROD)
-- **62/62** `apps/*/vercel.json` → `"crons": []`
-- **62/62** `/api/cron/revenueos` routes: hard-refuse before `runPursuitTick` unless `REVENUEOS_VERCEL_BRAIN=1`
-- **PROD already cleared:** BidBinder (Phase 1), InvoiceChaser (Phase 2 deploy `dpl_HS4VZmaxE5t3hj5zNCLKVr5j8h4M`, cron ls empty)
-- **Still need one-at-a-time redeploy** for remaining ~60 projects so empty crons + refuse code take effect in production.
+## Live verification (this machine)
+- `/status` → `engine.authority=mac`, `macBrain=true`, `vercelBrainAllowed=false`
+- Checkpoint file written: `.data/operator-engine-checkpoint.json` (50 businesses)
+- `last_core_tick` advancing; businesses completing ticks under concurrency=3
+- Targeted test: `npx tsx --test tests/engine-checkpoint.test.ts` — PASS
 
-## Targeted validation
-- Local: root cron list, refuse-before-hunt ordering, 62 empty crons, 62 refuse guards — PASS
-- `npx tsx --test tests/operator-claims-fail-closed.test.ts` — 7/7 PASS
-- Prod tributeready cron ls — PASS (2 non-brain jobs only)
-- Prod invoicechaser cron ls — empty (expected)
+## Engine capability matrix
 
-## Fail-closed rule (now)
-Any accidental invoke of autonomous Vercel routes without `REVENUEOS_VERCEL_BRAIN=1` returns skip / refuse — does **not** call `runPursuitTick` / `runContinuousHunt`.
+| Requirement | Status |
+|-------------|--------|
+| Persistent scheduler | YES |
+| Durable job queue | YES (pursuit ledger file/Supabase) + runtime checkpoint |
+| Worker supervision | YES (launchd KeepAlive) |
+| Heartbeats | YES |
+| Crash recovery / auto restart | YES (KeepAlive) |
+| Persisted checkpoints | YES (engine-checkpoint.json) |
+| Controlled concurrency | YES (MAX_CONCURRENCY) |
+| Resource limits | YES (tick budget + watchdog) |
+| Resumable unfinished work | YES (ledger + schedule hydrate) |
+| One business fail ≠ engine crash | YES (per-tick catch + process handlers) |
 
-## Remaining Phase 2 queue (do NOT batch)
-Redeploy remaining storefronts **one project at a time** (empty crons already in git). No business rebuilds — deploy only.
-
-## Next exact action (Phase 3)
-Make Mac Core the authoritative engine: durable queue, worker supervision, crash recovery, controlled concurrency. No portfolio build.
+## Next exact action (Phase 4)
+E2E proof only: intentional kill → LaunchAgent restart → checkpoint restore → tick resumes; confirm Vercel not brain; Activity reflects real ticks. **No business building.**
 
 ## Do not do
 - Build the 50 businesses
 - Parallel multi-app deploys
 - Re-enable `REVENUEOS_VERCEL_BRAIN`
-- Load heavy build trees into agent context

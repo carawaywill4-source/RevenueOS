@@ -43,6 +43,11 @@ import {
   createSupabaseStore,
   type OperatorLedgerMode,
 } from "./lib/supabase-store.js";
+import {
+  defaultCheckpointPath,
+  loadEngineCheckpoint,
+  saveEngineCheckpoint,
+} from "./lib/engine-checkpoint.js";
 import { claimBusiness, releaseBusiness } from "./lib/claims.js";
 import {
   executeThroughSidecar,
@@ -81,6 +86,24 @@ async function main() {
   const env = loadEnv();
   const shadow = env.SHADOW_MODE === true;
   const claimEnabled = env.CLAIM_ENABLED === true && !shadow;
+  // Phase 3 — Mac is the sole autonomous brain unless explicitly overridden.
+  if (process.env.REVENUEOS_MAC_BRAIN !== "0") {
+    process.env.REVENUEOS_MAC_BRAIN = "1";
+  }
+  process.env.REVENUEOS_MODE = process.env.REVENUEOS_MODE || "LIVE";
+
+  // One failed tick/business must not take down the LaunchAgent worker.
+  process.on("uncaughtException", (error) => {
+    logger("error", "operator.process.uncaught_exception", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
+  process.on("unhandledRejection", (reason) => {
+    logger("error", "operator.process.unhandled_rejection", {
+      message: reason instanceof Error ? reason.message : String(reason),
+    });
+  });
+
   logger("info", "operator.boot.start", {
     service: SERVICE_NAME,
     version: SERVICE_VERSION,
@@ -89,6 +112,8 @@ async function main() {
     tickBudgetMs: env.TICK_BUDGET_MS,
     shadowMode: shadow,
     claimEnabled,
+    authority: "mac",
+    macBrain: process.env.REVENUEOS_MAC_BRAIN === "1",
   });
 
   const { store, mode, client, invalidateModeCache } = createSupabaseStore({
@@ -229,8 +254,8 @@ async function main() {
     },
     createClaim: async (business) => {
       if (!claimEnabled || degradedLocal) {
-        // Synthetic lease so the scheduler still ticks; Vercel remains owner
-        // (or Mac-local degraded mode when Supabase cannot coordinate).
+        // Synthetic lease so Mac scheduler keeps ticking when claims table
+        // is unavailable; Vercel routes hard-refuse the brain (Phase 2).
         return new Date(Date.now() + env.CLAIM_LEASE_MS).toISOString();
       }
       try {
@@ -278,6 +303,27 @@ async function main() {
     signal: abortController.signal,
   });
 
+  const repoRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../..",
+  );
+  const checkpointPath = defaultCheckpointPath(repoRoot);
+  const prior = loadEngineCheckpoint(checkpointPath);
+  if (prior) {
+    const restored = scheduler.hydrateFromStatuses(prior.businesses);
+    logger("info", "operator.boot.checkpoint_restored", {
+      path: checkpointPath,
+      savedAt: prior.savedAt,
+      restored,
+    });
+  }
+  scheduler.setStatusPersist((businesses) => {
+    saveEngineCheckpoint(checkpointPath, {
+      mode: process.env.REVENUEOS_MODE || "LIVE",
+      businesses,
+    });
+  });
+
   const health = createHealthServer({
     port: env.PORT,
     logger: (msg, meta) => logger("info", msg, meta ?? {}),
@@ -313,6 +359,18 @@ async function main() {
           (Date.now() - Date.parse(startedAt)) / 1000,
         ),
         ledgerMode,
+        degradedLocal,
+      },
+      engine: {
+        authority: "mac" as const,
+        macBrain: process.env.REVENUEOS_MAC_BRAIN === "1",
+        vercelBrainAllowed: process.env.REVENUEOS_VERCEL_BRAIN === "1",
+        checkpointPath,
+        checkpointSavedAt: loadEngineCheckpoint(checkpointPath)?.savedAt ?? null,
+        maxConcurrency: env.MAX_CONCURRENCY,
+        tickBudgetMs: env.TICK_BUDGET_MS,
+        perBusinessMinIntervalMs: env.PER_BUSINESS_MIN_INTERVAL_MS,
+        supervision: "launchd_keepalive",
       },
       businesses: scheduler.getStatuses(),
       cutover: {
