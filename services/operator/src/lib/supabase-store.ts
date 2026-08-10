@@ -51,8 +51,23 @@ function isRosDocId(id: string) {
 export type SupabaseStoreHandle = {
   store: ExperimentStore;
   mode: () => Promise<OperatorLedgerMode>;
+  invalidateModeCache: () => void;
   client: SupabaseClient;
 };
+
+const SUPABASE_FETCH_TIMEOUT_MS = 8_000;
+
+/** Prevent hung REST from holding Mac Core ticks open for minutes. */
+function timedFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const timeout = AbortSignal.timeout(SUPABASE_FETCH_TIMEOUT_MS);
+  const signal = init?.signal
+    ? AbortSignal.any([init.signal, timeout])
+    : timeout;
+  return fetch(input, { ...init, signal });
+}
 
 export function createSupabaseStore(input: {
   url: string;
@@ -60,6 +75,7 @@ export function createSupabaseStore(input: {
 }): SupabaseStoreHandle {
   const sb = createClient(input.url, input.serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: timedFetch },
   });
 
   let modeCache: Promise<OperatorLedgerMode> | null = null;
@@ -87,6 +103,11 @@ export function createSupabaseStore(input: {
       }
     })();
     return modeCache;
+  }
+
+  /** Drop cached mode after outages so Core can re-enter degraded local ledger. */
+  function invalidateModeCache() {
+    modeCache = null;
   }
 
   async function savePursuitDocument(job: PursuitJob) {
@@ -680,5 +701,10 @@ export function createSupabaseStore(input: {
     },
   };
 
-  return { store, mode: probeMode, client: sb };
+  return {
+    store,
+    mode: probeMode,
+    client: sb,
+    invalidateModeCache,
+  };
 }

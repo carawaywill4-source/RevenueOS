@@ -19,11 +19,26 @@
  */
 
 import {
+  createFileExperimentStore,
   createOperatorAdapter,
   type OperatorLoopLogger,
 } from "@revenueos/core";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { hydrateEnvFromFiles, loadEnv } from "./env.js";
 import { PORTFOLIO, findBusiness, getPortfolio } from "./portfolio.js";
+
+// Node 20 + supabase-js realtime constructor requires a WebSocket global.
+if (typeof globalThis.WebSocket === "undefined") {
+  // @ts-expect-error minimal stub for client construction; REST does not use it
+  globalThis.WebSocket = class {
+    close() {}
+    send() {}
+    addEventListener() {}
+    removeEventListener() {}
+  };
+}
 import {
   createSupabaseStore,
   type OperatorLedgerMode,
@@ -76,12 +91,19 @@ async function main() {
     claimEnabled,
   });
 
-  const { store, mode, client } = createSupabaseStore({
+  const { store, mode, client, invalidateModeCache } = createSupabaseStore({
     url: env.SUPABASE_URL,
     serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
   });
 
+  const localLedgerRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../.data/operator-local-ledger",
+  );
+
   let ledgerMode: OperatorLedgerMode | null = null;
+  /** When Supabase REST hangs/fails, keep Mac Core ticking on local file ledgers. */
+  let degradedLocal = false;
   try {
     ledgerMode = await mode();
     logger("info", "operator.boot.ledger_mode", { ledgerMode });
@@ -90,12 +112,15 @@ async function main() {
       message: error instanceof Error ? error.message : String(error),
     });
   }
-  if (ledgerMode === "unavailable") {
-    logger("error", "operator.boot.abort", {
+  if (ledgerMode === "unavailable" || ledgerMode === null) {
+    degradedLocal = true;
+    ledgerMode = "unavailable";
+    invalidateModeCache();
+    logger("warn", "operator.boot.degraded_local_ledger", {
       reason: "supabase_unavailable",
-      hint: "check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY",
+      ledgerRoot: localLedgerRoot,
+      note: "ticks continue on file ledger until Supabase responds",
     });
-    process.exit(1);
   }
 
   const wanted =
@@ -118,19 +143,52 @@ async function main() {
   const startedAt = new Date().toISOString();
   const abortController = new AbortController();
 
-  let controlState: OwnerControlState = await loadOwnerControls(client);
+  let controlState: OwnerControlState;
+  try {
+    controlState = await Promise.race([
+      loadOwnerControls(client),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("owner_controls_timeout")), 8_000),
+      ),
+    ]);
+  } catch (error) {
+    degradedLocal = true;
+    controlState = {
+      portfolioPaused: false,
+      pausedBusinesses: [],
+      prioritizedBusinesses: [],
+      updatedAt: new Date().toISOString(),
+      updatedBy: "degraded_local",
+    };
+    logger("warn", "operator.boot.owner_controls_degraded", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
   logger("info", "operator.boot.owner_controls", {
     portfolioPaused: controlState.portfolioPaused,
     pausedBusinesses: controlState.pausedBusinesses,
     prioritizedBusinesses: controlState.prioritizedBusinesses,
+    degradedLocal,
   });
 
   const scheduler = new PortfolioScheduler({
     businesses,
-    createAdapter: async (business) =>
-      createOperatorAdapter({
+    createAdapter: async (business) => {
+      const tickStore = degradedLocal
+        ? (() => {
+            const dir = path.join(localLedgerRoot, business.siteId);
+            mkdirSync(dir, { recursive: true });
+            return createFileExperimentStore(dir);
+          })()
+        : store;
+      if (degradedLocal) {
+        logger("info", "operator.tick.local_ledger", {
+          siteId: business.siteId,
+        });
+      }
+      return createOperatorAdapter({
         manifest: business,
-        store,
+        store: tickStore,
         safeActionSource: listCutoverSafeActions,
         executor: async (action) => {
           if (shadow) {
@@ -139,12 +197,19 @@ async function main() {
               detail: `shadow_mode: would execute ${action.type}`,
             };
           }
+          if (degradedLocal) {
+            // Do not pretend commerce happened — defer until Supabase/coordination recovers.
+            return {
+              ok: false,
+              detail: `degraded_local_deferred:${action.type}`,
+            };
+          }
           const cronSecret =
             process.env.CRON_SECRET || process.env.PORTFOLIO_PULSE_TOKEN;
           const commercial = await executeOperatorCommercialAction({
             action,
             manifest: business,
-            store,
+            store: tickStore,
             cronSecret,
           });
           if (commercial.ok) return commercial;
@@ -160,21 +225,41 @@ async function main() {
           }
           return commercial;
         },
-      }),
+      });
+    },
     createClaim: async (business) => {
-      if (!claimEnabled) {
-        // Synthetic lease so the scheduler still ticks; Vercel remains owner.
+      if (!claimEnabled || degradedLocal) {
+        // Synthetic lease so the scheduler still ticks; Vercel remains owner
+        // (or Mac-local degraded mode when Supabase cannot coordinate).
         return new Date(Date.now() + env.CLAIM_LEASE_MS).toISOString();
       }
-      const claim = await claimBusiness(client, {
+      try {
+        const claim = await Promise.race([
+          claimBusiness(client, {
+            siteId: business.siteId,
+            owner: env.OPERATOR_NAME,
+            leaseMs: env.CLAIM_LEASE_MS,
+          }),
+          new Promise<null>((resolve) =>
+            setTimeout(() => resolve(null), 8_000),
+          ),
+        ]);
+        if (claim?.leaseUntil) return claim.leaseUntil;
+      } catch (error) {
+        logger("warn", "operator.claim.error", {
+          siteId: business.siteId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      degradedLocal = true;
+      invalidateModeCache();
+      logger("warn", "operator.claim.degraded_synthetic", {
         siteId: business.siteId,
-        owner: env.OPERATOR_NAME,
-        leaseMs: env.CLAIM_LEASE_MS,
       });
-      return claim?.leaseUntil ?? null;
+      return new Date(Date.now() + env.CLAIM_LEASE_MS).toISOString();
     },
     releaseClaim: async (business) => {
-      if (!claimEnabled) return;
+      if (!claimEnabled || degradedLocal) return;
       await releaseBusiness(client, {
         siteId: business.siteId,
         owner: env.OPERATOR_NAME,
@@ -251,37 +336,58 @@ async function main() {
   });
 
   // PortfolioArchitect evolution — slow cadence; does not interrupt commercial ticks.
-  // First autonomous launch already done → stopCreatingNewBusinesses until owner raises throughput.
-  try {
-    const { runEvolutionCycle } = await import("./lib/portfolio-evolution.js");
-    const evolve = async () => {
-      try {
-        const activeSiteIds = scheduler.getStatuses().map((b) => b.siteId);
-        const result = await runEvolutionCycle({
-          client,
-          activeSiteIds,
-          suppressLaunchSelection: true,
-        });
-        logger("info", "operator.architect.cycle", {
-          opportunities: result.state.opportunities.length,
-          launches: result.state.launches.length,
-          stopCreating: result.state.safety.stopCreatingNewBusinesses,
-        });
-      } catch (e) {
-        logger("warn", "operator.architect.cycle_failed", {
-          message: e instanceof Error ? e.message : String(e),
-        });
-      }
-    };
-    void evolve();
-    const architectTimer = setInterval(() => void evolve(), 30 * 60_000);
-    abortController.signal.addEventListener("abort", () =>
-      clearInterval(architectTimer),
-    );
-  } catch (e) {
-    logger("warn", "operator.architect.wire_failed", {
-      message: e instanceof Error ? e.message : String(e),
-    });
+  // Owner-authorized 50-business reset raises throughput; otherwise suppress auto-spawn.
+  // Skip while Supabase is unreachable — evolution cannot persist and would only hang.
+  if (degradedLocal) {
+    logger("warn", "operator.architect.skipped_degraded_local", {});
+  } else {
+    try {
+      const { runEvolutionCycle, loadArchitectState } = await import(
+        "./lib/portfolio-evolution.js"
+      );
+      const evolve = async () => {
+        try {
+          if (degradedLocal) return;
+          const activeSiteIds = scheduler.getStatuses().map((b) => b.siteId);
+          const arch = await loadArchitectState(client);
+          const ownerRaised =
+            arch.ownerPolicy.stopCreatingNewBusinesses === false &&
+            (arch.ownerPolicy.maxActiveBusinesses ?? 0) >= 50;
+          const result = await runEvolutionCycle({
+            client,
+            activeSiteIds,
+            suppressLaunchSelection: !ownerRaised,
+            safetyOverride: ownerRaised
+              ? {
+                  stopCreatingNewBusinesses: false,
+                  maxActiveBusinesses: 50,
+                  prioritizeExistingOverNew: true,
+                }
+              : undefined,
+          });
+          logger("info", "operator.architect.cycle", {
+            opportunities: result.state.opportunities.length,
+            launches: result.state.launches.length,
+            stopCreating: result.state.safety.stopCreatingNewBusinesses,
+            ownerRaised,
+            activeCount: activeSiteIds.length,
+          });
+        } catch (e) {
+          logger("warn", "operator.architect.cycle_failed", {
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
+      };
+      void evolve();
+      const architectTimer = setInterval(() => void evolve(), 30 * 60_000);
+      abortController.signal.addEventListener("abort", () =>
+        clearInterval(architectTimer),
+      );
+    } catch (e) {
+      logger("warn", "operator.architect.wire_failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
   }
 
   const shutdown = async (signal: string) => {
