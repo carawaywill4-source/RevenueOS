@@ -1,7 +1,7 @@
 # RevenueOS Recovery + Native Platform
 
-Last updated: 2026-08-10T20:45:00Z  
-Mode: **VERCEL BRAIN REMOVED — website hosting migration not started**
+Last updated: 2026-08-10T20:58:00Z  
+Mode: **CORE ARCHITECTURE FROZEN — SiteVault pilot dual-run started (ScopeGuard only)**
 
 ```
 SUPABASE_RUNTIME_DEPENDENCY = 0
@@ -9,6 +9,10 @@ SUPABASE_DATA_AUTHORITY = false
 REVENUEOS_NATIVE_POSTGRES_AUTHORITY = true
 VERCEL_BRAIN_DEPENDENCY = 0
 MAC_EXECUTION_AUTHORITY = true
+MULTIPLE_EXECUTION_AUTHORITIES = 0
+CROSS_BUSINESS_STATE_CONTAMINATION = 0
+BUSINESSES_50_50_AFTER_RESTART = true
+REVENUEOS_CORE_ARCHITECTURE = FROZEN
 ```
 
 ## Ultimate pass condition
@@ -16,7 +20,7 @@ MAC_EXECUTION_AUTHORITY = true
 ```
 SUPABASE_DEPENDENCY = 0        ✅ runtime
 VERCEL_BRAIN_DEPENDENCY = 0    ✅ execution
-VERCEL_HOSTING_DEPENDENCY = ⏳ website migration later
+VERCEL_HOSTING_DEPENDENCY = ⏳ one pilot dual-run (ScopeGuard); 49 untouched
 ```
 
 RevenueOS must survive even if Mendhaus (or any single business) is deleted.
@@ -378,9 +382,81 @@ Sequential disable (14 projects, one-at-a-time prod deploy of empty `vercel.json
 Serves storefront websites + ordinary APIs (checkout, owner/execute limbs, cleanup/growth-report).  
 **Not** RevenueOS autonomous think/schedule/execute.
 
-### Smallest next step toward Host/SiteVault (NOT STARTED)
+### Smallest SiteVault step (STARTED — ScopeGuard only)
 
-Inventory `services/hosting-plane` + business deploy paths that still assume Vercel as the long-term host; design SiteVault cutover for **one** pilot business — do not migrate the portfolio yet.
+Disposable pilot **outside** the active 50 portfolio. Vercel remains primary DNS; no portfolio migration.
+
+| Item | Value |
+|------|--------|
+| Pilot | `scopeguard` (not in active 50) |
+| Control plane | `services/hosting-plane` `:8090` |
+| Candidate URL | `http://127.0.0.1:9104` |
+| Vercel primary | `https://scopeguard-rho-jade.vercel.app` (still primary) |
+| DNS cutover | **false** |
+| Dual-run | **PASS** (`pass=true`, health 200, smoke `/api/checkout:405`) |
+| Trace | `.data/hosting-dual-run-scopeguard-2026-08-10T20-58-22-833Z.json` |
+| Other 49 businesses | **untouched** on Vercel |
+
+Next gates (not done): real domain on VPS gateway → Stripe against candidate webhook → rollback proof → 24h stability → only then DNS cut.
+
+---
+
+# FINAL SOVEREIGNTY TEST (COMPLETE — CORE FROZEN)
+
+Harness (test-only, no architecture redesign): `scripts/sovereignty-final-test.mjs`  
+Report: `.data/sovereignty-final-report.json` (`OVERALL_PASS=true`, `architectureModified=false`)
+
+### Pass flags
+
+| Flag | Value |
+|------|------:|
+| `SUPABASE_RUNTIME_DEPENDENCY` | **0** |
+| `VERCEL_BRAIN_DEPENDENCY` | **0** |
+| `MULTIPLE_EXECUTION_AUTHORITIES` | **0** |
+| `CROSS_BUSINESS_STATE_CONTAMINATION` | **0** |
+| `MAC_EXECUTION_AUTHORITY` | **true** |
+| `NATIVE_POSTGRES_AUTHORITY` | **true** |
+| `BUSINESSES_50_50_AFTER_RESTART` | **true** |
+
+### Proofs 1–10
+
+| # | Proof | Result |
+|---|--------|--------|
+| 1 | Autonomous cycle all 50 (Mac/native only) | **PASS** (50/50 tick; state grew) |
+| 2 | Native Postgres sole durable authority | **PASS** (`ros_*`, `mh_*=0`) |
+| 3 | No brain path ↔ Supabase | **PASS** (no URL/key/DB; log hits 0) |
+| 4 | No brain path → Vercel cron/serverless/deploy APIs | **PASS** |
+| 5 | Kill/restart Core — queue/state survives, no dup authority | **PASS** (50/50 resume) |
+| 6 | Restart native Postgres + recovery | **PASS** |
+| 7 | Deprecated cloud-brain endpoints refuse execution | **PASS** (`executedBrainCount=0` / 52) |
+| 8 | Exactly one execution authority | **PASS** (`mac/native`) |
+| 9 | 50-business isolation (A≠B; no storefront owns Core) | **PASS** |
+| 10 | Authority map produced | **PASS** (below) |
+
+### Authority map
+
+```
+RevenueOS Core          → LOCAL / NATIVE   (LaunchAgent com.revenueos.core → :8080)
+→ Execution Authority   → NATIVE           (Mac only; Vercel brain DISABLED)
+→ Database Authority    → NATIVE           (Postgres 127.0.0.1:55432, ros_*)
+→ Queue Authority       → NATIVE           (operator checkpoint + ros_*)
+→ Business Workers      → NATIVE           (in-process portfolio workers)
+→ Storefronts           → VERCEL           (HTTP only; ScopeGuard dual-run LOCAL candidate)
+Supabase                → EXTERNAL_ARCHIVED_NOT_RUNTIME
+```
+
+### FREEZE
+
+**RevenueOS core architecture is FROZEN** after this sovereignty PASS.
+
+Do **not**:
+- redesign RevenueOS core
+- migrate all businesses off Vercel
+- add reporting features
+- add another scheduler
+- create another database abstraction
+
+Proceed **only** with SiteVault infrastructure independence for disposable pilots, one at a time, with Vercel remaining primary until explicit DNS cutover gates pass.
 
 ---
 
@@ -392,9 +468,12 @@ Inventory `services/hosting-plane` + business deploy paths that still assume Ver
 | Stage 2 dump archive | Done |
 | Live Supabase cutover | **PASS** |
 | Vercel brain removal | **PASS** |
+| Final sovereignty test | **PASS** |
+| Core architecture | **FROZEN** |
 | Mac Core writes | **`ros_*` native Postgres** |
+| SiteVault pilot (ScopeGuard dual-run) | **PASS** (DNS not cut) |
 
 ## Current step
 
-**STOPPED after Vercel brain removal.**  
-Do not start website/SiteVault migration until approved.
+**STOPPED after sovereignty freeze + ScopeGuard dual-run.**  
+Do not migrate additional storefronts or cut DNS without explicit approval.
