@@ -25,7 +25,11 @@
     "sidecar:test": "SKIP_PLAYWRIGHT_INSTALL=1 npm --workspace @revenueos/browser-sidecar run test",
     "dashboard:dev": "npm --workspace @portfolio/dashboard run dev",
     "dashboard:build": "npm --workspace @portfolio/dashboard run build",
-    "dashboard:start": "npm --workspace @portfolio/dashboard run start"
+    "dashboard:start": "npm --workspace @portfolio/dashboard run start",
+    "revenueos": "npm --workspace @revenueos/infra run cli --",
+    "db": "npm --workspace @revenueos/infra run cli -- db",
+    "test:data": "tsx --test packages/revenueos-data/src/health.test.ts",
+    "test:infra": "tsx --test services/revenueos-infra/src/tests/*.test.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
