@@ -1,7 +1,7 @@
 # RevenueOS Recovery + Native Platform
 
-Last updated: 2026-08-10T19:40:00Z  
-Mode: **AUTHORITY INVESTIGATION COMPLETE — STAGE 3 BLOCKED**
+Last updated: 2026-08-10T19:50:00Z  
+Mode: **AUTHORITY CORRECTED — Stage 2 dump RETAINED; merge local durable state next; NO Stage 3**
 
 ## Ultimate pass condition
 
@@ -12,155 +12,186 @@ VERCEL_DEPENDENCY = 0
 
 ## Priority
 
-Infrastructure independence #1. No cutover until authoritative memory is copied.
+Infrastructure independence #1. No cutover until Mendhaus backup + local durable state are merged into native Postgres.
 
 ---
 
 # SECURITY
 
-The Stage 2 direct DB password was exposed in chat/history → **treat as compromised**.  
-Rotate the `fnrwz…` database password; update only gitignored local secrets.  
-Never print/log/commit/echo the replacement credential.
+Stage 2 DB password was exposed in chat → treat as compromised; rotate when convenient.  
+Do not print/log/commit credentials.
 
 ---
 
-# AUTHORITY INVESTIGATION (2026-08-10)
+# AUTHORITY CORRECTION (owner dashboard + live evidence)
 
-## Decision
+Owner reports **only one Supabase project in account/org: Mendhaus.**  
+There is **no** second visible `buvfl…` project. Prior “`buvfl` is authoritative” conclusion from config alone is **withdrawn**.
+
+## Conclusion (proven)
 
 ```
-AUTHORITATIVE_SUPABASE_PROJECT = buvfllemxdvmwzhvfori
+A) fnrwzloovduhryynmgok = Mendhaus (ONLY real Supabase project)
+   buvfllemxdvmwzhvfori = stale/legacy config (loads in Core .env; not a usable live authority)
+   AUTHORITATIVE MIGRATION SOURCE =
+     Mendhaus Stage-2 backup (historical)
+     + local operator ledgers / checkpoints (current activity while Supabase path broken)
 ```
 
-**Stage 2 local copy (`fnrwzloovduhryynmgok`) is NOT the authoritative Mac Core memory.**  
-**Another verified Stage 2 export is REQUIRED against `buvfl…` once its direct Postgres URL is available.**  
-**No Stage 3. No merge. No deletes. No disabling either project.**
-
-### Evidence (decisive)
-
-| Evidence | Detail |
-|----------|--------|
-| Live LaunchAgent | `com.revenueos.core` WorkingDirectory = `services/operator`; **no** `SUPABASE_*` in plist env |
-| Env hydrate order | `hydrateEnvFromFiles()` loads **`services/operator/.env` first** → then repo `.env.local` only if unset (`services/operator/src/env.ts`) |
-| Effective Core URL | `services/operator/.env` → **`buvfllemxdvmwzhvfori`** (also root `.env.local`) |
-| Live Core activity | `/status` shows 50 businesses ticking now (e.g. `invoicechaser` `lastTickAt=2026-08-10T19:30:53Z`) |
-| Stage 2 copy fact check | Local `fnrwz` restore: **`invoicechaser` experiment rows = 0** |
-| Stage 2 copy freshness | Newest local experiment timestamp ≈ **2026-08-09** (stale vs live ticks today) |
-| Docs | `docs/REVENUEOS_MAC_CUTOVER_STATUS.md` / migration manifest: **`buvfl…` = live memory**; `fnrwz…` = storefront/stale |
-| Boot mode | Core logs `ledgerMode: "document"` → native pursuit tables not available on Core’s project; state in `revenueos_experiments` documents |
-| Degraded local | `.data/operator-local-ledger/*` **actively written** during REST hangs (50 ledger files; mtimes during this investigation) |
+**Do NOT request another Supabase DB URL.**  
+**KEEP the existing verified Stage 2 dump (107,976 rows).**  
+**NO Stage 3 cutover yet.**
 
 ---
 
-## Projects discovered
+# STEP 1 — Mendhaus project ref
 
-### PROJECT A — `buvfllemxdvmwzhvfori` (**AUTHORITATIVE for Mac Core**)
+| Check | Result |
+|-------|--------|
+| `apps/mendhaus/.env.local` `SUPABASE_URL` ref | **`fnrwzloovduhryynmgok`** |
+| Stage 2 direct DB host | `db.fnrwzloovduhryynmgok.supabase.co` |
+| REST against Mendhaus app creds | `revenueos_experiments` **107396** rows; **`mh_orders` exists** |
+| Local Stage 2 restore | Same 107396 experiments (checksum-verified earlier) |
 
-| Field | Value |
-|-------|-------|
-| Role | Mac Core / TributeReady **live memory** |
-| Referenced by | `services/operator/.env`, root `.env.local`, docs as live memory |
-| Components | Mac LaunchAgent Core (`createSupabaseStore`), operator claims/learning/portfolio docs |
-| Direct PG URL | **Not available locally** (blocked Stage 2 against this project) |
-| REST during investigation | **Timed out** on `/rest/v1/` and experiments probe (5–10s) — same flaky pattern; Core often falls back to local ledgers |
-| Prior documented counts | ~46k–47k experiments (cutover status / migration manifest) — **not re-verified live this pass due to REST timeout** |
-| Ledger mode (live boot) | **document** |
-| Also | File ledger fallback when REST hangs |
-
-### PROJECT B — `fnrwzloovduhryynmgok` (**Stage 2 dump source; NOT Mac Core authority**)
-
-| Field | Value |
-|-------|-------|
-| Role | Legacy / storefront app donor project |
-| Referenced by | **~62** `apps/*/.env.local`; Stage 2 `SUPABASE_DB_URL` you supplied |
-| Components | Storefront apps’ local env (often documented as timeout/stale) |
-| Direct PG | Was used for Stage 2 dump (password **compromised — rotate**) |
-| Verified dump tables | `revenueos_experiments` 107396; `lessons` 266; `scorecards` 76; `channels` 238; `attributions` 0 |
-| REST smoke this pass | **Reachable** — `Content-Range 0-0/107396` on experiments (matches dump) |
-| Newest in local copy | experiments ~2026-08-09; lessons ~2026-08-10 13:15 local; channels ~2026-08-09 |
-| invoicechaser in copy | **0 rows** |
-| Extra non-ROS tables | `mh_*` (MendHaus) — excluded from ROS export |
-
-### Additional refs
-
-No third Supabase project ref found in Core/operator/docs path beyond A/B.  
-Vercel prod env not re-pulled this pass (paused nonessential Vercel work).
+**Mendhaus = `fnrwzloovduhryynmgok` = Stage 2 dump source. CONFIRMED.**
 
 ---
 
-## Live Mac Core configuration (not inferred from stale files alone)
+# STEP 2 — What is `buvfllemxdvmwzhvfori`?
+
+| Check | Result |
+|-------|--------|
+| Where referenced | **Only** `services/operator/.env` + root `.env.local` (+ outdated docs). **Not** in 62 storefront app envs |
+| Storefront envs | **62 apps → `fnrwz…` (Mendhaus)** |
+| DNS | Resolves (CDN/edge IP) |
+| REST now | **Timeout** (not usable) |
+| In owner dashboard | **Not present** (owner confirmation) |
+| Appears to be | Stale/deleted/orphan project ref left in Core env; **not** Mendhaus |
+
+### Does Mac Core actually use it successfully?
+
+| Fact | Evidence |
+|------|----------|
+| Core **loads** `buvfl` URL | `hydrateEnvFromFiles()` prefers `services/operator/.env` |
+| Loading ≠ authority | Owner dashboard + REST timeouts |
+| Boot probe earlier today | One `ledgerMode: document` / intermittent `degradedLocal:true` / `owner_controls_timeout` / synthetic claims |
+| Current durable writes | **Local ledgers + checkpoint updating continuously** |
+| Last clear degraded signals | Boot window ~`2026-08-10T18:51Z` (`degradedLocal:true`, synthetic claims) |
+
+**Mac Core has been operating primarily from degraded/local durable storage**, while still *configured* to call a dead/stale `buvfl` URL.
+
+---
+
+# STEP 3 — Reinterpreted live architecture
 
 ```
-launchd com.revenueos.core
-  WorkingDirectory = …/services/operator
-  Program = tsx services/operator/src/index.ts
-  Env from plist = REVENUEOS_MAC_BRAIN=1, REVENUEOS_VERCEL_BRAIN=0 (no Supabase URL)
-  hydrateEnvFromFiles → services/operator/.env  ⇒  buvfl…
-  createSupabaseStore(url=env.SUPABASE_URL)
+Mendhaus Supabase (fnrwz…)
+  = historical / older persisted RevenueOS + Mendhaus app tables
+  (reachable via storefront credentials; Stage 2 dump verified)
+
+Local durable state
+  = current Mac Core activity while configured Supabase path fails
+  .data/operator-local-ledger/<site>/ledger.json   (50 sites)
+  .data/operator-engine-checkpoint.json            (scheduler/engine)
 ```
 
-Observed live: `engine.authority=mac`, 50 businesses, recent ticks, checkpoint `savedAt` refreshing, local ledgers updating.
+InvoiceChaser active locally with **0** InvoiceChaser rows in Mendhaus dump ⇒ work happened in **degraded/local mode**, not “wrong Supabase project.”
 
 ---
 
-## Missing tables (code inventory vs reality)
+# STEP 4 — Timeline / coverage compare
 
-| Table | On fnrwz (Stage 2 dump) | On buvfl (Core project) | Verdict |
-|-------|-------------------------|-------------------------|---------|
-| `revenueos_experiments` | present (107396) | present (document ledger; REST flaky) | **Active primary document store** |
-| `revenueos_lessons` | present (266) | expected present | Active |
-| `revenueos_scorecards` | present (76) | expected present | Active |
-| `revenueos_channels` | present (238) | expected present | Active |
-| `revenueos_attributions` | present (0) | unknown live | Empty/optional |
-| `revenueos_pursuits` | **absent** | **absent/errors → document mode** | **B: never migrated to native on Core project; pursuits stored as experiment documents** (`ledgerMode=document`) |
-| `revenueos_pursuit_events` | **absent** | **absent/errors → document mode** | Same as pursuits — document path |
-| `revenueos_leases` | **absent** | likely absent / document leases | Document-mode leases in experiments |
-| `revenueos_planner_runs` | **absent** | likely document | Document category in experiments |
-| `revenueos_cycle_reports` | **absent** | likely document | Document |
-| `revenueos_exposures` | **absent** | likely document | Document |
-| `revenueos_discovery_doors` | **absent** | likely document | Document |
-| `revenueos_capability_gaps` | **absent** | likely document | Document |
-| `revenueos_operator_claims` | **absent** | **documented missing**; claims use `ros:opclaim:*` experiment docs | **A/B: never applied native DDL; document claims** |
-| Scheduler / tick state | n/a | **local file** `.data/operator-engine-checkpoint.json` | **D: local** |
-| Degraded learning writes | n/a | **local files** `.data/operator-local-ledger/<site>/` | **D: local when Supabase degraded** |
+### Mendhaus (Stage 2 local restore = live REST count)
 
-No fake empty tables created.
+| Domain | Rows | Newest timestamp |
+|--------|-----:|------------------|
+| experiments | 107,396 | **2026-08-09** ~15:51 |
+| lessons | 266 | 2026-08-10 ~13:15 |
+| scorecards | 76 | 2026-08-08 |
+| channels | 238 | 2026-08-09 ~18:41 |
+| attributions | 0 | — |
+| Distinct experiment `site_id`s | **11** | older set (e.g. mendhaus, bidbinder, raiseready, …) |
+| invoicechaser experiments | **0** | — |
+
+### Local ledgers (`.data/operator-local-ledger`)
+
+| Domain | Approx rows (sum) | Sites with data | Newest (content) |
+|--------|------------------:|----------------:|------------------|
+| experiments | 2,194 | 50 | **2026-08-10T19:48Z** |
+| lessons | 200 | 50 | 2026-08-10T18:21Z |
+| pursuits | 3,455 | 50 | 2026-08-10T19:48Z |
+| pursuitEvents | 99,532 | 50 | 2026-08-10T19:48Z |
+| exposures | 3,664 | 50 | (varies) |
+| channels | 1,250 | 50 | 2026-08-10T19:48Z |
+| leases | 603 | 50 | 2026-08-10T19:44Z |
+| Checkpoint `lastTickAt` | 50 businesses | — | **2026-08-10T19:47Z** |
+
+### Overlap
+
+| | |
+|--|--|
+| Experiment site overlap (local ∩ Mendhaus) | **0 sites** |
+| Local-only experiment sites | **50** (current portfolio, includes invoicechaser) |
+| Mendhaus-only experiment sites | **11** (historical set) |
+
+**InvoiceChaser:** local ledger has experiments/pursuits/events/leases **today**; Mendhaus DB has **zero** IC experiment rows.
 
 ---
 
-## Stage 2 copy status
+# STEP 5 — True native state plan (no cutover yet)
 
-| Question | Answer |
-|----------|--------|
-| Is Stage 2 copy the correct cutover source? | **NO** |
-| Why project-ID discrepancy? | You supplied `fnrwz` DB URL; Mac Core uses `buvfl` REST URL |
-| Another export required? | **YES — Stage 2 redo against `buvfllemxdvmwzhvfori` direct Postgres** |
-| Also capture? | Local file ledgers + engine checkpoint (unique recent state when REST degraded) |
+```
+MENDHAUS SUPABASE BACKUP (existing Stage 2 dump)   ← historical memory
++ LOCAL LEDGERS (.data/operator-local-ledger)      ← current portfolio brain state
++ ENGINE CHECKPOINT                                ← scheduler/tick resume
+(+ any other verified local durable files)
+        ↓  import/merge (dedupe by stable IDs; prefer newer timestamps)
+REVENUEOS NATIVE POSTGRES
+```
+
+Rules:
+- Never overwrite newer local records with older Mendhaus rows
+- Map document-mode collections → native `ros_*` / imported `revenueos_*` deliberately
+- Keep Mendhaus dump as read-only historical source until merge verified
 
 ---
 
-# Completed stages (unchanged)
+# STEP 6 — Existing Stage 2 dump validity
+
+| Item | Status |
+|------|--------|
+| Dump file | `~/.revenueos/backups/stage2-revenueos-fnrwz-20260810T192422Z.dump` |
+| SHA-256 | `73f6e687a27f0cb0fdf493603f10080d2b3f834094f75cdd2f0bec46f6cbb2c9` |
+| Rows | **107,976** across 5 tables |
+| Restore + restart proofs | PASS (prior) |
+| Is Mendhaus? | **YES** |
+| Re-`pg_dump` needed? | **NO** — retain |
+| Remaining Stage-2-class work | **Import/merge local ledgers + checkpoint into native Postgres** |
+
+---
+
+# Completed foundation
 
 | Stage | Result |
 |-------|--------|
-| Stage 1 | Native Postgres + RevenueOS.Data |
-| Stage 2 tooling | Proven on `fnrwz` dump (wrong authority for cutover) |
-| Authority investigation | **`buvfl` is Mac Core authority** |
+| Stage 1 | Native PG + RevenueOS.Data |
+| Stage 2 dump/restore | Valid **Mendhaus** historical copy |
+| Authority correction | `buvfl` stale; live gap filled by **local durable state** |
 
 ---
 
-# NO STAGE 3 YET
+# DO NOT
 
-Do not switch RevenueOS.Data production path to native Postgres.  
-Do not disable/delete either Supabase project.
+- Stage 3 cutover
+- Ask for another Supabase DB password (no evidence of a second active project)
+- Delete Mendhaus / disable projects
+- Blindly trust `services/operator/.env` `SUPABASE_URL`
 
-## Smallest next step
+## Exact smallest next step
 
-1. Rotate compromised `fnrwz` DB password.  
-2. Provide **direct Postgres URL for `buvfllemxdvmwzhvfori`** in gitignored secrets (no chat paste if avoidable).  
-3. Re-run **Stage 2 only** against `buvfl` (+ inventory local ledgers/checkpoint for merge into native later).  
-4. Only after that verify PASS → consider Stage 3.
+**Design + implement a read-only inventory + merge importer:**  
+local ledger JSON + engine checkpoint → native Postgres tables, with ID/timestamp dedupe against the existing Mendhaus restore — **no production cutover**.
 
 ## Current step
 
-**STOPPED.** Awaiting `buvfl` direct DB credentials after password hygiene.
+**STOPPED** after authority correction. Awaiting instruction to begin local→native merge work.
