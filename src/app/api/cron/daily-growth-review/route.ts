@@ -72,6 +72,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // PHASE 2 — Mac is the RevenueOS brain. Refuse autonomous hunt on Vercel
+  // unless explicitly re-enabled (never set in production).
+  if (process.env.REVENUEOS_VERCEL_BRAIN !== "1") {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      mode: "mac_brain_only",
+      cycleStatus: "refused_cloud_brain",
+      note: "Continuous hunt / runPursuitTick moved to Mac Core — Vercel will not execute the brain",
+    });
+  }
+
   if (!growthStorageIsConfigured()) {
     return NextResponse.json(
       { error: "GrowthOS is not configured" },

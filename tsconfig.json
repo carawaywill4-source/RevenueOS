@@ -32,5 +32,15 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "apps", "revenueos", "packages"]
+  "exclude": [
+    "node_modules",
+    "apps",
+    "revenueos",
+    "packages",
+    "services",
+    "tests",
+    "macos",
+    ".data",
+    "scripts"
+  ]
 }

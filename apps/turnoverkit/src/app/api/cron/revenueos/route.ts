@@ -21,6 +21,16 @@ export async function GET(request: Request) {
   if (!authorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // PHASE 2 — Mac is the RevenueOS brain. Vercel must not run autonomy.
+  if (process.env.REVENUEOS_VERCEL_BRAIN !== "1") {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      mode: "mac_brain_only",
+      cycleStatus: "refused_cloud_brain",
+      note: "RevenueOS autonomous execution runs on Mac Core only",
+    });
+  }
   const adapter = createAdapter();
   const host = await checkOperatorHosting(adapter.id);
   if (host.hosted) {

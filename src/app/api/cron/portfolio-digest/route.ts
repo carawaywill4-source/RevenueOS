@@ -187,6 +187,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // PHASE 2 — portfolio orchestration/reporting belongs on Mac Core.
+  if (process.env.REVENUEOS_VERCEL_BRAIN !== "1") {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      mode: "mac_brain_only",
+      cycleStatus: "refused_cloud_orchestration",
+      note: "Portfolio digest moved off Vercel — Mac Core owns continuous portfolio work",
+    });
+  }
+
   const force = new URL(request.url).searchParams.get("force") === "1";
   const claimed = await claimHourlyEmailSlot("portfolio");
   if (!claimed && !force) {
