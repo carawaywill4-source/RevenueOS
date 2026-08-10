@@ -1,6 +1,6 @@
 # RevenueOS Crash Recovery Log
 
-Last updated: 2026-08-10T18:15:00Z
+Last updated: 2026-08-10T18:20:00Z
 
 ## Original objective
 
@@ -20,33 +20,30 @@ Branch: `cursor/persistent-pursuit-engine`
 Repo: `/Users/willsmacbook/Developer/tributeready`  
 
 ### Completed / present in working tree
-- `packages/revenueos/src/forge/portfolio-50-spec.ts` — full 50-spec catalog.
-- Soft-retire + `dynamic_only_50` mode (`portfolio-active-mode.json`, `portfolio-retired.json`, `portfolio-dynamic.json`).
-- Operator wiring (uncommitted): `portfolio.ts`, `portfolio-reset.ts`, launcher/evolution/scheduler/owner-api/health-server.
-- ~50 untracked scaffolded apps under `apps/*` (spot-check: pkg + page + checkout).
-- Incomplete `services/portfolio-factory/` (aborted earlier).
-- `docs/REVENUEOS_VERCEL_DURATION_ROOT_CAUSE.md`
-- Fail-closed claim lookup in `operator-claims.ts` (local, uncommitted).
-- Mac Activity preserve + owner dashboard Stripe 2s timeout (local, uncommitted).
+- Portfolio-50 spec + soft-retire registries (mostly uncommitted outside recovery steps).
+- Fail-closed claim lookup in core + BidBinder vendor (Step 3).
+- Mac Activity preserve + owner dashboard Stripe 2s timeout (local, uncommitted — Step 4+).
+- `docs/REVENUEOS_VERCEL_DURATION_ROOT_CAUSE.md` (uncommitted).
 
 ### Git snapshot (bounded)
-- Recovery Step 1 committed as `49cd92a` (RECOVERY.md + BidBinder vercel.json).
+- Step 1: `49cd92a` — RECOVERY.md + BidBinder empty crons
+- Step 2: `c889702` — RECOVERY.md deploy proof
 - Do not load `node_modules`, `.next`, `macos/RevenueOS/.build` into context.
 
 ## What is incomplete
 
-1. **61 other apps** still have `* * * * *` crons (BidBinder prod cron cleared).
-2. Fail-closed not proven on Vercel runtime for remaining live projects.
+1. **61 other apps** still have `* * * * *` crons (only BidBinder cleared in prod).
+2. Other apps’ `vendor/revenueos` copies may still be fail-open (only BidBinder synced in Step 3).
 3. Mac Core circuit breaker during Supabase outage.
-4. E2E proof: Mac tick + Vercel no-op when Core owns claim.
-5. Per-business LIVE deploy/fulfillment for the 50 (queued, not started here).
+4. Mac Core: prove one successful tick / Activity not empty (Step 4).
+5. Per-business LIVE deploy/fulfillment for the 50 (queued).
 
 ## Important decisions
 
 - Soft-retire prior portfolio; preserve learning.
 - Active mode = `dynamic_only_50`.
 - Mac Core = brain; Vercel = storefront/webhooks only.
-- Fail closed on claim lookup failure.
+- Fail closed on claim lookup failure (native error, document error, thrown/timeout).
 - Micro-batches only; one business or one subsystem at a time.
 
 ## Likely crash cause
@@ -60,28 +57,28 @@ Cursor resource death from monolithic portfolio-50/factory work + loading many a
 | 0 | Inventory + create RECOVERY.md | DONE |
 | 1 | Disable BidBinder minute cron locally | DONE |
 | 2 | Deploy **only** BidBinder so empty crons take effect in prod | DONE |
-| 3 | Local verify: BidBinder cron route + fail-closed semantics (no full suite) | NEXT |
-| 4 | Mac Core: one successful tick / Activity not empty | PENDING |
+| 3 | Local verify: BidBinder cron route + fail-closed semantics | DONE |
+| 4 | Mac Core: one successful tick / Activity not empty | NEXT |
 | 5 | Minimal Supabase-outage circuit breaker on Core | PENDING |
 | 6 | Disable crons for next 1–3 **retired** sites only | PENDING |
 | 7 | LIVE business queue: BUILD1→TEST→CHECKPOINT→NEXT | PENDING |
 
 ## Completed work (this session)
 
-- Recovered state; created RECOVERY.md.
-- Step 1: `apps/bidbinder/vercel.json` → `"crons": []` (committed `49cd92a`).
-- Step 2: `vercel deploy --prod --yes` from `apps/bidbinder` only.
-  - Deployment: `dpl_GaUCM68QxCJ8VXhxJYyHYf7oSD6j` READY
-  - Alias: https://bidbinder.vercel.app (HTTP 200)
-  - Proof: `vercel cron ls` → **No cron jobs found** for bidbinder
+- Step 1–2: BidBinder cron emptied + prod deploy; `vercel cron ls` → none.
+- Step 3 verification:
+  - **FAIL-CLOSED: PASS** — `checkOperatorHosting` returns `hosted: true` with `owner: lookup_failed_fail_closed` on native 503, thrown timeout, and document 522 after native missing.
+  - **CRON-ROUTE PROTECTION: PASS** — BidBinder `vercel.json` crons `[]`; route early-returns when `host.hosted` before `await runPursuitTick`; vendor matches core.
+  - Fixed BidBinder vendor (was still fail-open) + document-claim HTTP errors now fail closed.
+  - Targeted test: `npx tsx --test tests/operator-claims-fail-closed.test.ts` → 7/7 pass.
 
 ## Current step
 
-Step 2 complete.
+Step 3 complete. STOP — do not start Step 4 until owner directs.
 
 ## Next exact action
 
-Step 3 — Local verify only: read BidBinder `/api/cron/revenueos` route + `checkOperatorHosting` fail-closed path; confirm retired/unhosted behavior without deploying other apps or running full test suites.
+Step 4 — Mac Core only: confirm process is up and obtain one successful tick / non-empty Activity. No portfolio deploy. No multi-app cron sweep.
 
 ## Do not do
 
@@ -90,3 +87,4 @@ Step 3 — Local verify only: read BidBinder `/api/cron/revenueos` route + `chec
 - Load heavy build dirs into context
 - Parallel multi-business work
 - Deploy more than one site per step
+- Begin Step 4 without owner go-ahead

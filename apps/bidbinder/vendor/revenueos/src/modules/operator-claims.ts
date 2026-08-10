@@ -72,7 +72,7 @@ async function fetchDocumentClaim(
   url: string,
   key: string,
   siteId: string,
-): Promise<ClaimRow | null> {
+): Promise<{ ok: true; row: ClaimRow | null } | { ok: false }> {
   const id = operatorClaimDocId(siteId);
   const res = await fetch(
     `${url}/rest/v1/revenueos_experiments?id=eq.${encodeURIComponent(id)}&select=document&limit=1`,
@@ -85,9 +85,10 @@ async function fetchDocumentClaim(
       signal: AbortSignal.timeout(8_000),
     },
   );
-  if (!res.ok) return null;
+  // Transport/API failure must fail closed — never treat as "unclaimed".
+  if (!res.ok) return { ok: false };
   const rows = (await res.json()) as Array<{ document?: ClaimRow }>;
-  return rows[0]?.document ?? null;
+  return { ok: true, row: rows[0]?.document ?? null };
 }
 
 export async function checkOperatorHosting(
@@ -116,10 +117,25 @@ export async function checkOperatorHosting(
       };
     }
     if (!native.missing) {
-      return { hosted: false, reason: "lookup_failed" };
+      // FAIL CLOSED: Supabase errors must NOT wake the Vercel brain.
+      // Dual-execution / duration storms happen when lookup_failed was treated
+      // as "unhosted" and cron ran runPursuitTick during outages.
+      return {
+        hosted: true,
+        reason: "env_flag",
+        owner: "lookup_failed_fail_closed",
+      };
     }
 
-    const doc = activeFromRow(await fetchDocumentClaim(url, key, siteId));
+    const docRes = await fetchDocumentClaim(url, key, siteId);
+    if (!docRes.ok) {
+      return {
+        hosted: true,
+        reason: "env_flag",
+        owner: "lookup_failed_fail_closed",
+      };
+    }
+    const doc = activeFromRow(docRes.row);
     if (!doc) return { hosted: false, reason: "unclaimed" };
     return {
       hosted: true,
@@ -129,6 +145,11 @@ export async function checkOperatorHosting(
       storage: "document",
     };
   } catch {
-    return { hosted: false, reason: "lookup_failed" };
+    // FAIL CLOSED — same as lookup_failed above.
+    return {
+      hosted: true,
+      reason: "env_flag",
+      owner: "lookup_failed_fail_closed",
+    };
   }
 }
