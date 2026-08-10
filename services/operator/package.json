@@ -18,10 +18,12 @@
     "@revenueos/core": "file:../../packages/revenueos",
     "@revenueos/storefront-kit": "file:../../packages/storefront-kit",
     "@supabase/supabase-js": "^2.109.0",
+    "pg": "^8.16.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/pg": "^8.15.5",
     "tsx": "^4.23.10",
     "typescript": "^5"
   }

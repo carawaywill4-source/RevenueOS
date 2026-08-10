@@ -1,13 +1,20 @@
 # RevenueOS Recovery + Native Platform
 
-Last updated: 2026-08-10T20:04:00Z  
-Mode: **STEP 11 REAL IMPORT + NATIVE TEST PASS — live cutover still blocked**
+Last updated: 2026-08-10T20:20:00Z  
+Mode: **LIVE SUPABASE CUTOVER COMPLETE — Vercel removal not started**
+
+```
+SUPABASE_RUNTIME_DEPENDENCY = 0
+SUPABASE_DATA_AUTHORITY = false
+REVENUEOS_NATIVE_POSTGRES_AUTHORITY = true
+VERCEL_DEPENDENCY = (unchanged — not this step)
+```
 
 ## Ultimate pass condition
 
 ```
-SUPABASE_DEPENDENCY = 0
-VERCEL_DEPENDENCY = 0
+SUPABASE_DEPENDENCY = 0   ✅ runtime
+VERCEL_DEPENDENCY = 0     ⏳ next
 ```
 
 RevenueOS must survive even if Mendhaus (or any single business) is deleted.
@@ -279,30 +286,46 @@ Report: `~/.revenueos/backups/native-core-test-2026-08-10T20-03-50-582Z.json`
 | Supabase network calls observed | **NO** |
 | Live LaunchAgent changed | **NO** |
 
-### Authority status
-
-```
-NATIVE POSTGRES = populated + verified replacement (ready to become LIVE authority)
-LIVE REVENUEOS CORE / LaunchAgent = UNCHANGED (still file-ledger / stale Supabase config path)
-```
-
 ---
 
-# FINAL SUPABASE CUTOVER PROCEDURE (DO NOT RUN YET)
+# LIVE SUPABASE CUTOVER (COMPLETE)
 
-Exact sequence when approved:
+Pre-cutover backup: `~/.revenueos/backups/revenueos-pre-cutover-2026-08-10T20-09-21-418Z.dump`  
+SHA-256: `8502e9cfcb70861a1deff543ebb320e36b9bf03b021403b27ca253584a53fb14`  
+Delta re-import after ledger advance: `platformImportReal=PASS` (50 businesses, conflicts=0, unknown=0, mh_*=absent)
 
-1. Backup native PG: `npm run db -- backup pre-cutover`
-2. Re-run `platform-import` if local ledgers advanced materially since last import
-3. Re-run `native-core-test` → must PASS
-4. Point **test** operator boot at native only (`REVENUEOS_DATA_PROVIDER=postgres`, `SUPABASE=DISABLED`, alternate port) for soak
-5. Update LaunchAgent plist / operator env: `REVENUEOS_DATA_PROVIDER=postgres`, `REVENUEOS_DATABASE_URL=…55432…`; remove Supabase URL/key from Core boot path
-6. Restart LaunchAgent once; verify health + 50 businesses + ticks write to `ros_*`
-7. Confirm zero Supabase REST from Core process
-8. Only then disable/remove Supabase project credentials from RevenueOS Core secrets
-9. Vercel migration remains a later step
+### Native soak (PORT 18080) then LIVE LaunchAgent (`com.revenueos.core` :8080)
 
-**Do not perform steps 5–8 until explicitly approved.**
+| Check | Result |
+|-------|--------|
+| Live cutover | **PASS** |
+| Native authority (`engine.authority=mac/native`, `dataProvider=postgres`) | **PASS** |
+| 50-business restore | **PASS** |
+| Real brain ticks (observe/decide/enqueue/learn; exec>0) | **PASS** |
+| Native write proof | events/activity/pursuits advanced in `ros_*` during live window |
+| PG + Core restart recovery | **PASS** (`DB_HEALTHY`, ticks resume) |
+| Supabase credentials in runtime | **NO** (`SUPABASE_URL` / `SERVICE_ROLE_KEY` / `DB_URL` absent from `.env`, plist, process) |
+| Supabase network calls (post-cutover logs) | **0** |
+| Stale Mendhaus→platform env coupling removed | **YES** |
+| Supabase unavailable failure test | Core remains healthy on native Postgres |
+
+### Coupling cleanup applied
+
+- Operator boots via `REVENUEOS_DATA_PROVIDER=postgres` + `createPostgresExperimentStore` → `ros_*`
+- `hydrateEnvFromFiles` no longer reads `apps/*/.env.local` or Mendhaus donor
+- Platform config: `.env.revenueos-platform` (+ example) / `services/operator/.env`
+- `scripts/sync-portfolio-envs.mjs`: `SUPABASE_*` removed from `SHARED_KEYS`
+- `scripts/deploy-portfolio-site.mjs`: default donor → `.env.revenueos-platform` (not Mendhaus)
+- LaunchAgent plist embeds native provider; Supabase keys removed
+- Historical Supabase dump retained offline under `~/.revenueos/backups/` (not required at runtime)
+
+### Supabase project/account
+
+**May be cancelled without stopping RevenueOS.** Do not delete until you explicitly choose to; dump remains as offline archive.
+
+### Smallest first step for Vercel removal (NOT STARTED)
+
+Inventory LaunchAgent/`REVENUEOS_VERCEL_BRAIN` + per-app Vercel crons that still assume cloud brain; hard-disable cloud ticks while Mac remains sole authority — then retire hosting plane separately.
 
 ---
 
@@ -311,14 +334,13 @@ Exact sequence when approved:
 | Item | Status |
 |------|--------|
 | Stage 1 native PG + RevenueOS.Data | Done |
-| Stage 2 `revenueos_*` dump/restore/checksum | Done — **reinterpret as misplaced platform slice** |
+| Stage 2 `revenueos_*` dump/restore/checksum | Done — offline archive |
 | Ownership forensics | Done |
-| Step 10 platform-import dry-run | **PASS** |
-| Step 11 migration 0002 + import tooling | **PASS** (commit `9c5a657`) |
-| Step 11 real import + native test | **PASS** |
-| `buvfl…` in Core `.env` | Stale config; not Mendhaus; not authority |
-| Mac Core current writes | Local ledgers (platform) while configured Supabase path fails |
+| Step 10–11 import + native test | **PASS** |
+| Live Supabase cutover | **PASS** |
+| Mac Core writes | **`ros_*` native Postgres** |
 
 ## Current step
 
-**STOPPED after Step 11.** Native Postgres is ready to become LIVE authority. Awaiting approval for Supabase cutover. No Vercel work yet.
+**STOPPED after live Supabase cutover.**  
+`SUPABASE_RUNTIME_DEPENDENCY = 0`. Do not start Vercel removal until approved.

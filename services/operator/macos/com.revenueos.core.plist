@@ -29,6 +29,14 @@
     <string>LIVE</string>
     <key>REVENUEOS_VERCEL_BRAIN</key>
     <string>0</string>
+    <key>REVENUEOS_DATA_PROVIDER</key>
+    <string>postgres</string>
+    <key>REVENUEOS_DATABASE_URL</key>
+    <string>postgresql://revenueos:revenueos_local_dev@127.0.0.1:55432/revenueos</string>
+    <key>SUPABASE_DISABLED</key>
+    <string>1</string>
+    <key>SUPABASE</key>
+    <string>DISABLED</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>

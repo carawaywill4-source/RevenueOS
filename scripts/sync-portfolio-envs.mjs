@@ -52,8 +52,8 @@ export const SHARED_KEYS = [
   "REDDIT_USER_AGENT",
   "REDDIT_ALLOWED_SUBREDDITS",
   "REDDIT_DAILY_ACTION_CAP",
-  "SUPABASE_URL",
-  "SUPABASE_SERVICE_ROLE_KEY",
+  // SUPABASE_URL removed — businesses must not define RevenueOS platform infra
+  // SUPABASE_SERVICE_ROLE_KEY removed from shared platform sync
   "CRON_SECRET",
   "PORTFOLIO_PULSE_TOKEN",
   "OWNER_DIALOG_TOKEN",

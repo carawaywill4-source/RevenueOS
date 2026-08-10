@@ -3,7 +3,7 @@
  * Vendor packages, create/link Vercel project, copy secrets from a donor .env,
  * create Stripe webhook, deploy production.
  *
- * Usage: node scripts/deploy-portfolio-site.mjs <siteId> [--donor apps/mendhaus/.env.local]
+ * Usage: node scripts/deploy-portfolio-site.mjs <siteId> [--donor .env.revenueos-platform]
  */
 import { execSync, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
@@ -20,7 +20,7 @@ if (!siteId) {
 }
 const donorArg = process.argv.includes("--donor")
   ? process.argv[process.argv.indexOf("--donor") + 1]
-  : "apps/mendhaus/.env.local";
+  : ".env.revenueos-platform";
 const appDir = path.join(ROOT, "apps", siteId);
 if (!fs.existsSync(appDir)) {
   console.error("missing app", appDir);

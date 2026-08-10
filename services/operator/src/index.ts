@@ -1,31 +1,25 @@
 /**
  * Persistent RevenueOS operator service.
  *
- * The serverless form runs each business's brain in a 60-second Vercel
- * cron burst, once per hour. This service runs the same brain in a
- * long-lived Node process — real event loop, sub-minute tick cadence,
- * no cold-start.
- *
  * Boot sequence:
- *   1. Parse env (fails fast if Supabase creds are missing).
- *   2. Wire the Supabase-backed ExperimentStore.
- *   3. Register a fly.io-friendly SIGTERM handler that flips an AbortController.
- *   4. Start the HTTP health/status server on :8080.
- *   5. For each business in the manifest, spawn a scheduler task that:
- *        - claims the business (revenueos_operator_claims)
- *        - constructs the portable adapter with the sidecar-backed executor
- *        - runs runOperatorTick under the shared concurrency semaphore
- *   6. On SIGTERM, release claims and stop the loop within grace period.
+ *   1. Parse env (native Postgres OR legacy Supabase).
+ *   2. Wire ExperimentStore (ros_* Postgres is LIVE authority after cutover).
+ *   3. SIGTERM → AbortController.
+ *   4. HTTP health/status server.
+ *   5. Per-business scheduler ticks.
  */
 
 import {
   createFileExperimentStore,
   createOperatorAdapter,
+  type ExperimentStore,
   type OperatorLoopLogger,
 } from "@revenueos/core";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type pg from "pg";
 import { hydrateEnvFromFiles, loadEnv } from "./env.js";
 import { PORTFOLIO, findBusiness, getPortfolio } from "./portfolio.js";
 
@@ -43,6 +37,15 @@ import {
   createSupabaseStore,
   type OperatorLedgerMode,
 } from "./lib/supabase-store.js";
+import { createPostgresExperimentStore } from "./lib/postgres-store.js";
+import {
+  applyOwnerControlPg,
+  claimBusinessPg,
+  listRecentNativeActivity,
+  loadOwnerControlsPg,
+  persistSchedulerCheckpointPg,
+  releaseBusinessPg,
+} from "./lib/postgres-platform.js";
 import {
   defaultCheckpointPath,
   loadEngineCheckpoint,
@@ -59,6 +62,7 @@ import {
 } from "./lib/agent-executor.js";
 import { PortfolioScheduler } from "./lib/scheduler.js";
 import { createHealthServer } from "./lib/health-server.js";
+import { buildOwnerDashboardNative } from "./lib/owner-api.js";
 import {
   applyOwnerControl,
   isBusinessCommerciallyPaused,
@@ -104,6 +108,7 @@ async function main() {
     });
   });
 
+  const nativePostgres = env.dataProvider === "postgres";
   logger("info", "operator.boot.start", {
     service: SERVICE_NAME,
     version: SERVICE_VERSION,
@@ -112,13 +117,9 @@ async function main() {
     tickBudgetMs: env.TICK_BUDGET_MS,
     shadowMode: shadow,
     claimEnabled,
-    authority: "mac",
+    authority: nativePostgres ? "mac/native" : "mac",
+    dataProvider: env.dataProvider,
     macBrain: process.env.REVENUEOS_MAC_BRAIN === "1",
-  });
-
-  const { store, mode, client, invalidateModeCache } = createSupabaseStore({
-    url: env.SUPABASE_URL,
-    serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
   });
 
   const localLedgerRoot = path.resolve(
@@ -126,26 +127,52 @@ async function main() {
     "../../../.data/operator-local-ledger",
   );
 
-  let ledgerMode: OperatorLedgerMode | null = null;
-  /** When Supabase REST hangs/fails, keep Mac Core ticking on local file ledgers. */
+  let store: ExperimentStore;
+  let client: SupabaseClient | undefined;
+  let pgPool: pg.Pool | undefined;
+  let ledgerMode: OperatorLedgerMode | "native_postgres" | null = null;
+  /** Legacy Supabase-only degrade path — never used in native Postgres mode. */
   let degradedLocal = false;
-  try {
-    ledgerMode = await mode();
-    logger("info", "operator.boot.ledger_mode", { ledgerMode });
-  } catch (error) {
-    logger("warn", "operator.boot.ledger_probe_failed", {
-      message: error instanceof Error ? error.message : String(error),
+  let invalidateModeCache: () => void = () => {};
+
+  if (nativePostgres) {
+    const handle = createPostgresExperimentStore(env.REVENUEOS_DATABASE_URL!);
+    store = handle.store;
+    pgPool = handle.pool;
+    ledgerMode = await handle.mode();
+    // Health probe
+    await pgPool.query("select 1");
+    logger("info", "operator.boot.ledger_mode", {
+      ledgerMode,
+      provider: "postgres",
+      supabase: "DISABLED",
     });
-  }
-  if (ledgerMode === "unavailable" || ledgerMode === null) {
-    degradedLocal = true;
-    ledgerMode = "unavailable";
-    invalidateModeCache();
-    logger("warn", "operator.boot.degraded_local_ledger", {
-      reason: "supabase_unavailable",
-      ledgerRoot: localLedgerRoot,
-      note: "ticks continue on file ledger until Supabase responds",
+  } else {
+    const sb = createSupabaseStore({
+      url: env.SUPABASE_URL!,
+      serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY!,
     });
+    store = sb.store;
+    client = sb.client;
+    invalidateModeCache = sb.invalidateModeCache;
+    try {
+      ledgerMode = await sb.mode();
+      logger("info", "operator.boot.ledger_mode", { ledgerMode });
+    } catch (error) {
+      logger("warn", "operator.boot.ledger_probe_failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    if (ledgerMode === "unavailable" || ledgerMode === null) {
+      degradedLocal = true;
+      ledgerMode = "unavailable";
+      invalidateModeCache();
+      logger("warn", "operator.boot.degraded_local_ledger", {
+        reason: "supabase_unavailable",
+        ledgerRoot: localLedgerRoot,
+        note: "legacy path only — native Postgres mode does not use this",
+      });
+    }
   }
 
   const wanted =
@@ -170,20 +197,24 @@ async function main() {
 
   let controlState: OwnerControlState;
   try {
-    controlState = await Promise.race([
-      loadOwnerControls(client),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("owner_controls_timeout")), 8_000),
-      ),
-    ]);
+    if (nativePostgres && pgPool) {
+      controlState = await loadOwnerControlsPg(pgPool);
+    } else {
+      controlState = await Promise.race([
+        loadOwnerControls(client!),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("owner_controls_timeout")), 8_000),
+        ),
+      ]);
+    }
   } catch (error) {
-    degradedLocal = true;
+    if (!nativePostgres) degradedLocal = true;
     controlState = {
       portfolioPaused: false,
       pausedBusinesses: [],
       prioritizedBusinesses: [],
       updatedAt: new Date().toISOString(),
-      updatedBy: "degraded_local",
+      updatedBy: nativePostgres ? "native_default" : "degraded_local",
     };
     logger("warn", "operator.boot.owner_controls_degraded", {
       message: error instanceof Error ? error.message : String(error),
@@ -194,19 +225,23 @@ async function main() {
     pausedBusinesses: controlState.pausedBusinesses,
     prioritizedBusinesses: controlState.prioritizedBusinesses,
     degradedLocal,
+    dataProvider: env.dataProvider,
   });
 
   const scheduler = new PortfolioScheduler({
     businesses,
     createAdapter: async (business) => {
-      const tickStore = degradedLocal
-        ? (() => {
-            const dir = path.join(localLedgerRoot, business.siteId);
-            mkdirSync(dir, { recursive: true });
-            return createFileExperimentStore(dir);
-          })()
-        : store;
-      if (degradedLocal) {
+      const tickStore =
+        nativePostgres
+          ? store
+          : degradedLocal
+            ? (() => {
+                const dir = path.join(localLedgerRoot, business.siteId);
+                mkdirSync(dir, { recursive: true });
+                return createFileExperimentStore(dir);
+              })()
+            : store;
+      if (!nativePostgres && degradedLocal) {
         logger("info", "operator.tick.local_ledger", {
           siteId: business.siteId,
         });
@@ -222,8 +257,7 @@ async function main() {
               detail: `shadow_mode: would execute ${action.type}`,
             };
           }
-          if (degradedLocal) {
-            // Do not pretend commerce happened — defer until Supabase/coordination recovers.
+          if (!nativePostgres && degradedLocal) {
             return {
               ok: false,
               detail: `degraded_local_deferred:${action.type}`,
@@ -253,14 +287,31 @@ async function main() {
       });
     },
     createClaim: async (business) => {
-      if (!claimEnabled || degradedLocal) {
-        // Synthetic lease so Mac scheduler keeps ticking when claims table
-        // is unavailable; Vercel routes hard-refuse the brain (Phase 2).
+      if (!claimEnabled) {
+        return new Date(Date.now() + env.CLAIM_LEASE_MS).toISOString();
+      }
+      if (nativePostgres && pgPool) {
+        try {
+          const claim = await claimBusinessPg(pgPool, {
+            siteId: business.siteId,
+            owner: env.OPERATOR_NAME,
+            leaseMs: env.CLAIM_LEASE_MS,
+          });
+          if (claim?.leaseUntil) return claim.leaseUntil;
+        } catch (error) {
+          logger("warn", "operator.claim.pg_error", {
+            siteId: business.siteId,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+        return new Date(Date.now() + env.CLAIM_LEASE_MS).toISOString();
+      }
+      if (degradedLocal) {
         return new Date(Date.now() + env.CLAIM_LEASE_MS).toISOString();
       }
       try {
         const claim = await Promise.race([
-          claimBusiness(client, {
+          claimBusiness(client!, {
             siteId: business.siteId,
             owner: env.OPERATOR_NAME,
             leaseMs: env.CLAIM_LEASE_MS,
@@ -284,7 +335,15 @@ async function main() {
       return new Date(Date.now() + env.CLAIM_LEASE_MS).toISOString();
     },
     releaseClaim: async (business) => {
-      if (!claimEnabled || degradedLocal) return;
+      if (!claimEnabled) return;
+      if (nativePostgres && pgPool) {
+        await releaseBusinessPg(pgPool, {
+          siteId: business.siteId,
+          owner: env.OPERATOR_NAME,
+        });
+        return;
+      }
+      if (degradedLocal || !client) return;
       await releaseBusiness(client, {
         siteId: business.siteId,
         owner: env.OPERATOR_NAME,
@@ -322,16 +381,61 @@ async function main() {
       mode: process.env.REVENUEOS_MODE || "LIVE",
       businesses,
     });
+    if (nativePostgres && pgPool) {
+      const doc = {
+        version: 1,
+        savedAt: new Date().toISOString(),
+        authority: "mac",
+        mode: process.env.REVENUEOS_MODE || "LIVE",
+        businesses,
+      };
+      void persistSchedulerCheckpointPg(pgPool, doc).catch((err) => {
+        logger("warn", "operator.checkpoint.pg_persist_failed", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
   });
 
   const health = createHealthServer({
     port: env.PORT,
     logger: (msg, meta) => logger("info", msg, meta ?? {}),
     client,
+    buildNativeDashboard: nativePostgres
+      ? async (snap) => {
+          const since = new Date(Date.now() - 6 * 3_600_000).toISOString();
+          const recentEvents = pgPool
+            ? await listRecentNativeActivity(
+                pgPool,
+                snap.businesses.map((b) => b.siteId),
+                since,
+                40,
+              )
+            : [];
+          return buildOwnerDashboardNative({
+            businesses: snap.businesses,
+            uptimeSec: snap.service.uptimeSec,
+            startedAt: snap.service.startedAt,
+            ownerControls: controlState,
+            recentEvents,
+            dataProvider: "postgres",
+          });
+        }
+      : undefined,
     getOwnerControls: () => controlState,
     onOwnerControl: async (command, siteId) => {
+      if (nativePostgres && pgPool) {
+        const result = await applyOwnerControlPg({
+          pool: pgPool,
+          command: command as ControlCommand,
+          siteId,
+          actor: "owner-ui",
+        });
+        if (result.ok) controlState = result.state;
+        return result;
+      }
       const result = await applyOwnerControl({
-        client,
+        client: client!,
         command: command as ControlCommand,
         siteId,
         actor: "owner-ui",
@@ -360,9 +464,11 @@ async function main() {
         ),
         ledgerMode,
         degradedLocal,
+        dataProvider: env.dataProvider,
+        dbHealth: nativePostgres ? "DB_HEALTHY" : undefined,
       },
       engine: {
-        authority: "mac" as const,
+        authority: (nativePostgres ? "mac/native" : "mac") as "mac",
         macBrain: process.env.REVENUEOS_MAC_BRAIN === "1",
         vercelBrainAllowed: process.env.REVENUEOS_VERCEL_BRAIN === "1",
         checkpointPath,
@@ -371,12 +477,14 @@ async function main() {
         tickBudgetMs: env.TICK_BUDGET_MS,
         perBusinessMinIntervalMs: env.PER_BUSINESS_MIN_INTERVAL_MS,
         supervision: "launchd_keepalive",
+        dataProvider: env.dataProvider,
       },
       businesses: scheduler.getStatuses(),
       cutover: {
         shadowMode: shadow,
         claimEnabled,
         operator: env.OPERATOR_NAME,
+        supabaseDisabled: nativePostgres,
       },
       ownerControls: {
         portfolioPaused: controlState.portfolioPaused,
@@ -394,9 +502,13 @@ async function main() {
   });
 
   // PortfolioArchitect evolution — slow cadence; does not interrupt commercial ticks.
-  // Owner-authorized 50-business reset raises throughput; otherwise suppress auto-spawn.
-  // Skip while Supabase is unreachable — evolution cannot persist and would only hang.
-  if (degradedLocal) {
+  // Skip in native Postgres until architect state is ported off Supabase client.
+  // Skip while legacy Supabase is unreachable.
+  if (nativePostgres) {
+    logger("info", "operator.architect.skipped_native_postgres", {
+      note: "architect persistence still Supabase-shaped; commercial ticks unaffected",
+    });
+  } else if (degradedLocal) {
     logger("warn", "operator.architect.skipped_degraded_local", {});
   } else {
     try {

@@ -173,6 +173,10 @@ export function createHealthServer(input: {
   snapshot: StatusSnapshotProvider;
   logger: (msg: string, meta?: Record<string, unknown>) => void;
   client?: SupabaseClient;
+  /** Native Postgres dashboard builder (no Supabase). */
+  buildNativeDashboard?: (
+    snap: ReturnType<StatusSnapshotProvider>,
+  ) => Promise<Record<string, unknown>>;
   onAddBusiness?: (siteId: string) => { ok: boolean; detail: string };
   getOwnerControls?: () => OwnerControlState;
   onOwnerControl?: (
@@ -238,36 +242,118 @@ export function createHealthServer(input: {
     if (req.method === "GET" && url.pathname === "/owner/dashboard") {
       if (!authorizedLocal(req)) return json(401, { error: "Unauthorized" });
       const snap = input.snapshot();
+      if (!input.client && input.buildNativeDashboard) {
+        void input
+          .buildNativeDashboard(snap)
+          .then(async (dash) => {
+            const money = await Promise.race([
+              fetchStripeMoney(),
+              new Promise<Record<string, unknown>>((resolve) =>
+                setTimeout(
+                  () =>
+                    resolve({
+                      ok: false,
+                      reason: "stripe_timeout",
+                      stripeAvailableLabel: "unavailable",
+                      stripePendingLabel: "unavailable",
+                    }),
+                  2_500,
+                ),
+              ),
+            ]);
+            json(200, {
+              ...dash,
+              today: {
+                ...(dash.today as object),
+                ...(money as object),
+              },
+            });
+          })
+          .catch((err) =>
+            json(500, {
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
+        return;
+      }
       if (!input.client) {
         json(200, {
           ok: true,
           businesses: snap.businesses,
-          note: "supabase client unavailable",
+          note: "memory client unavailable",
         });
         return;
       }
+      // Activity must return fast for the Mac app (10s client timeout).
+      // Never block the dashboard on Stripe — /money owns financial truth.
       void buildOwnerDashboard({
         client: input.client,
         businesses: snap.businesses,
         uptimeSec: snap.service.uptimeSec,
         startedAt: snap.service.startedAt,
         ownerControls: input.getOwnerControls?.(),
-      }).then(async (dash) => {
-        const money = await fetchStripeMoney();
-        json(200, {
-          ...dash,
-          today: {
-            ...((dash.today as object) ?? {}),
-            stripeAvailableLabel:
-              (money as { stripeAvailableLabel?: string }).stripeAvailableLabel ??
-              "unavailable",
-            stripePendingLabel:
-              (money as { stripePendingLabel?: string }).stripePendingLabel ??
-              "unavailable",
-          },
-          money,
+      })
+        .then(async (dash) => {
+          const money = await Promise.race([
+            fetchStripeMoney(),
+            new Promise<Record<string, unknown>>((resolve) =>
+              setTimeout(
+                () =>
+                  resolve({
+                    ok: false,
+                    reason: "stripe_timeout",
+                    stripeAvailableLabel: "unavailable",
+                    stripePendingLabel: "unavailable",
+                  }),
+                2_000,
+              ),
+            ),
+          ]);
+          json(200, {
+            ...dash,
+            today: {
+              ...((dash.today as object) ?? {}),
+              stripeAvailableLabel:
+                (money as { stripeAvailableLabel?: string })
+                  .stripeAvailableLabel ?? "unavailable",
+              stripePendingLabel:
+                (money as { stripePendingLabel?: string }).stripePendingLabel ??
+                "unavailable",
+            },
+            money,
+          });
+        })
+        .catch((err) => {
+          // Still surface in-memory tick activity if dashboard assembly fails.
+          const operational = snap.businesses
+            .filter((b) => b.lastTickAt)
+            .sort(
+              (a, b) =>
+                Date.parse(b.lastTickAt ?? "0") -
+                Date.parse(a.lastTickAt ?? "0"),
+            )
+            .slice(0, 25)
+            .map((b) => ({
+              at: b.lastTickAt,
+              business: b.displayName,
+              summary:
+                b.lastOk === false
+                  ? `Repairing — ${b.lastError ?? "tick error"}`
+                  : (b.lastExecuted ?? 0) > 0
+                    ? `Executed ${b.lastExecuted} commercial action(s)`
+                    : (b.lastEnqueued ?? 0) > 0
+                      ? `Planned ${b.lastEnqueued} next move(s)`
+                      : "Operating cycle completed",
+            }));
+          json(200, {
+            ok: true,
+            health: { label: "Operating", uptimeSec: snap.service.uptimeSec },
+            businesses: snap.businesses,
+            activity: operational,
+            note: "dashboard_partial",
+            error: err instanceof Error ? err.message : String(err),
+          });
         });
-      });
       return;
     }
 

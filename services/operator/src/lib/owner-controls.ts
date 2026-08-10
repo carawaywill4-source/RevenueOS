@@ -5,14 +5,22 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  DEFAULT_OWNER_CONTROL_STATE,
+  type ControlCommand,
+  type OwnerControlState,
+  isBusinessCommerciallyPaused,
+  prioritizeBoostMs,
+} from "./owner-controls-types.js";
 
-export type OwnerControlState = {
-  portfolioPaused: boolean;
-  pausedBusinesses: string[];
-  prioritizedBusinesses: string[];
-  updatedAt: string;
-  updatedBy: string;
-};
+export type {
+  ControlCommand,
+  OwnerControlState,
+} from "./owner-controls-types.js";
+export {
+  isBusinessCommerciallyPaused,
+  prioritizeBoostMs,
+} from "./owner-controls-types.js";
 
 export type OwnerControlAudit = {
   id: string;
@@ -27,13 +35,7 @@ const STATE_ID = "ros:owner_control:portfolio";
 const STATE_CATEGORY = "__ros_owner_control__";
 const AUDIT_CATEGORY = "__ros_owner_control_audit__";
 
-const DEFAULT_STATE: OwnerControlState = {
-  portfolioPaused: false,
-  pausedBusinesses: [],
-  prioritizedBusinesses: [],
-  updatedAt: new Date(0).toISOString(),
-  updatedBy: "system",
-};
+const DEFAULT_STATE: OwnerControlState = { ...DEFAULT_OWNER_CONTROL_STATE };
 
 export async function loadOwnerControls(
   client: SupabaseClient,
@@ -95,13 +97,6 @@ async function audit(
   );
 }
 
-export type ControlCommand =
-  | "pause_revenueos"
-  | "resume_revenueos"
-  | "pause_business"
-  | "resume_business"
-  | "prioritize_business";
-
 export async function applyOwnerControl(input: {
   client: SupabaseClient;
   command: ControlCommand;
@@ -157,21 +152,4 @@ export async function applyOwnerControl(input: {
     state,
     detail: `Applied ${input.command}${siteId ? ` for ${siteId}` : ""} — learning and queues retained`,
   };
-}
-
-export function isBusinessCommerciallyPaused(
-  state: OwnerControlState,
-  siteId: string,
-): boolean {
-  return state.portfolioPaused || state.pausedBusinesses.includes(siteId);
-}
-
-export function prioritizeBoostMs(
-  state: OwnerControlState,
-  siteId: string,
-): number {
-  const idx = state.prioritizedBusinesses.indexOf(siteId);
-  if (idx < 0) return 0;
-  // Higher priority → shorter wait between ticks (still gated by brain cooldowns).
-  return Math.max(0, 30_000 - idx * 5_000);
 }
