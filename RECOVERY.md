@@ -1,6 +1,6 @@
 # RevenueOS Crash Recovery Log
 
-Last updated: 2026-08-10T18:12:00Z
+Last updated: 2026-08-10T18:15:00Z
 
 ## Original objective
 
@@ -30,13 +30,13 @@ Repo: `/Users/willsmacbook/Developer/tributeready`
 - Mac Activity preserve + owner dashboard Stripe 2s timeout (local, uncommitted).
 
 ### Git snapshot (bounded)
-- ~72 dirty paths; portfolio-50 reset uncommitted.
+- Recovery Step 1 committed as `49cd92a` (RECOVERY.md + BidBinder vercel.json).
 - Do not load `node_modules`, `.next`, `macos/RevenueOS/.build` into context.
 
 ## What is incomplete
 
-1. **61 other apps** still have `* * * * *` crons (BidBinder local cron cleared; not yet deployed).
-2. Fail-closed not proven on Vercel runtime for live projects.
+1. **61 other apps** still have `* * * * *` crons (BidBinder prod cron cleared).
+2. Fail-closed not proven on Vercel runtime for remaining live projects.
 3. Mac Core circuit breaker during Supabase outage.
 4. E2E proof: Mac tick + Vercel no-op when Core owns claim.
 5. Per-business LIVE deploy/fulfillment for the 50 (queued, not started here).
@@ -59,8 +59,8 @@ Cursor resource death from monolithic portfolio-50/factory work + loading many a
 |------|-------|--------|
 | 0 | Inventory + create RECOVERY.md | DONE |
 | 1 | Disable BidBinder minute cron locally | DONE |
-| 2 | Deploy **only** BidBinder so empty crons take effect in prod (or confirm deploy command; no other apps) | NEXT |
-| 3 | Local verify: BidBinder cron route + fail-closed semantics (no full suite) | PENDING |
+| 2 | Deploy **only** BidBinder so empty crons take effect in prod | DONE |
+| 3 | Local verify: BidBinder cron route + fail-closed semantics (no full suite) | NEXT |
 | 4 | Mac Core: one successful tick / Activity not empty | PENDING |
 | 5 | Minimal Supabase-outage circuit breaker on Core | PENDING |
 | 6 | Disable crons for next 1–3 **retired** sites only | PENDING |
@@ -68,17 +68,20 @@ Cursor resource death from monolithic portfolio-50/factory work + loading many a
 
 ## Completed work (this session)
 
-- Recovered state from git + `docs/REVENUEOS_VERCEL_DURATION_ROOT_CAUSE.md` + prior transcript.
-- Created this file.
-- Step 1: `apps/bidbinder/vercel.json` → `"crons": []` (JSON validated).
+- Recovered state; created RECOVERY.md.
+- Step 1: `apps/bidbinder/vercel.json` → `"crons": []` (committed `49cd92a`).
+- Step 2: `vercel deploy --prod --yes` from `apps/bidbinder` only.
+  - Deployment: `dpl_GaUCM68QxCJ8VXhxJYyHYf7oSD6j` READY
+  - Alias: https://bidbinder.vercel.app (HTTP 200)
+  - Proof: `vercel cron ls` → **No cron jobs found** for bidbinder
 
 ## Current step
 
-Step 1 complete. Awaiting continuation into Step 2.
+Step 2 complete.
 
 ## Next exact action
 
-Deploy **only** BidBinder (single Vercel project) so production stops invoking `/api/cron/revenueos` every minute. Do not deploy the portfolio. Do not touch other `vercel.json` files in the same step.
+Step 3 — Local verify only: read BidBinder `/api/cron/revenueos` route + `checkOperatorHosting` fail-closed path; confirm retired/unhosted behavior without deploying other apps or running full test suites.
 
 ## Do not do
 
@@ -86,3 +89,4 @@ Deploy **only** BidBinder (single Vercel project) so production stops invoking `
 - Run portfolio-factory E2E
 - Load heavy build dirs into context
 - Parallel multi-business work
+- Deploy more than one site per step
