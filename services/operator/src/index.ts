@@ -228,6 +228,12 @@ async function main() {
     dataProvider: env.dataProvider,
   });
 
+  // Shared lane routing state — refreshed from admit checkpoint (no global freeze).
+  const admitLaneState = {
+    currentCandidate: null as string | null,
+    titanManaged: new Set<string>(),
+  };
+
   const scheduler = new PortfolioScheduler({
     businesses,
     createAdapter: async (business) => {
@@ -354,6 +360,13 @@ async function main() {
     prioritizeIntervalBoostMs: (siteId) =>
       prioritizeBoostMs(controlState, siteId),
     maxConcurrency: env.MAX_CONCURRENCY,
+    laneReservedRevenue: Number(process.env.LANE_RESERVED_REVENUE || env.LANE_RESERVED_REVENUE || 2),
+    laneReservedAdmit: Number(process.env.LANE_RESERVED_ADMIT || env.LANE_RESERVED_ADMIT || 1),
+    laneForSite: (siteId) => {
+      if (admitLaneState.currentCandidate === siteId) return "admit";
+      if (admitLaneState.titanManaged.has(siteId)) return "revenue";
+      return "general";
+    },
     perBusinessMinIntervalMs: env.PER_BUSINESS_MIN_INTERVAL_MS,
     tickBudgetMs: env.TICK_BUDGET_MS,
     maxJobsPerTick: env.MAX_JOBS_PER_TICK,
@@ -591,6 +604,8 @@ async function main() {
           // Monkey-patch by restarting executor deps is awkward; instead the
           // executor loop reloads titanManaged from checkpoint each cycle below.
           const cp = await bind();
+          admitLaneState.currentCandidate = cp.currentCandidate;
+          admitLaneState.titanManaged = new Set(cp.titanManaged);
           logger("info", "storefront.repair.executor.wired", {
             version: "storefront-repair-v2",
             titanManaged: cp.titanManaged.length,
@@ -598,9 +613,121 @@ async function main() {
             deploymentMethod: "vercel_cli_prod",
             ownerExecuteDependency: false,
           });
+          // Keep lanes fresh without blocking any worker.
+          const refreshLanes = async () => {
+            try {
+              const latest = await bind();
+              admitLaneState.currentCandidate = latest.currentCandidate;
+              admitLaneState.titanManaged = new Set(latest.titanManaged);
+            } catch {
+              /* ignore */
+            }
+          };
+          const laneTimer = setInterval(() => {
+            void refreshLanes();
+          }, 30_000);
+          abortController.signal.addEventListener("abort", () =>
+            clearInterval(laneTimer),
+          );
         })();
       } catch (e) {
         logger("error", "storefront.repair.executor.wire_failed", {
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
+
+      // Parallel autonomy domain floors (learning/infra/cost/self-repair).
+      try {
+        const { runParallelAutonomyCoordinator } = await import(
+          "./lib/parallel-autonomy.js"
+        );
+        const { loadAdmitCheckpoint } = await import(
+          "./lib/portfolio-admit-controller.js"
+        );
+        void runParallelAutonomyCoordinator({
+          pool: pgPool,
+          logger,
+          signal: abortController.signal,
+          appRoot: repoRoot,
+          getEngineeringDeps: () => ({
+            pool: pgPool,
+            logger,
+            appRoot: repoRoot,
+            pauseNewAdmissions: async (reason: string) => {
+              const cp = await loadAdmitCheckpoint(
+                pgPool,
+                targetPortfolio,
+                probationMinutes,
+              );
+              cp.pauseNewAdmissions = true;
+              cp.pauseNewAdmissionsReason = reason;
+              const { saveAdmitCheckpoint } = await import(
+                "./lib/portfolio-admit-controller.js"
+              );
+              await saveAdmitCheckpoint(pgPool, cp);
+            },
+            resumeNewAdmissions: async () => {
+              const cp = await loadAdmitCheckpoint(
+                pgPool,
+                targetPortfolio,
+                probationMinutes,
+              );
+              cp.pauseNewAdmissions = false;
+              cp.pauseNewAdmissionsReason = null;
+              const { saveAdmitCheckpoint } = await import(
+                "./lib/portfolio-admit-controller.js"
+              );
+              await saveAdmitCheckpoint(pgPool, cp);
+            },
+            pauseBusiness: async (siteId: string) => {
+              const r = await applyOwnerControlPg({
+                pool: pgPool,
+                command: "pause_business",
+                siteId,
+                actor: "engineering-repair",
+              });
+              if (r.ok) controlState = r.state;
+            },
+            resumeBusiness: async (siteId: string) => {
+              const r = await applyOwnerControlPg({
+                pool: pgPool,
+                command: "resume_business",
+                siteId,
+                actor: "engineering-repair",
+              });
+              if (r.ok) controlState = r.state;
+            },
+            markEngineeringBlocked: async () => {
+              /* lifecycle updates optional for detached worker */
+            },
+            getRolloutBusinessNumber: () =>
+              admitLaneState.titanManaged.size +
+              (admitLaneState.currentCandidate ? 1 : 0),
+          }),
+          getRevenuePulse: () => {
+            const statuses = scheduler
+              .getStatuses()
+              .filter((s) => !s.commerciallyPaused);
+            const recentExecuted = statuses.reduce(
+              (n, s) => n + (s.lastExecuted ?? 0),
+              0,
+            );
+            return {
+              activeBusinesses: statuses.length,
+              recentExecuted,
+            };
+          },
+          intervalMs: Number(process.env.PARALLEL_AUTONOMY_INTERVAL_MS || "45000"),
+        }).catch((err) => {
+          logger("error", "parallel.autonomy.crash", {
+            message: err instanceof Error ? err.message : String(err),
+          });
+        });
+        logger("info", "parallel.autonomy.wired", {
+          version: "parallel-autonomy-v1",
+        });
+      } catch (e) {
+        logger("error", "parallel.autonomy.wire_failed", {
           message: e instanceof Error ? e.message : String(e),
         });
       }

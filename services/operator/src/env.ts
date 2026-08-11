@@ -49,7 +49,10 @@ const schema = z
       .string()
       .optional()
       .transform((v) => v === "1" || v === "true"),
-    MAX_CONCURRENCY: z.coerce.number().default(2),
+    // Parallel autonomy: enough slots for reserved REVENUE + ADMIT lanes + burst.
+    MAX_CONCURRENCY: z.coerce.number().default(6),
+    LANE_RESERVED_REVENUE: z.coerce.number().default(2),
+    LANE_RESERVED_ADMIT: z.coerce.number().default(1),
     PER_BUSINESS_MIN_INTERVAL_MS: z.coerce.number().default(45_000),
     TICK_BUDGET_MS: z.coerce.number().default(120_000),
     MAX_JOBS_PER_TICK: z.coerce.number().default(8),

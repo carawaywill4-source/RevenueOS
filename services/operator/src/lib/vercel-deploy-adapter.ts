@@ -242,6 +242,10 @@ export function prepareAndDeployStorefront(input: {
     siteId: input.siteId,
   });
 
+  const prepDir = path.join(appDir, "vendor");
+  mkdirSync(path.join(prepDir, "revenueos"), { recursive: true });
+  mkdirSync(path.join(prepDir, "storefront-kit"), { recursive: true });
+
   const prep = sh(
     "bash",
     [path.join(input.appRoot, "scripts/prepare-portfolio-deploy.sh"), input.siteId],

@@ -48,6 +48,12 @@ export type SchedulerConfig = {
   prioritizeIntervalBoostMs?: (siteId: string) => number;
   /** Max concurrent business ticks in-flight. */
   maxConcurrency?: number;
+  /** Reserved slots that prefer TITAN_MANAGED revenue ticks. */
+  laneReservedRevenue?: number;
+  /** Reserved slots that prefer the current admission candidate. */
+  laneReservedAdmit?: number;
+  /** Classify a site into a scheduling lane. */
+  laneForSite?: (siteId: string) => "revenue" | "admit" | "general";
   /** Minimum ms between two ticks for the same business. */
   perBusinessMinIntervalMs?: number;
   /** Tick budget in ms — persistent operator uses generous budgets. */
@@ -59,45 +65,140 @@ export type SchedulerConfig = {
   signal: AbortSignal;
 };
 
-class Semaphore {
-  private available: number;
-  private queue: Array<() => void> = [];
-  constructor(size: number) {
-    this.available = size;
+class LaneSemaphore {
+  /**
+   * Guaranteed floors without winner-takes-all:
+   * reserved revenue + reserved admit + general burst pool.
+   */
+  private revenue: number;
+  private admit: number;
+  private general: number;
+  private readonly revenueCap: number;
+  private readonly admitCap: number;
+  private readonly generalCap: number;
+  private waiters: Array<{
+    lane: "revenue" | "admit" | "general";
+    resolve: (release: () => void) => void;
+    reject: (e: Error) => void;
+    signal?: AbortSignal;
+    onAbort: () => void;
+  }> = [];
+
+  constructor(input: {
+    maxConcurrency: number;
+    revenueReserved: number;
+    admitReserved: number;
+  }) {
+    this.revenueCap = Math.max(0, input.revenueReserved);
+    this.admitCap = Math.max(0, input.admitReserved);
+    this.generalCap = Math.max(
+      1,
+      input.maxConcurrency - this.revenueCap - this.admitCap,
+    );
+    this.revenue = this.revenueCap;
+    this.admit = this.admitCap;
+    this.general = this.generalCap;
   }
-  async acquire(signal?: AbortSignal): Promise<() => void> {
+
+  async acquire(
+    lane: "revenue" | "admit" | "general",
+    signal?: AbortSignal,
+  ): Promise<() => void> {
     if (signal?.aborted) throw new Error("aborted");
-    if (this.available > 0) {
-      this.available -= 1;
-      return () => this.release();
-    }
+    const got = this.tryTake(lane);
+    if (got) return got;
     return new Promise<() => void>((resolve, reject) => {
-      const onAbort = () => reject(new Error("aborted"));
-      signal?.addEventListener("abort", onAbort);
-      this.queue.push(() => {
-        signal?.removeEventListener("abort", onAbort);
-        this.available -= 1;
-        resolve(() => this.release());
-      });
+      const entry = {
+        lane,
+        resolve,
+        reject,
+        signal,
+        onAbort: () => {
+          this.waiters = this.waiters.filter((w) => w !== entry);
+          reject(new Error("aborted"));
+        },
+      };
+      signal?.addEventListener("abort", entry.onAbort);
+      if (lane === "admit") this.waiters.unshift(entry);
+      else if (lane === "revenue") {
+        const i = this.waiters.findIndex((w) => w.lane === "general");
+        if (i < 0) this.waiters.push(entry);
+        else this.waiters.splice(i, 0, entry);
+      } else this.waiters.push(entry);
     });
   }
-  private release() {
-    this.available += 1;
-    const next = this.queue.shift();
-    if (next) next();
+
+  private tryTake(
+    lane: "revenue" | "admit" | "general",
+  ): (() => void) | null {
+    const take = (pool: "revenue" | "admit" | "general"): (() => void) | null => {
+      if (pool === "revenue" && this.revenue > 0) {
+        this.revenue -= 1;
+        return () => {
+          this.revenue = Math.min(this.revenueCap, this.revenue + 1);
+          this.pump();
+        };
+      }
+      if (pool === "admit" && this.admit > 0) {
+        this.admit -= 1;
+        return () => {
+          this.admit = Math.min(this.admitCap, this.admit + 1);
+          this.pump();
+        };
+      }
+      if (pool === "general" && this.general > 0) {
+        this.general -= 1;
+        return () => {
+          this.general = Math.min(this.generalCap, this.general + 1);
+          this.pump();
+        };
+      }
+      return null;
+    };
+
+    if (lane === "admit") return take("admit") ?? take("general");
+    if (lane === "revenue") return take("revenue") ?? take("general");
+    return (
+      take("general") ??
+      // Borrow unused reserved capacity only when no priority waiters.
+      (this.waiters.some((w) => w.lane !== "general")
+        ? null
+        : take("revenue") ?? take("admit"))
+    );
+  }
+
+  private pump() {
+    for (const want of ["admit", "revenue", "general"] as const) {
+      const idx = this.waiters.findIndex((w) => w.lane === want);
+      if (idx < 0) continue;
+      const release = this.tryTake(want);
+      if (!release) continue;
+      const [item] = this.waiters.splice(idx, 1);
+      item!.signal?.removeEventListener("abort", item!.onAbort);
+      item!.resolve(release);
+      return this.pump();
+    }
   }
 }
 
 export class PortfolioScheduler {
   private readonly status = new Map<string, BusinessRuntimeStatus>();
-  private readonly semaphore: Semaphore;
+  private readonly semaphore: LaneSemaphore;
   private readonly tasks: Promise<void>[] = [];
   private onStatusPersist: ((statuses: BusinessRuntimeStatus[]) => void) | null =
     null;
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly laneForSite: (siteId: string) => "revenue" | "admit" | "general";
 
   constructor(private readonly config: SchedulerConfig) {
-    this.semaphore = new Semaphore(config.maxConcurrency ?? 3);
+    this.semaphore = new LaneSemaphore({
+      maxConcurrency: config.maxConcurrency ?? 6,
+      revenueReserved: config.laneReservedRevenue ?? 2,
+      admitReserved: config.laneReservedAdmit ?? 1,
+    });
+    this.laneForSite =
+      config.laneForSite ??
+      (() => "general");
     for (const b of config.businesses) {
       this.status.set(b.siteId, {
         siteId: b.siteId,
@@ -186,9 +287,33 @@ export class PortfolioScheduler {
     const log = this.config.logger;
     const minInterval = this.config.perBusinessMinIntervalMs ?? 12_000;
     while (!this.config.signal.aborted) {
+      // Paused businesses must NOT consume REVENUE/ADMIT concurrency slots.
+      const pausedEarly =
+        this.config.isCommerciallyPaused?.(business.siteId) === true;
+      if (pausedEarly) {
+        this.updateStatus(business.siteId, {
+          commerciallyPaused: true,
+          lastOk: true,
+          lastExecuted: 0,
+          lastEnqueued: 0,
+          lastError: null,
+        });
+        // Rare log — avoid spam (every ~10 cycles via ticks counter).
+        const ticks = this.status.get(business.siteId)?.ticks ?? 0;
+        if (ticks % 20 === 0) {
+          log("info", "operator.scheduler.commercially_paused", {
+            siteId: business.siteId,
+            note: "skipped_without_semaphore",
+          });
+        }
+        await sleepInterruptible(Math.max(30_000, minInterval), this.config.signal);
+        continue;
+      }
+
       let release: (() => void) | null = null;
       try {
-        release = await this.semaphore.acquire(this.config.signal);
+        const lane = this.laneForSite(business.siteId);
+        release = await this.semaphore.acquire(lane, this.config.signal);
       } catch {
         break;
       }
@@ -210,10 +335,7 @@ export class PortfolioScheduler {
             commerciallyPaused: paused,
           });
           if (paused) {
-            // Keep Mac ownership; do not erase queues or learning.
-            log("info", "operator.scheduler.commercially_paused", {
-              siteId: business.siteId,
-            });
+            // Race: paused after acquire — release quickly, no tick.
             this.updateStatus(business.siteId, {
               lastError: null,
               lastOk: true,

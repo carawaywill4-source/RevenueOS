@@ -4,6 +4,8 @@ set -euo pipefail
 SITE="${1:?siteId required}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/apps/$SITE"
+# Ensure destination parents exist — rsync mkdir can fail on fresh apps.
+mkdir -p "$APP/vendor/revenueos" "$APP/vendor/storefront-kit"
 rsync -a --delete --exclude node_modules --exclude .git \
   "$ROOT/packages/revenueos/" "$APP/vendor/revenueos/"
 rsync -a --delete --exclude node_modules --exclude .git \

@@ -14,7 +14,6 @@ import type { OwnerControlState } from "./owner-controls-types.js";
 import { applyOwnerControlPg, loadOwnerControlsPg } from "./postgres-platform.js";
 import {
   getReliabilitySnapshot,
-  handleEngineeringIncident,
   scanAdapterMissingIncidents,
 } from "./engineering-repair.js";
 import {
@@ -26,6 +25,7 @@ import {
   type CommercialReadinessResult,
 } from "./commercial-readiness.js";
 import { requestCommercialRepairForCandidate } from "./storefront-repair-executor.js";
+import { enqueueEngineeringSelfRepair } from "./parallel-autonomy.js";
 
 export const ADMIT_CHECKPOINT_KEY = "admit_rollout_checkpoint";
 export const TARGET_PORTFOLIO_DEFAULT = 50;
@@ -841,47 +841,38 @@ export async function runPortfolioAdmitController(
       }
       recentRepairAt.set(repairKey, Date.now());
 
-      cp.phase = "ENGINEERING_REPAIR";
+      // Do NOT block admission polling on engineering self-repair.
+      // Self-repair runs on its own parallel autonomy worker.
+      enqueueEngineeringSelfRepair({
+        siteId,
+        reason,
+        source: "admit",
+      });
+      deps.logger("info", "admit.repair.enqueued_async", {
+        siteId,
+        reason,
+        healthyMsPreserved: cp.healthyMsAccumulated,
+        note: "SELF_REPAIR detached — admit continues",
+      });
+      // Stay in LIVE_PROBATION; engineering worker may briefly report ENGINEERING_REPAIR via events.
+      cp.phase = "LIVE_PROBATION";
       await saveAdmitCheckpoint(deps.pool, cp);
-      try {
-        const outcome = await handleEngineeringIncident(repairDeps(), {
-          reason,
-          siteId,
-          source: "admit",
-        });
-        const snap = await getReliabilitySnapshot(deps.pool);
-        cp.reliability = {
-          totalFailures: snap.metrics.totalFailures,
-          uniqueFingerprints: snap.metrics.uniqueFingerprints,
-          repeatFailures: snap.metrics.repeatFailures,
-          autoRepaired: snap.metrics.autoRepaired,
-          codeRepairs: snap.metrics.codeRepairs,
-          rollbacks: snap.metrics.rollbacks,
-        };
-        if (outcome.status === "CRITICAL_HOLD") {
-          cp.phase = "CRITICAL_HOLD";
-          cp.platformHealth = "CRITICAL";
-          cp.pauseNewAdmissions = true;
-          cp.pauseNewAdmissionsReason = outcome.detail;
-        } else {
-          // Resume probation in place — do NOT reset healthyMsAccumulated.
-          cp.phase = "LIVE_PROBATION";
+      void (async () => {
+        try {
+          const snap = await getReliabilitySnapshot(deps.pool);
+          cp.reliability = {
+            totalFailures: snap.metrics.totalFailures,
+            uniqueFingerprints: snap.metrics.uniqueFingerprints,
+            repeatFailures: snap.metrics.repeatFailures,
+            autoRepaired: snap.metrics.autoRepaired,
+            codeRepairs: snap.metrics.codeRepairs,
+            rollbacks: snap.metrics.rollbacks,
+          };
+          await saveAdmitCheckpoint(deps.pool, cp);
+        } catch {
+          /* non-blocking */
         }
-        deps.logger("info", "admit.repair.handled", {
-          siteId,
-          level: outcome.level,
-          status: outcome.status,
-          fingerprint: outcome.fingerprint,
-          healthyMsPreserved: cp.healthyMsAccumulated,
-        });
-      } catch (err) {
-        cp.phase = "LIVE_PROBATION";
-        deps.logger("error", "admit.repair.failed", {
-          siteId,
-          message: err instanceof Error ? err.message : String(err),
-        });
-      }
-      await saveAdmitCheckpoint(deps.pool, cp);
+      })();
     }
   }
 
