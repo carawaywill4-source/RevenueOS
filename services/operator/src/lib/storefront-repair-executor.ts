@@ -600,6 +600,17 @@ export async function requestCommercialRepairForCandidate(input: {
   input.logger?.("info", "admit.repair_requested", { siteId: input.siteId });
 }
 
+function attemptDue(nextAttemptAt: string | null | undefined): boolean {
+  if (!nextAttemptAt) return true;
+  // Accept ISO and Postgres text timestamps ("2026-08-11 15:23:06.487231+00").
+  const normalized = nextAttemptAt.includes("T")
+    ? nextAttemptAt
+    : nextAttemptAt.replace(" ", "T").replace(/\+00$/, "Z");
+  const ms = Date.parse(normalized);
+  if (Number.isNaN(ms)) return true;
+  return ms <= Date.now();
+}
+
 function pickNextRepair(
   businesses: Record<string, BusinessCommercialRecord>,
   excludeSiteIds: Set<string>,
@@ -610,7 +621,7 @@ function pickNextRepair(
     if (
       pref.state === "REPAIR_REQUIRED" &&
       !excludeSiteIds.has(preferSiteId) &&
-      (!pref.nextAttemptAt || Date.parse(pref.nextAttemptAt) <= Date.now()) &&
+      attemptDue(pref.nextAttemptAt) &&
       pref.attempts < 3
     ) {
       return pref;
@@ -620,7 +631,7 @@ function pickNextRepair(
     (b) =>
       b.state === "REPAIR_REQUIRED" &&
       !excludeSiteIds.has(b.siteId) &&
-      (!b.nextAttemptAt || Date.parse(b.nextAttemptAt) <= Date.now()) &&
+      attemptDue(b.nextAttemptAt) &&
       b.attempts < 3,
   );
   candidates.sort((a, b) => {
@@ -1023,7 +1034,8 @@ export async function runStorefrontRepairExecutor(deps: {
   getCurrentProbation?: () => string | null;
   intervalMs?: number;
 }): Promise<void> {
-  const interval = deps.intervalMs ?? 120_000;
+  // Admission candidates need fast repair pickup; 30s default (was 120s).
+  const interval = deps.intervalMs ?? 30_000;
   deps.logger("info", "storefront.repair.executor.start", {
     version: REPAIR_EXECUTOR_VERSION,
     ownerExecuteDependency: false,

@@ -15,15 +15,166 @@
 
 import type { SiteAdapter } from "../adapters/types";
 import { runApexCycle } from "../apex/cycle";
+import { inferRiskClass } from "../apex/governor";
 import type { ApexCycleResult } from "../apex/types";
+import { newId } from "../ledger/store";
 import { runNexusCycle } from "../nexus/organism";
 import type { NexusCycleResult } from "../nexus/organism";
+import { filterAutonomousActions } from "../policy";
 import { runTitanCycle } from "../titan/executive-loop";
 import type { TitanCycleResult } from "../titan/types";
+import type { Opportunity, PursuitJob } from "../types";
+import {
+  drainPursuits,
+  enqueuePursuitsFromOpportunities,
+  type DrainResult,
+} from "./pursuit-engine";
 import { runPursuitTick } from "./pursuit-plan";
 import type { PortfolioSignal } from "./revenue-priority";
 import type { PlanAndEnqueueResult } from "./pursuit-plan";
-import type { DrainResult } from "./pursuit-engine";
+
+/**
+ * APEX previously authorized actions (e.g. distribute_owned_urls) but never
+ * fed the pursuit queue — plan/drain ran before APEX, and NEXUS only logged
+ * apex.action.proposed. Bridge R0/R1 authorized limbs into durable pursuits
+ * and drain them in the same tick (deterministic; no paid AI).
+ */
+async function enqueueAndDrainAuthorizedApexAction(input: {
+  adapter: SiteAdapter;
+  apex: ApexCycleResult;
+  observation: PlanAndEnqueueResult["observation"];
+  skipEnqueue?: boolean;
+  logger: OperatorLoopLogger;
+}): Promise<{ jobs: PursuitJob[]; drain: DrainResult | null }> {
+  const empty = { jobs: [] as PursuitJob[], drain: null as DrainResult | null };
+  if (input.skipEnqueue) return empty;
+  const decision = input.apex.decision;
+  if (!decision?.authorized || !decision.selected_action) return empty;
+
+  const risk = decision.risk_class ?? inferRiskClass(decision.selected_action);
+  // Only auto-bridge owned/safe classes. R2+ already need separate policy paths.
+  if (risk !== "R0" && risk !== "R1") {
+    input.logger("info", "apex.authorize.skip_bridge", {
+      businessId: input.adapter.id,
+      action: decision.selected_action,
+      risk,
+      reason: "risk_class_not_auto_bridged",
+    });
+    return empty;
+  }
+
+  const available = filterAutonomousActions(await input.adapter.listSafeActions());
+  if (!available.some((a) => a.type === decision.selected_action)) {
+    input.logger("warn", "apex.authorize.skip_bridge", {
+      businessId: input.adapter.id,
+      action: decision.selected_action,
+      reason: "adapter_missing_safe_action",
+    });
+    return empty;
+  }
+
+  const store = input.adapter.getExperimentStore();
+  if (!store.savePursuit || !store.claimPursuits) return empty;
+
+  const existing =
+    (await store.listPursuits?.(input.adapter.id, {
+      states: [
+        "DISCOVER",
+        "QUALIFY",
+        "EXECUTE",
+        "WAITING_FOR_EVIDENCE",
+        "ATTRIBUTE",
+        "LEARN",
+        "REPLENISH",
+      ],
+    })) ?? [];
+
+  const now = new Date();
+  const opportunity: Opportunity = {
+    id: `apex-${decision.selected_action}`,
+    title: `APEX authorized: ${decision.selected_action}`,
+    metric: "qualified visits",
+    category: "acquisition",
+    action: decision.why_this_action || decision.selected_action,
+    expectedImpact: 8,
+    confidence: decision.confidence ?? 0.5,
+    effort: 1,
+    score: 99,
+    safeActionType: decision.selected_action,
+    patternKey: `apex-authorized:${decision.selected_action}`,
+  };
+
+  const created = enqueuePursuitsFromOpportunities({
+    siteId: input.adapter.id,
+    opportunities: [opportunity],
+    hypotheses: [],
+    existing,
+    maxEnqueue: 1,
+    now,
+  });
+
+  for (const job of created) {
+    await store.savePursuit(job);
+    if (store.appendPursuitEvent) {
+      await store.appendPursuitEvent({
+        id: newId("pevt"),
+        pursuitId: job.id,
+        siteId: job.siteId,
+        eventType: "enqueued",
+        detail: {
+          title: job.title,
+          actionType: job.actionType,
+          patternKey: job.patternKey,
+          source: "apex_authorized_bridge",
+          apexDecisionId: decision.decision_id,
+          apexTraceId: decision.trace_id,
+        },
+        createdAt: now.toISOString(),
+      });
+    }
+  }
+
+  if (created.length === 0) {
+    input.logger("info", "apex.authorize.bridge_noop", {
+      businessId: input.adapter.id,
+      action: decision.selected_action,
+      reason: "idempotent_or_already_queued",
+    });
+    return empty;
+  }
+
+  const drain = await drainPursuits({
+    adapter: input.adapter,
+    store,
+    observation: input.observation,
+    budgetMs: 60_000,
+    maxJobs: 4,
+    maxConcurrentExecutions: 2,
+    now,
+  });
+
+  input.logger("info", "apex.authorize.bridged", {
+    businessId: input.adapter.id,
+    action: decision.selected_action,
+    enqueued: created.length,
+    executed: drain.executed,
+    claimed: drain.claimed,
+  });
+
+  return { jobs: created, drain };
+}
+
+function mergeDrain(a: DrainResult, b: DrainResult | null): DrainResult {
+  if (!b) return a;
+  return {
+    claimed: a.claimed + b.claimed,
+    advanced: a.advanced + b.advanced,
+    executed: a.executed + b.executed,
+    stillWaiting: b.stillWaiting,
+    claimableRemaining: b.claimableRemaining,
+    jobs: [...a.jobs, ...b.jobs],
+  };
+}
 
 export type OperatorLoopLogger = (
   level: "info" | "warn" | "error",
@@ -136,7 +287,7 @@ export async function runOperatorTick(input: {
       businessId: input.businessId,
       skipEnqueue: input.skipEnqueue === true,
     });
-    const { plan, drain } = await runPursuitTick(input.adapter, {
+    let { plan, drain } = await runPursuitTick(input.adapter, {
       budgetMs: input.tickBudgetMs ?? 180_000,
       maxJobs: input.skipEnqueue ? 0 : (input.maxJobsPerTick ?? 24),
       maxEnqueue: input.maxEnqueuePerTick,
@@ -165,7 +316,36 @@ export async function runOperatorTick(input: {
           apexErr instanceof Error ? apexErr.message : String(apexErr),
       });
     }
+    // Close the auth→queue gap: authorized R0/R1 actions become pursuits now.
+    if (apex) {
+      try {
+        const bridged = await enqueueAndDrainAuthorizedApexAction({
+          adapter: input.adapter,
+          apex,
+          observation: plan.observation,
+          skipEnqueue: input.skipEnqueue,
+          logger: log,
+        });
+        if (bridged.jobs.length > 0) {
+          plan = {
+            ...plan,
+            enqueued: [...plan.enqueued, ...bridged.jobs],
+            enqueuedCount: plan.enqueuedCount + bridged.jobs.length,
+          };
+          drain = mergeDrain(drain, bridged.drain);
+        }
+      } catch (bridgeErr) {
+        log("warn", "apex.authorize.bridge_error", {
+          businessId: input.businessId,
+          message:
+            bridgeErr instanceof Error
+              ? bridgeErr.message
+              : String(bridgeErr),
+        });
+      }
+    }
     // TITAN consumes APEX + FORGE truth; Phase 1 recommends only.
+    // execution_authority is intentionally hard-coded NONE (not a failed auth).
     let titan: TitanCycleResult | undefined;
     try {
       titan = await runTitanCycle({
@@ -239,6 +419,8 @@ export async function runOperatorTick(input: {
       firstCustomerMode: plan.firstCustomerMode?.active,
       suspended: plan.suspension?.suspended ?? false,
       apexBottleneck: apex?.bottleneck,
+      apexAuthorized: apex?.decision?.authorized ?? false,
+      apexAction: apex?.decision?.selected_action ?? null,
       titanConstraint: titan?.constraints.primary,
       titanFavor: titan?.decision.resource_allocation,
       nexusConstraint: nexus?.binding_constraint,

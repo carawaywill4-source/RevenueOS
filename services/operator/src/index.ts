@@ -572,7 +572,7 @@ async function main() {
             return [];
           },
           getCurrentProbation: () => null,
-          intervalMs: Number(process.env.STOREFRONT_REPAIR_INTERVAL_MS || "90000"),
+          intervalMs: Number(process.env.STOREFRONT_REPAIR_INTERVAL_MS || "30000"),
         }).catch((err) => {
           logger("error", "storefront.repair.executor.crash", {
             message: err instanceof Error ? err.message : String(err),
@@ -592,7 +592,7 @@ async function main() {
           // executor loop reloads titanManaged from checkpoint each cycle below.
           const cp = await bind();
           logger("info", "storefront.repair.executor.wired", {
-            version: "storefront-repair-v1",
+            version: "storefront-repair-v2",
             titanManaged: cp.titanManaged.length,
             current: cp.currentCandidate,
             deploymentMethod: "vercel_cli_prod",
