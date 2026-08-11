@@ -41,6 +41,7 @@ export type EvidenceType =
   | "SYNTHETIC";
 
 export type BottleneckKind =
+  | "NO_EXPOSURE"
   | "NO_IMPRESSIONS"
   | "IMPRESSIONS_NO_CLICKS"
   | "CLICKS_NO_ENGAGEMENT"
@@ -49,6 +50,7 @@ export type BottleneckKind =
   | "CHECKOUT_NO_PURCHASE"
   | "PURCHASE_NO_PROFIT"
   | "PROFIT_NO_SCALE"
+  | "UNKNOWN_MEASUREMENT"
   | "UNKNOWN";
 
 export type IntentState =

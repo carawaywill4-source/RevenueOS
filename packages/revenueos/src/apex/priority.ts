@@ -23,6 +23,7 @@ export type RankedAction = {
 };
 
 const BOTTLENECK_ACTIONS: Record<BottleneckKind, RankedAction[]> = {
+  NO_EXPOSURE: [], // filled below from NO_IMPRESSIONS
   NO_IMPRESSIONS: [
     {
       action: "publish_discovery_door",
@@ -78,16 +79,93 @@ const BOTTLENECK_ACTIONS: Record<BottleneckKind, RankedAction[]> = {
   ],
   CLICKS_NO_ENGAGEMENT: [
     {
+      action: "demand_radar_sweep",
+      channel: "research",
+      audience: "problem_cluster",
+      expected_value: 0.55,
+      information_value: 0.85,
+      urgency: 0.75,
+      cost: 0.1,
+      risk_penalty: 0.02,
+      score: 0,
+      hypothesis:
+        "Arrivals without engagement — diagnose intent/source before mutating offer copy",
+    },
+    {
+      action: "distribute_owned_urls",
+      channel: "indexnow_sitemap",
+      audience: "search_crawlers",
+      expected_value: 0.5,
+      information_value: 0.55,
+      urgency: 0.7,
+      cost: 0.05,
+      risk_penalty: 0.02,
+      score: 0,
+      hypothesis:
+        "Widen qualified exposure from better sources; bounce may be wrong-intent traffic",
+    },
+    {
+      action: "publish_discovery_door",
+      channel: "owned_seo",
+      audience: "high_intent_search",
+      expected_value: 0.52,
+      information_value: 0.7,
+      urgency: 0.7,
+      cost: 0.15,
+      risk_penalty: 0.05,
+      score: 0,
+      hypothesis:
+        "Publish intent-matched discovery doors to replace low-engagement traffic",
+    },
+    {
+      action: "list_gumroad",
+      channel: "gumroad",
+      audience: "freelance_buyers",
+      expected_value: 0.48,
+      information_value: 0.6,
+      urgency: 0.6,
+      cost: 0.1,
+      risk_penalty: 0.08,
+      score: 0,
+      hypothesis: "Marketplace buyers already shopping — different traffic quality",
+    },
+    {
+      action: "message_genome_test",
+      channel: "owned_landing",
+      audience: "arrived_visitors",
+      expected_value: 0.42,
+      information_value: 0.7,
+      urgency: 0.5,
+      cost: 0.1,
+      risk_penalty: 0.05,
+      score: 0,
+      hypothesis:
+        "Headline/message test — only when evidence allows product/conversion mutation",
+    },
+    {
+      action: "conversion_lab_cta",
+      channel: "owned_landing",
+      audience: "arrived_visitors",
+      expected_value: 0.4,
+      information_value: 0.65,
+      urgency: 0.45,
+      cost: 0.1,
+      risk_penalty: 0.05,
+      score: 0,
+      hypothesis: "CTA experiment — only with sufficient evidence + isolation",
+    },
+    {
       action: "offer_clarity_update",
       channel: "owned_landing",
       audience: "problem_aware_freelancers",
-      expected_value: 0.5,
-      information_value: 0.7,
-      urgency: 0.65,
+      expected_value: 0.3,
+      information_value: 0.45,
+      urgency: 0.35,
       cost: 0.12,
-      risk_penalty: 0.05,
+      risk_penalty: 0.1,
       score: 0,
-      hypothesis: "Job-to-be-done framing reduces bounce after click",
+      hypothesis:
+        "Offer copy rewrite is last resort — requires new signal + cooldown",
     },
   ],
   ENGAGEMENT_NO_INTENT: [
@@ -102,6 +180,18 @@ const BOTTLENECK_ACTIONS: Record<BottleneckKind, RankedAction[]> = {
       risk_penalty: 0.05,
       score: 0,
       hypothesis: "Clearer CTA path converts engagement to checkout intent",
+    },
+    {
+      action: "trust_signal_pack",
+      channel: "owned_landing",
+      audience: "engaged_visitors",
+      expected_value: 0.5,
+      information_value: 0.6,
+      urgency: 0.55,
+      cost: 0.1,
+      risk_penalty: 0.05,
+      score: 0,
+      hypothesis: "Trust/proof near CTA reduces engagement→intent drop",
     },
   ],
   INTENT_NO_CHECKOUT: [
@@ -174,7 +264,24 @@ const BOTTLENECK_ACTIONS: Record<BottleneckKind, RankedAction[]> = {
       hypothesis: "Insufficient signal — gather demand evidence before heavy execution",
     },
   ],
+  UNKNOWN_MEASUREMENT: [
+    {
+      action: "demand_radar_sweep",
+      channel: "research",
+      audience: "problem_cluster",
+      expected_value: 0.3,
+      information_value: 0.9,
+      urgency: 0.6,
+      cost: 0.1,
+      risk_penalty: 0.02,
+      score: 0,
+      hypothesis:
+        "Measurement cannot establish funnel state — repair analytics before product mutation",
+    },
+  ],
 };
+// NO_EXPOSURE uses the same acquisition-first action set as NO_IMPRESSIONS.
+BOTTLENECK_ACTIONS.NO_EXPOSURE = BOTTLENECK_ACTIONS.NO_IMPRESSIONS;
 
 export function scoreAction(a: RankedAction): number {
   const riskClass = inferRiskClass(a.action);

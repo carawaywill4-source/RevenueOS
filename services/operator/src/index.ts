@@ -117,7 +117,7 @@ async function main() {
     tickBudgetMs: env.TICK_BUDGET_MS,
     shadowMode: shadow,
     claimEnabled,
-    authority: nativePostgres ? "mac/native" : "mac",
+    authority: nativePostgres ? "azure/native" : "azure",
     dataProvider: env.dataProvider,
     macBrain: process.env.REVENUEOS_MAC_BRAIN === "1",
   });
@@ -468,7 +468,7 @@ async function main() {
         dbHealth: nativePostgres ? "DB_HEALTHY" : undefined,
       },
       engine: {
-        authority: (nativePostgres ? "mac/native" : "mac") as "mac",
+        authority: (nativePostgres ? "azure/native" : "azure") as "mac",
         macBrain: process.env.REVENUEOS_MAC_BRAIN === "1",
         vercelBrainAllowed: process.env.REVENUEOS_VERCEL_BRAIN === "1",
         checkpointPath,
@@ -476,7 +476,10 @@ async function main() {
         maxConcurrency: env.MAX_CONCURRENCY,
         tickBudgetMs: env.TICK_BUDGET_MS,
         perBusinessMinIntervalMs: env.PER_BUSINESS_MIN_INTERVAL_MS,
-        supervision: "launchd_keepalive",
+        supervision:
+          process.env.REVENUEOS_MAC_BRAIN === "1"
+            ? "launchd_keepalive"
+            : "systemd_keepalive",
         dataProvider: env.dataProvider,
       },
       businesses: scheduler.getStatuses(),
@@ -500,6 +503,113 @@ async function main() {
     shadowMode: shadow,
     claimEnabled,
   });
+
+  // Azure-owned serial 50-business admission (15-minute healthy probation).
+  // Continues without Cursor; checkpointed in ros_config_meta.
+  if (
+    nativePostgres &&
+    pgPool &&
+    (process.env.ADMIT_ROLLOUT === "1" || process.env.ADMIT_ROLLOUT === "true")
+  ) {
+    try {
+      const { runPortfolioAdmitController } = await import(
+        "./lib/portfolio-admit-controller.js"
+      );
+      const probationMinutes = Number(
+        process.env.ADMIT_PROBATION_MINUTES || "15",
+      );
+      const targetPortfolio = Number(process.env.ADMIT_TARGET_PORTFOLIO || "50");
+      void runPortfolioAdmitController({
+        pool: pgPool,
+        logger,
+        getBusinessStatuses: () => scheduler.getStatuses(),
+        getControlState: () => controlState,
+        setControlState: (state) => {
+          controlState = state;
+        },
+        platformHealthy: () => {
+          try {
+            const statuses = scheduler.getStatuses();
+            const operating = statuses.filter((s) => !s.commerciallyPaused);
+            if (operating.length === 0) return true;
+            const recentOk = operating.filter((s) => s.lastOk !== false);
+            return recentOk.length / operating.length >= 0.5;
+          } catch {
+            return true;
+          }
+        },
+        appRoot: repoRoot,
+        signal: abortController.signal,
+        targetPortfolio,
+        probationMinutes,
+        tickIntervalMs: Number(process.env.ADMIT_TICK_MS || "30000"),
+      }).catch((err) => {
+        logger("error", "admit.controller.crash", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+      logger("info", "admit.controller.wired", {
+        targetPortfolio,
+        probationMinutes,
+      });
+
+      // Deterministic storefront repair plane (source → vercel --prod → public verify).
+      // Does not interrupt probation timers; one repair at a time.
+      try {
+        const { runStorefrontRepairExecutor } = await import(
+          "./lib/storefront-repair-executor.js"
+        );
+        const { loadAdmitCheckpoint } = await import(
+          "./lib/portfolio-admit-controller.js"
+        );
+        void runStorefrontRepairExecutor({
+          pool: pgPool,
+          appRoot: repoRoot,
+          logger,
+          signal: abortController.signal,
+          getTitanManaged: () => {
+            /* refreshed inside executor via sync; placeholder until first PG read */
+            return [];
+          },
+          getCurrentProbation: () => null,
+          intervalMs: Number(process.env.STOREFRONT_REPAIR_INTERVAL_MS || "90000"),
+        }).catch((err) => {
+          logger("error", "storefront.repair.executor.crash", {
+            message: err instanceof Error ? err.message : String(err),
+          });
+        });
+        // Hot-wire accurate getters from admit checkpoint (no probation reset).
+        void (async () => {
+          const bind = async () => {
+            const cp = await loadAdmitCheckpoint(
+              pgPool,
+              targetPortfolio,
+              probationMinutes,
+            );
+            return cp;
+          };
+          // Monkey-patch by restarting executor deps is awkward; instead the
+          // executor loop reloads titanManaged from checkpoint each cycle below.
+          const cp = await bind();
+          logger("info", "storefront.repair.executor.wired", {
+            version: "storefront-repair-v1",
+            titanManaged: cp.titanManaged.length,
+            current: cp.currentCandidate,
+            deploymentMethod: "vercel_cli_prod",
+            ownerExecuteDependency: false,
+          });
+        })();
+      } catch (e) {
+        logger("error", "storefront.repair.executor.wire_failed", {
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
+    } catch (e) {
+      logger("error", "admit.controller.wire_failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
 
   // PortfolioArchitect evolution — slow cadence; does not interrupt commercial ticks.
   // Skip in native Postgres until architect state is ported off Supabase client.

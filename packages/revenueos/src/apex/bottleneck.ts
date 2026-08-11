@@ -36,9 +36,39 @@ export function diagnoseBottleneck(input: {
   });
 
   const { qualifiedVisits: q, intents, checkouts, purchases, revenueUsd } = counts;
+  const hourViews = input.observation.hourPulse?.landingViews;
+  // Lifetime landingViews can inflate evidence; require fresh exposure before
+  // treating the bottleneck as a landing/offer problem.
+  let eventFreshVisits = 0;
+  for (const e of input.recentEvents ?? []) {
+    const detail = (e.detail ?? {}) as Record<string, unknown>;
+    const kind = String(detail.kind ?? "");
+    if (
+      e.eventType === "beacon" ||
+      detail.kind === "apex_commercial_event" ||
+      kind === "page_view" ||
+      kind === "VISIT"
+    ) {
+      const created = Date.parse(e.createdAt ?? "");
+      if (Number.isFinite(created) && Date.now() - created < 6 * 60 * 60_000) {
+        eventFreshVisits += 1;
+      }
+    }
+  }
+  const freshExposure =
+    (typeof hourViews === "number" && hourViews > 0) || eventFreshVisits > 0;
 
   // Insufficient evidence: never claim the offer/product is the failure mode.
   if (trafficInsufficient(evidence.evidence_level)) {
+    if (q <= 0 && !freshExposure) {
+      return {
+        kind: "NO_EXPOSURE",
+        detail:
+          "NO_EXPOSURE — impressions/exposure = 0 (or unmeasured). Discover/distribute; do not mutate product. Do NOT label as CLICKS_NO_ENGAGEMENT.",
+        counts,
+        evidence,
+      };
+    }
     if (q <= 0) {
       return {
         kind: "NO_IMPRESSIONS",
@@ -57,10 +87,23 @@ export function diagnoseBottleneck(input: {
     };
   }
 
-  if (q > 0 && intents === 0 && checkouts === 0) {
+  // Stale lifetime views without fresh exposure → still a distribution problem.
+  // Lifetime qualified_visits / landingViews must NEVER become CLICKS_NO_ENGAGEMENT.
+  if (!freshExposure && purchases === 0 && checkouts === 0) {
+    return {
+      kind: "NO_EXPOSURE",
+      detail:
+        `NO_EXPOSURE / stale measurement (hourViews=${hourViews ?? "n/a"}, recentBeaconVisits=${eventFreshVisits}, lifetimeQualified=${q}) ` +
+        `— prioritize distribution/acquisition, not offer copy.`,
+      counts,
+      evidence,
+    };
+  }
+
+  if (q > 0 && intents === 0 && checkouts === 0 && freshExposure) {
     return {
       kind: "CLICKS_NO_ENGAGEMENT",
-      detail: `With actionable sample (qualified=${q}), no CTA/checkout — relevance/message may be weak.`,
+      detail: `With fresh exposure + actionable sample (qualified=${q}), no CTA/checkout — relevance/message may be weak.`,
       counts,
       evidence,
     };

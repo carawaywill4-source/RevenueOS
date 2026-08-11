@@ -147,6 +147,58 @@ test("small-sample protection blocks product mutation", () => {
   assert.equal(repair.allowed, true);
 });
 
+test("action cooldown blocks repeated offer_clarity without new signal", () => {
+  const recent = [
+    {
+      decision_id: "d1",
+      business_id: "bidforge",
+      timestamp: new Date().toISOString(),
+      selected_action: "offer_clarity_update",
+      bottleneck: "CLICKS_NO_ENGAGEMENT",
+    },
+  ] as unknown as import("./types").ApexDecision[];
+  const blocked = guardExperiment({
+    action: "offer_clarity_update",
+    evidenceLevel: "ACTIONABLE_SIGNAL",
+    recentDecisions: recent,
+    bottleneck: "CLICKS_NO_ENGAGEMENT",
+  });
+  assert.equal(blocked.allowed, false);
+  assert.match(blocked.reason, /action_cooldown/);
+
+  const diversify = guardExperiment({
+    action: "demand_radar_sweep",
+    evidenceLevel: "ACTIONABLE_SIGNAL",
+    recentDecisions: recent,
+    bottleneck: "CLICKS_NO_ENGAGEMENT",
+  });
+  assert.equal(diversify.allowed, true);
+});
+
+test("stale lifetime views without fresh exposure → NO_IMPRESSIONS", () => {
+  const now = new Date().toISOString();
+  const d = diagnoseBottleneck({
+    observation: {
+      ...emptyObs(40),
+      hourPulse: {
+        windowStart: now,
+        windowEnd: now,
+        landingViews: 0,
+        checkouts: 0,
+        purchases: 0,
+        revenueUsd: 0,
+        zeroHour: true,
+      },
+    },
+    state: {
+      ...defaultEmptyState("bidforge"),
+      qualified_visits: 40,
+    },
+  });
+  assert.equal(d.kind, "NO_IMPRESSIONS");
+  assert.match(d.detail, /fresh exposure|distribution/i);
+});
+
 test("FAST clock under first customer + insufficient evidence", () => {
   const sel = selectActiveClock({
     evidenceLevel: "NO_EVIDENCE",
