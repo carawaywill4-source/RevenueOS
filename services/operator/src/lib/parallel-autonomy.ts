@@ -27,6 +27,8 @@ export type AutonomyDomain =
   | "INFRA"
   | "COST"
   | "EVOLUTION"
+  | "CREATION"
+  | "CODE_EVOLUTION"
   | "OWNER_TELEMETRY";
 
 type Logger = (
@@ -280,8 +282,10 @@ export async function runParallelAutonomyCoordinator(deps: {
         bump("COST", "enforced");
       }
 
-      // EVOLUTION heartbeat (portfolio evolution remains independent; no freeze)
+      // EVOLUTION / CREATION / CODE_EVOLUTION heartbeats (peer loops own work)
       bump("EVOLUTION", "capacity_observed");
+      bump("CREATION", "architect_peer_loop");
+      bump("CODE_EVOLUTION", "code_evolution_peer_loop");
       bump("OWNER_TELEMETRY", "non_blocking");
 
       // Reflect revenue/admit/repair as RUNNING if peers exist

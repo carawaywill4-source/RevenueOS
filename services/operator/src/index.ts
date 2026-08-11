@@ -738,13 +738,68 @@ async function main() {
     }
   }
 
-  // PortfolioArchitect evolution — slow cadence; does not interrupt commercial ticks.
-  // Skip in native Postgres until architect state is ported off Supabase client.
-  // Skip while legacy Supabase is unreachable.
-  if (nativePostgres) {
-    logger("info", "operator.architect.skipped_native_postgres", {
-      note: "architect persistence still Supabase-shaped; commercial ticks unaffected",
-    });
+  // PortfolioArchitect + CODE_EVOLUTION — Postgres-durable, non-blocking lanes.
+  if (nativePostgres && pgPool) {
+    try {
+      const { runBusinessArchitectLoop } = await import(
+        "./lib/business-architect-loop.js"
+      );
+      void runBusinessArchitectLoop({
+        pool: pgPool,
+        appRoot: repoRoot,
+        logger,
+        signal: abortController.signal,
+        intervalMs: Number(process.env.BUSINESS_ARCHITECT_INTERVAL_MS || "60000"),
+      }).catch((err) => {
+        logger("error", "architect.loop.crash", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+      logger("info", "architect.loop.wired", {
+        version: "business-architect-pg-v1",
+        persistence: "ros_portfolio_state + ros_config_meta",
+      });
+    } catch (e) {
+      logger("error", "architect.loop.wire_failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+
+    try {
+      const { runCodeEvolutionLoop } = await import(
+        "./lib/code-evolution-executor.js"
+      );
+      void runCodeEvolutionLoop({
+        pool: pgPool,
+        appRoot: repoRoot,
+        logger,
+        signal: abortController.signal,
+        preferSiteId: "storelift",
+        getManagedSiteIds: () => {
+          if (admitLaneState.titanManaged.size > 0) {
+            return [...admitLaneState.titanManaged];
+          }
+          // Boot race: lane refresh may lag first code-evolution tick.
+          return scheduler
+            .getStatuses()
+            .filter((s) => !s.commerciallyPaused)
+            .map((s) => s.siteId);
+        },
+        intervalMs: Number(process.env.CODE_EVOLUTION_INTERVAL_MS || "120000"),
+      }).catch((err) => {
+        logger("error", "code_evolution.loop.crash", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+      logger("info", "code_evolution.loop.wired", {
+        version: "code-evolution-v1",
+        preferSiteId: "storelift",
+      });
+    } catch (e) {
+      logger("error", "code_evolution.loop.wire_failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
   } else if (degradedLocal) {
     logger("warn", "operator.architect.skipped_degraded_local", {});
   } else {
