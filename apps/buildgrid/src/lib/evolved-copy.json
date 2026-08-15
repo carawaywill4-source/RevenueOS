@@ -1,0 +1,61 @@
+{
+  "headline": "The job is in the field. The chaos is in your inbox.",
+  "lede": "BuildGrid is the coordination pack a project manager on a small or mid-size build actually opens on Tuesday morning — RFI log, 3-week look-ahead, punch list, and submittal tracker. One payment. Digital files. Reuse it on every job.",
+  "inside": [
+    {
+      "title": "RFI log",
+      "body": "Number, date, question, assignee, due date, closed. So the architect question from Thursday does not vanish into a text thread when the inspector shows up."
+    },
+    {
+      "title": "3-week look-ahead",
+      "body": "Crew-level schedule the superintendent can mark up. Not a 400-line P6 export nobody reads in the trailer."
+    },
+    {
+      "title": "Punch list system",
+      "body": "Room-by-room items, owner, photo note, sign-off. Walks stop dying in a group chat the week before turnover."
+    },
+    {
+      "title": "Submittal tracker",
+      "body": "Spec section, status, reviewer, return date. Ends the sentence “I thought you had that.”"
+    }
+  ],
+  "without": [
+    "RFIs live in email, texts, and a spreadsheet named FINAL_v7.",
+    "Look-aheads are rebuilt from scratch every Monday.",
+    "Punch items get lost between the walk and the closeout binder.",
+    "Subs swear a submittal was sent. You cannot prove when."
+  ],
+  "withThis": [
+    "One log the whole job can point at.",
+    "A look-ahead that matches how the site actually works.",
+    "Punch that survives the walk, the photos, and the owner meeting.",
+    "Submittals with a date trail you can show the architect."
+  ],
+  "notFor": [
+    "Teams that need live multiplayer SaaS with seats and SSO.",
+    "Enterprise PMOs replacing Procore or Autodesk.",
+    "People looking for a course. This is a working pack, not a lecture."
+  ],
+  "faqs": [
+    {
+      "q": "What do I actually download?",
+      "a": "Editable templates: RFI log, 3-week look-ahead, punch list, and submittal tracker — plus a one-page how-to so a new PM can start the same day. Not a locked PDF of theory."
+    },
+    {
+      "q": "Is this software?",
+      "a": "No. It is a digital pack you own. Open it in Excel, Sheets, or the equivalent you already use on the job. No login, no monthly seat."
+    },
+    {
+      "q": "Who is this for?",
+      "a": "Project managers and supers coordinating subcontractors on small and mid-size builds — where email is still the operating system and a $40k platform is not happening this quarter."
+    },
+    {
+      "q": "What if the files are not what I needed?",
+      "a": "Email care@buildgrid.com within 14 days if the download is defective or you cannot open the files. We do not invent reviews or customer counts."
+    }
+  ],
+  "cta": "Get the BuildGrid pack",
+  "priceUsd": 29,
+  "evolvedBy": "revenueos-storefront-evolve",
+  "evolvedAt": "2026-08-13T21:25:00.000Z"
+}

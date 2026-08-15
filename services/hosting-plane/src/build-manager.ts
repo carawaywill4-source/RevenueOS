@@ -1,14 +1,24 @@
 /**
- * BuildManager — produce a deployable Next.js artifact for a site.
- * Does not route traffic. Failures → DEPLOYMENT_FAILED only.
+ * BuildManager — produce deployable static artifact.
+ * Default: lightweight brand→HTML (fits small Azure VMs).
+ * Optional: HOSTING_FORCE_NEXT_BUILD=1 for full Next export.
  */
 
-import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { buildStaticFromBrand } from "./static-brand-build.js";
+import { nativeSiteUrl } from "./public-domain.js";
 
 export type BuildResult =
-  | { ok: true; appDir: string; version: string; durationMs: number }
+  | {
+      ok: true;
+      appDir: string;
+      artifactDir: string;
+      version: string;
+      durationMs: number;
+      mode: "static";
+      fingerprint?: string;
+    }
   | { ok: false; error: string; durationMs: number };
 
 export async function buildSite(input: {
@@ -16,71 +26,48 @@ export async function buildSite(input: {
   siteId: string;
   appRelPath: string;
   version: string;
+  artifactRoot: string;
 }): Promise<BuildResult> {
   const started = Date.now();
   const appDir = path.join(input.repoRoot, input.appRelPath);
   if (!existsSync(appDir)) {
-    return { ok: false, error: `missing_app:${input.appRelPath}`, durationMs: Date.now() - started };
-  }
-
-  // Install from monorepo root so workspace hoisting resolves (e.g. @tailwindcss/postcss).
-  // Installing only inside apps/<site> breaks Next CSS tooling in this repo.
-  const workspaceName = `@portfolio/${input.siteId}`;
-  const install = spawnSync(
-    "npm",
-    [
-      "install",
-      "--workspace",
-      workspaceName,
-      "--include=dev",
-      "--prefer-offline",
-      "--no-audit",
-      "--no-fund",
-    ],
-    {
-      cwd: input.repoRoot,
-      encoding: "utf8",
-      env: { ...process.env, CI: "1" },
-      timeout: 10 * 60_000,
-    },
-  );
-  if (install.status !== 0) {
     return {
       ok: false,
-      error: `install_failed:${(install.stderr || install.stdout || "").slice(0, 280)}`,
+      error: `missing_app:${input.appRelPath}`,
       durationMs: Date.now() - started,
     };
   }
 
-  const build = spawnSync("npx", ["next", "build"], {
-    cwd: appDir,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      NODE_ENV: "production",
-      NEXT_TELEMETRY_DISABLED: "1",
-      NODE_PATH: [
-        path.join(input.repoRoot, "node_modules"),
-        path.join(appDir, "node_modules"),
-        process.env.NODE_PATH ?? "",
-      ]
-        .filter(Boolean)
-        .join(path.delimiter),
-    },
-    timeout: 15 * 60_000,
-  });
-  if (build.status !== 0) {
+  const forceNext = process.env.HOSTING_FORCE_NEXT_BUILD === "1";
+  if (!forceNext) {
+    const built = buildStaticFromBrand({
+      repoRoot: input.repoRoot,
+      siteId: input.siteId,
+      version: input.version,
+      artifactRoot: input.artifactRoot,
+      canonicalUrl: nativeSiteUrl(input.siteId),
+    });
+    if (!built.ok) {
+      return {
+        ok: false,
+        error: built.error,
+        durationMs: built.durationMs,
+      };
+    }
     return {
-      ok: false,
-      error: `build_failed:${(build.stderr || build.stdout || "").slice(0, 400)}`,
-      durationMs: Date.now() - started,
+      ok: true,
+      appDir,
+      artifactDir: built.artifactDir,
+      version: input.version,
+      durationMs: built.durationMs,
+      mode: "static",
+      fingerprint: built.fingerprint,
     };
   }
 
   return {
-    ok: true,
-    appDir,
-    version: input.version,
+    ok: false,
+    error: "next_build_disabled_on_small_vm_set_HOSTING_FORCE_NEXT_BUILD_only_with_enough_ram",
     durationMs: Date.now() - started,
   };
 }

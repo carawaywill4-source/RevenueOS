@@ -1,12 +1,13 @@
 /**
  * Owner command/chat — queries live Core + durable memory.
- * Uses handleOwnerMessage from @revenueos/core (not a disconnected chatbot).
+ * Primary brain: xAI Grok (OWNER_DIALOG). OpenAI is fallback only.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   getOpenAICapabilityStatus,
   handleOwnerMessage,
+  xaiHealth,
   type OwnerDialogState,
 } from "@revenueos/core";
 import type { BusinessRuntimeStatus } from "./scheduler.js";
@@ -19,19 +20,7 @@ function factualAnswer(
 ): string | null {
   const msg = message.toLowerCase();
   if (/what are you doing|right now|currently doing/.test(msg)) {
-    if (!businesses.length) return "No businesses are currently claimed by Core.";
-    const lines = businesses.map((b) => {
-      const name =
-        PORTFOLIO.find((p) => p.siteId === b.siteId)?.displayName ?? b.displayName;
-      const doing =
-        (b.lastExecuted ?? 0) > 0
-          ? "executing commercial work"
-          : (b.lastEnqueued ?? 0) > 0
-            ? "selecting next actions"
-            : "observing / waiting on cooldowns";
-      return `• ${name}: ${doing}${b.lastError ? ` (${b.lastError.slice(0, 80)})` : ""}`;
-    });
-    return `Right now across the portfolio:\n${lines.join("\n")}`;
+    return null;
   }
   if (/learned today|what have you learned/.test(msg)) {
     if (!activity.length) {
@@ -79,7 +68,6 @@ export async function ownerChat(input: {
   businesses: BusinessRuntimeStatus[];
   uptimeSec: number;
 }): Promise<Record<string, unknown>> {
-  const openai = getOpenAICapabilityStatus();
   const since = new Date(Date.now() - 24 * 3_600_000).toISOString();
   const siteIds = input.businesses.map((b) => b.siteId);
   let activity: Array<{ business: string; summary: string; at: string }> = [];
@@ -134,24 +122,31 @@ export async function ownerChat(input: {
   };
 
   const factual = factualAnswer(input.message, input.businesses, activity);
-  const dialog = await handleOwnerMessage({ message: input.message, state });
+  const dialog = await handleOwnerMessage({
+    message: input.message,
+    state,
+    preferProvider: "auto",
+  });
 
   let answer = dialog.answer;
   let source = dialog.source;
-  if (openai.status !== "ok") {
-    if (factual) {
-      answer = factual;
-      source = "deterministic";
-    }
+  const xai = xaiHealth();
+  const openai = getOpenAICapabilityStatus();
+
+  // If Grok answered, keep it. Only overlay factual overrides for pure
+  // status queries when the model returned deterministic fallback.
+  if (source === "deterministic" && factual) {
+    answer = factual;
+  } else if (source === "deterministic" && openai.status !== "ok" && xai.status !== "AVAILABLE") {
     const banner =
-      openai.code === "no_credits"
-        ? "Natural-language reasoning is degraded (OpenAI returned no credits / 429). Answering from Core state only.\n\n"
-        : `Natural-language reasoning is degraded (${openai.reason ?? openai.code}). Answering from Core state only.\n\n`;
-    if (!answer.includes("degraded") && !answer.includes("offline fallback")) {
+      xai.status === "FAILED"
+        ? `Grok unavailable (${"lastError" in xai ? xai.lastError : "failed"}). Answering from Core state only.\n\n`
+        : xai.status === "DISABLED"
+          ? "Grok not configured. Answering from Core state only.\n\n"
+          : "AI reasoning degraded. Answering from Core state only.\n\n";
+    if (!answer.includes("offline fallback") && !answer.includes("Grok unavailable")) {
       answer = banner + answer;
     }
-  } else if (factual && dialog.source === "deterministic") {
-    answer = factual;
   }
 
   return {
@@ -159,9 +154,15 @@ export async function ownerChat(input: {
     answer,
     proposedChanges: dialog.proposedChanges,
     source,
+    model: dialog.model ?? null,
     capabilities: {
+      xai:
+        xai.status === "AVAILABLE"
+          ? { status: "ok", model: xai.model }
+          : { status: xai.status.toLowerCase(), detail: xai },
       openaiReasoning: openai.status === "ok" ? "ok" : "degraded",
       openaiNote: openai.note,
+      primaryBrain: "xai_grok",
     },
     at: new Date().toISOString(),
   };

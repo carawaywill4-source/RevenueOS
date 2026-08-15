@@ -62,3 +62,26 @@ test("max 50 active businesses", () => {
   assert.equal(r.ok, false);
   assert.equal(r.detail, "max_active_businesses");
 });
+
+test("redeploy of an existing site is not blocked by max_active", () => {
+  const fifty = Array.from({ length: 50 }, (_, i) =>
+    site({
+      siteId: `b${i}`,
+      limits: { cpuMillicores: 10, memoryMb: 10, diskMb: 10 },
+    }),
+  );
+  const cap = {
+    ...DEFAULT_CAPACITY,
+    totalCpuMillicores: 100_000,
+    totalMemoryMb: 100_000,
+    reservedCpuMillicores: 0,
+    reservedMemoryMb: 0,
+  };
+  const withoutSelf = fifty.filter((s) => s.siteId !== "b0");
+  const r = canAllocate(cap, withoutSelf, {
+    cpuMillicores: 10,
+    memoryMb: 10,
+    diskMb: 10,
+  });
+  assert.equal(r.ok, true);
+});

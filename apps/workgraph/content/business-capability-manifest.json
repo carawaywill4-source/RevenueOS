@@ -1,0 +1,43 @@
+{
+  "business_id": "scopeguard",
+  "product": {
+    "status": "READY",
+    "job_to_be_done": "protect freelancers from unpaid scope expansion",
+    "target_customer": "experienced freelancers / small agencies",
+    "primary_value": "professional boundary-setting + paid change handling"
+  },
+  "price": { "current": 45 },
+  "delivery": { "instant": true },
+  "trust": {
+    "score": "PASS",
+    "known_debt": ["custom domain pending"]
+  },
+  "ux": {
+    "desktop": "PASS",
+    "mobile": "PASS"
+  },
+  "checkout": { "status": "VERIFIED" },
+  "fulfillment": { "status": "VERIFIED" },
+  "reliability": { "status": "HEALTHY" },
+  "forge_confidence": 0.91,
+  "known_product_uncertainties": [
+    "willingness to pay not validated",
+    "preferred deliverable format not validated",
+    "agency vs solo-freelancer segment unresolved"
+  ],
+  "apex_allowed_to_test": [
+    "channel",
+    "persona",
+    "intent",
+    "message",
+    "acquisition_asset",
+    "landing_entry_path"
+  ],
+  "apex_requires_forge_approval_for": [
+    "product_redesign",
+    "major_pricing_change",
+    "fulfillment_change"
+  ],
+  "current_business_stage": "FIRST_CUSTOMER",
+  "primary_objective": "FIRST ATTRIBUTED STRANGER PURCHASE"
+}

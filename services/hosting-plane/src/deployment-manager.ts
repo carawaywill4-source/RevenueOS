@@ -4,7 +4,9 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { buildSite } from "./build-manager.js";
 import { checkHttpHealth, smokeCheckoutReady } from "./health.js";
 import { writeCaddyfile, writeNginxSnippet } from "./gateway.js";
@@ -15,6 +17,9 @@ import {
 } from "./resource-governor.js";
 import { createDockerRuntime } from "./runtime/docker-runtime.js";
 import { createProcessRuntime } from "./runtime/process-runtime.js";
+import { createStaticRuntime } from "./runtime/static-runtime.js";
+import { nativeSiteDomain, nativeSiteUrl } from "./public-domain.js";
+import { publicArtifactPasses } from "./static-brand-build.js";
 import type {
   DeployRequest,
   DeployResult,
@@ -59,13 +64,33 @@ function newId(prefix: string) {
 }
 
 async function pickRuntime(repoRoot: string): Promise<RuntimeAdapter> {
-  const prefer = (process.env.HOSTING_RUNTIME || "auto").toLowerCase();
+  const prefer = (process.env.HOSTING_RUNTIME || "static").toLowerCase();
   const docker = createDockerRuntime(repoRoot);
   const proc = createProcessRuntime(repoRoot);
+  const stat = createStaticRuntime();
+  if (prefer === "static") return stat;
   if (prefer === "docker") return docker;
   if (prefer === "process") return proc;
-  if (await docker.available()) return docker;
-  return proc;
+  // Default: static — works on small Azure VMs without per-site Node.
+  return stat;
+}
+
+let lastCaddyReloadAt = 0;
+function reloadCaddy(_gatewayDir: string) {
+  // Debounce: bulk deploys must not thrash systemd (start-limit-hit).
+  const now = Date.now();
+  if (now - lastCaddyReloadAt < 8_000) return;
+  lastCaddyReloadAt = now;
+  const main = "/etc/caddy/Caddyfile";
+  if (existsSync(main)) {
+    const reload = spawnSync(
+      "sudo",
+      ["caddy", "reload", "--config", main, "--force"],
+      { encoding: "utf8" },
+    );
+    if (reload.status === 0) return;
+  }
+  spawnSync("sudo", ["systemctl", "restart", "caddy"], { encoding: "utf8" });
 }
 
 export function createDeploymentManager(input: {
@@ -133,11 +158,18 @@ export function createDeploymentManager(input: {
     async deploy(req) {
       return withStateAsync(async (state) => {
         const deploymentId = newId("dep");
+        const preferStatic =
+          (process.env.HOSTING_RUNTIME || "static").toLowerCase() === "static";
         const limits: SiteLimits = {
           ...DEFAULT_SITE_LIMITS,
+          ...(preferStatic
+            ? { cpuMillicores: 10, memoryMb: 8, diskMb: 256 }
+            : {}),
           ...(req.limits ?? {}),
         };
-        const alloc = canAllocate(state.capacity, state.sites, limits);
+        // Redeploy of an already-tracked site must not consume a new slot.
+        const sitesForAlloc = state.sites.filter((s) => s.siteId !== req.siteId);
+        const alloc = canAllocate(state.capacity, sitesForAlloc, limits);
         if (!alloc.ok) {
           remember({
             business_id: req.siteId,
@@ -166,11 +198,13 @@ export function createDeploymentManager(input: {
         const appRel = path.isAbsolute(req.appDir)
           ? path.relative(repoRoot, req.appDir)
           : req.appDir;
+        const artifactRoot = path.join(dataDir, "artifacts");
         const built = await buildSite({
           repoRoot,
           siteId: req.siteId,
           appRelPath: appRel,
           version: req.version,
+          artifactRoot,
         });
         if (!built.ok) {
           remember({
@@ -192,19 +226,20 @@ export function createDeploymentManager(input: {
             deploymentId,
             siteId: req.siteId,
             version: req.version,
-            detail: `DEPLOYMENT_FAILED:${built.error}`,
+            detail: `BUILD_FAILED:${built.error}`,
             verification: { build: built.error },
           };
         }
 
-        const candidatePort = allocatePort(state);
         const rt = await getRuntime();
         const safeEnv = sanitizeEnv(req.env);
         writeSiteEnv(dataDir, req.siteId, safeEnv);
+        const isStatic = rt.kind === "static" || built.mode === "static";
+        const candidatePort = isStatic ? 0 : allocatePort(state);
         const start = await rt.start({
           siteId: req.siteId,
           deploymentId,
-          appDir: built.appDir,
+          appDir: isStatic ? built.artifactDir : built.appDir,
           port: candidatePort,
           env: safeEnv,
           limits,
@@ -229,43 +264,8 @@ export function createDeploymentManager(input: {
             deploymentId,
             siteId: req.siteId,
             version: req.version,
-            detail: `DEPLOYMENT_FAILED:${start.detail}`,
+            detail: `NATIVE_DEPLOY_FAILED:${start.detail}`,
             verification: { start: start.detail },
-          };
-        }
-
-        const baseUrl = `http://127.0.0.1:${candidatePort}`;
-        const health = await checkHttpHealth({ baseUrl, healthPath: "/" });
-        const smoke = await smokeCheckoutReady({ baseUrl });
-        if (!health.ok) {
-          await rt.stop({
-            siteId: req.siteId,
-            deploymentId,
-            port: candidatePort,
-            pid: start.pid,
-            containerId: start.containerId,
-          });
-          remember({
-            business_id: req.siteId,
-            deployment_id: deploymentId,
-            version: req.version,
-            reason: req.reason,
-            hypothesis: req.hypothesis,
-            status: "DEPLOYMENT_FAILED",
-            errors: [health.detail],
-            rollback_status: "none",
-          });
-          audit(state, "DEPLOYMENT_FAILED", health.detail, {
-            siteId: req.siteId,
-            actor: "core",
-          });
-          return {
-            ok: false,
-            deploymentId,
-            siteId: req.siteId,
-            version: req.version,
-            detail: `DEPLOYMENT_FAILED:health:${health.detail}`,
-            verification: { health, smoke },
           };
         }
 
@@ -274,15 +274,69 @@ export function createDeploymentManager(input: {
           ? [req.domain]
           : existing?.domains?.length
             ? existing.domains
-            : [`${req.siteId}.localhost`];
+            : [nativeSiteDomain(req.siteId)];
+
+        // For static: gateway first, then public health via Caddy hostname.
+        // For process: local port health before cutover.
+        let health = { ok: true, detail: "static_artifact", checkedAt: new Date().toISOString() };
+        let smoke = { ok: true, detail: "deferred_to_public_verify" };
+        if (!isStatic) {
+          const baseUrl = `http://127.0.0.1:${candidatePort}`;
+          health = await checkHttpHealth({ baseUrl, healthPath: "/" });
+          smoke = await smokeCheckoutReady({ baseUrl });
+          if (!health.ok) {
+            await rt.stop({
+              siteId: req.siteId,
+              deploymentId,
+              port: candidatePort,
+              pid: start.pid,
+              containerId: start.containerId,
+            });
+            remember({
+              business_id: req.siteId,
+              deployment_id: deploymentId,
+              version: req.version,
+              reason: req.reason,
+              hypothesis: req.hypothesis,
+              status: "DEPLOYMENT_FAILED",
+              errors: [health.detail],
+              rollback_status: "none",
+            });
+            audit(state, "DEPLOYMENT_FAILED", health.detail, {
+              siteId: req.siteId,
+              actor: "core",
+            });
+            return {
+              ok: false,
+              deploymentId,
+              siteId: req.siteId,
+              version: req.version,
+              detail: `COMMERCIAL_VERIFY_FAILED:health:${health.detail}`,
+              verification: { health, smoke },
+            };
+          }
+        }
+
+        if (!existsSync(built.artifactDir) && isStatic) {
+          return {
+            ok: false,
+            deploymentId,
+            siteId: req.siteId,
+            version: req.version,
+            detail: "BUILD_FAILED:artifact_missing",
+            verification: { artifact: built.artifactDir },
+          };
+        }
 
         // Cut traffic only after candidate health OK.
         if (existing?.status === "healthy" || existing?.status === "degraded") {
           // Keep previous known-good temporarily for rollback.
           const prevId = existing.deploymentId;
           const prevPort = existing.port;
+          const prevArtifact = existing.artifactDir;
           existing.previousDeploymentId = prevId;
           existing.previousPort = prevPort;
+          existing.previousArtifactDir = prevArtifact;
           existing.deploymentId = deploymentId;
           existing.version = req.version;
           existing.port = candidatePort;
@@ -293,32 +347,36 @@ export function createDeploymentManager(input: {
           existing.limits = limits;
           existing.envKeys = Object.keys(safeEnv);
           existing.appDir = built.appDir;
+          existing.artifactDir = isStatic ? built.artifactDir : undefined;
           existing.reason = req.reason;
           existing.hypothesis = req.hypothesis;
           existing.domain = domains[0];
           existing.domains = domains;
           existing.pid = start.pid;
           existing.containerId = start.containerId;
-          existing.runtimeKind = rt.kind;
+          existing.runtimeKind = isStatic ? "static" : rt.kind;
 
           // Stop previous after grace (best-effort; keep port recorded for rollback window)
-          setTimeout(() => {
-            void getRuntime().then((r) =>
-              r.stop({
-                siteId: req.siteId,
-                deploymentId: prevId,
-                port: prevPort,
-              }),
-            );
-          }, 30_000);
+          if (!isStatic && prevPort) {
+            setTimeout(() => {
+              void getRuntime().then((r) =>
+                r.stop({
+                  siteId: req.siteId,
+                  deploymentId: prevId,
+                  port: prevPort,
+                }),
+              );
+            }, 30_000);
+          }
         } else {
           const record: SiteRuntimeRecord = {
             siteId: req.siteId,
             version: req.version,
             deploymentId,
-            runtimeKind: rt.kind,
+            runtimeKind: isStatic ? "static" : rt.kind,
             status: "healthy",
             port: candidatePort,
+            artifactDir: isStatic ? built.artifactDir : undefined,
             domain: domains[0],
             domains,
             createdAt: new Date().toISOString(),
@@ -341,34 +399,106 @@ export function createDeploymentManager(input: {
         }
 
         refreshGatewayLocked(state);
+        reloadCaddy(gatewayDir);
+
+        const publicUrl = nativeSiteUrl(req.siteId);
+        let publicVerify: { ok: boolean; detail: string; missing?: string[] } = {
+          ok: true,
+          detail: "process_runtime_skip_static_markers",
+        };
+        if (isStatic) {
+          publicVerify = { ok: false, detail: "unverified" };
+          for (let attempt = 0; attempt < 4; attempt++) {
+            await new Promise((r) => setTimeout(r, attempt === 0 ? 400 : 1200));
+            try {
+              const res = await fetch(publicUrl, {
+                redirect: "follow",
+                headers: { "user-agent": "RevenueOS-HostingPlane/deploy-verify" },
+                signal: AbortSignal.timeout(8000),
+              });
+              const html = await res.text();
+              const pass = publicArtifactPasses(html);
+              const privacy = await fetch(`${publicUrl}/legal/privacy/`, {
+                signal: AbortSignal.timeout(6000),
+              }).catch(() => null);
+              if (pass.ok && privacy && privacy.status < 400) {
+                publicVerify = {
+                  ok: true,
+                  detail: `public_ok status=${res.status} renderer_markers`,
+                };
+                break;
+              }
+              publicVerify = {
+                ok: false,
+                detail: `DEPLOYMENT_DIVERGENCE http=${res.status} privacy=${privacy?.status ?? "n/a"}`,
+                missing: pass.missing,
+              };
+            } catch (e) {
+              publicVerify = {
+                ok: false,
+                detail: `DEPLOYMENT_DIVERGENCE fetch:${e instanceof Error ? e.message : String(e)}`,
+              };
+            }
+          }
+        }
+
+        if (isStatic && !publicVerify.ok) {
+          remember({
+            business_id: req.siteId,
+            deployment_id: deploymentId,
+            version: req.version,
+            reason: req.reason,
+            hypothesis: req.hypothesis,
+            status: "DEPLOYMENT_FAILED",
+            errors: [publicVerify.detail, ...(publicVerify.missing ?? [])],
+            rollback_status: "none",
+          });
+          audit(state, "DEPLOYMENT_FAILED", publicVerify.detail, {
+            siteId: req.siteId,
+            actor: "core",
+          });
+          return {
+            ok: false,
+            deploymentId,
+            siteId: req.siteId,
+            version: req.version,
+            publicUrl,
+            detail: publicVerify.detail,
+            verification: { health, smoke, publicVerify, artifactDir: built.artifactDir },
+          };
+        }
+
         remember({
           business_id: req.siteId,
           deployment_id: deploymentId,
           version: req.version,
           reason: req.reason,
           hypothesis: req.hypothesis,
-          changes_made: `deployed to port ${candidatePort}`,
+          changes_made: isStatic
+            ? `static_native:${built.artifactDir}`
+            : `deployed to port ${candidatePort}`,
           status: "DEPLOYED",
           rollback_status: "none",
         });
-        audit(state, "DEPLOY", `v=${req.version} port=${candidatePort}`, {
-          siteId: req.siteId,
-          actor: "core",
-        });
+        audit(
+          state,
+          "DEPLOY",
+          `v=${req.version} mode=${isStatic ? "static" : "process"}`,
+          {
+            siteId: req.siteId,
+            actor: "core",
+          },
+        );
 
-        const publicHost = domains[0];
         return {
           ok: true,
           deploymentId,
           siteId: req.siteId,
           version: req.version,
-          port: candidatePort,
-          publicUrl:
-            state.mode === "development"
-              ? baseUrl
-              : `https://${publicHost}`,
-          detail: "DEPLOYED",
-          verification: { health, smoke },
+          port: candidatePort || undefined,
+          publicUrl,
+          detail: isStatic ? "DEPLOYED_STATIC_NATIVE" : "DEPLOYED",
+          verification: { health, smoke, artifactDir: built.artifactDir },
         };
       });
     },
@@ -376,7 +506,11 @@ export function createDeploymentManager(input: {
     async rollback(siteId, actor = "owner") {
       return withStateAsync(async (state) => {
         const site = state.sites.find((s) => s.siteId === siteId);
-        if (!site?.previousDeploymentId || !site.previousPort) {
+        const hasStaticGood = Boolean(site?.previousArtifactDir);
+        const hasProcessGood = Boolean(
+          site?.previousDeploymentId && site.previousPort,
+        );
+        if (!site || (!hasStaticGood && !hasProcessGood)) {
           return {
             ok: false,
             deploymentId: site?.deploymentId ?? "none",
@@ -386,11 +520,51 @@ export function createDeploymentManager(input: {
             verification: {},
           };
         }
-        // Swap ports: previous becomes current. We may need to restart previous if stopped.
+        // Swap: previous known-good becomes current.
         const badId = site.deploymentId;
         const badPort = site.port;
-        const goodId = site.previousDeploymentId;
-        const goodPort = site.previousPort;
+        const badArtifact = site.artifactDir;
+        const goodId = site.previousDeploymentId ?? `rollback_${Date.now()}`;
+        const goodPort = site.previousPort ?? 0;
+        const goodArtifact = site.previousArtifactDir;
+
+        // Static rollback: point Caddy at previous artifact — no process restart.
+        if (site.runtimeKind === "static" && goodArtifact && existsSync(goodArtifact)) {
+          site.deploymentId = goodId;
+          site.port = 0;
+          site.previousDeploymentId = badId;
+          site.previousPort = badPort;
+          site.previousArtifactDir = badArtifact;
+          site.artifactDir = goodArtifact;
+          site.status = "healthy";
+          site.lastHealthAt = new Date().toISOString();
+          site.lastHealthOk = true;
+          site.lastDeployAt = new Date().toISOString();
+          refreshGatewayLocked(state);
+          reloadCaddy(gatewayDir);
+          remember({
+            business_id: siteId,
+            deployment_id: goodId,
+            version: site.version,
+            reason: "rollback_static_native",
+            status: "ROLLED_BACK",
+            rollback_status: "rolled_back",
+          });
+          audit(state, "ROLLBACK", `static→${goodArtifact}`, {
+            siteId,
+            actor,
+          });
+          return {
+            ok: true,
+            deploymentId: goodId,
+            siteId,
+            version: site.version,
+            publicUrl: nativeSiteUrl(siteId),
+            detail: "ROLLED_BACK_STATIC_NATIVE",
+            verification: { artifactDir: goodArtifact },
+            rolledBackTo: goodId,
+          };
+        }
 
         const rt = await getRuntime();
         const env = readSiteEnv(dataDir, siteId);
@@ -447,6 +621,7 @@ export function createDeploymentManager(input: {
         site.pid = restart.pid;
         site.containerId = restart.containerId;
         refreshGatewayLocked(state);
+        reloadCaddy(gatewayDir);
         await rt.stop({
           siteId,
           deploymentId: badId,
@@ -624,6 +799,35 @@ export function createDeploymentManager(input: {
       await withStateAsync(async (state) => {
         for (const site of state.sites) {
           if (site.status === "retired" || site.status === "stopped") continue;
+          // Static sites have no process port — probe public hostname or artifact.
+          if (site.runtimeKind === "static" || site.port === 0) {
+            const publicUrl =
+              site.domain
+                ? `https://${site.domain}`
+                : nativeSiteUrl(site.siteId);
+            let health = await checkHttpHealth({
+              baseUrl: publicUrl,
+              timeoutMs: 10_000,
+            });
+            if (!health.ok && site.artifactDir && existsSync(site.artifactDir)) {
+              health = {
+                ok: true,
+                httpOk: true,
+                latencyMs: 0,
+                statusCode: 200,
+                detail: "static_artifact_present",
+                checkedAt: new Date().toISOString(),
+              };
+            }
+            site.lastHealthAt = health.checkedAt;
+            site.lastHealthOk = health.ok;
+            site.status = health.ok
+              ? health.latencyMs > 3000
+                ? "degraded"
+                : "healthy"
+              : "degraded";
+            continue;
+          }
           const health = await checkHttpHealth({
             baseUrl: `http://127.0.0.1:${site.port}`,
           });

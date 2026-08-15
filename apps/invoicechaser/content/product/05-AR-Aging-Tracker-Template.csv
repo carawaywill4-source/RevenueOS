@@ -1,0 +1,4 @@
+Invoice_Number,Client_Name,Invoice_Date,Due_Date,Amount_USD,Days_Overdue,Aging_Bucket,Current_Touch_Stage,Next_Action_Date,Status
+INV-1042,Acme Corp,2026-07-01,2026-07-15,4500,30,31-60 Days,Touch 5 - Work Pause,2026-08-16,Escalated
+INV-1048,BrightPath Media,2026-07-20,2026-08-04,1850,11,1-15 Days,Touch 3 - Exec Notice,2026-08-17,Active
+INV-1051,Crestline Logistics,2026-08-01,2026-08-15,3200,0,Current,Touch 1 - Courtesy,2026-08-16,Pending Due

@@ -73,9 +73,11 @@ class LaneSemaphore {
   private revenue: number;
   private admit: number;
   private general: number;
+  private readonly maxConcurrency: number;
   private readonly revenueCap: number;
   private readonly admitCap: number;
   private readonly generalCap: number;
+  private activeCount: number = 0;
   private waiters: Array<{
     lane: "revenue" | "admit" | "general";
     resolve: (release: () => void) => void;
@@ -89,12 +91,18 @@ class LaneSemaphore {
     revenueReserved: number;
     admitReserved: number;
   }) {
-    this.revenueCap = Math.max(0, input.revenueReserved);
-    this.admitCap = Math.max(0, input.admitReserved);
-    this.generalCap = Math.max(
-      1,
-      input.maxConcurrency - this.revenueCap - this.admitCap,
-    );
+    this.maxConcurrency = Math.max(1, input.maxConcurrency);
+    // Ensure reserved slots do not exceed total max concurrency
+    let rev = Math.max(0, input.revenueReserved);
+    let adm = Math.max(0, input.admitReserved);
+    if (rev + adm >= this.maxConcurrency) {
+      const scale = (this.maxConcurrency - 1) / (rev + adm || 1);
+      rev = Math.floor(rev * scale);
+      adm = Math.floor(adm * scale);
+    }
+    this.revenueCap = rev;
+    this.admitCap = adm;
+    this.generalCap = Math.max(1, this.maxConcurrency - this.revenueCap - this.admitCap);
     this.revenue = this.revenueCap;
     this.admit = this.admitCap;
     this.general = this.generalCap;
@@ -132,24 +140,31 @@ class LaneSemaphore {
     lane: "revenue" | "admit" | "general",
   ): (() => void) | null {
     const take = (pool: "revenue" | "admit" | "general"): (() => void) | null => {
+      if (this.activeCount >= this.maxConcurrency) return null;
       if (pool === "revenue" && this.revenue > 0) {
         this.revenue -= 1;
+        this.activeCount += 1;
         return () => {
           this.revenue = Math.min(this.revenueCap, this.revenue + 1);
+          this.activeCount = Math.max(0, this.activeCount - 1);
           this.pump();
         };
       }
       if (pool === "admit" && this.admit > 0) {
         this.admit -= 1;
+        this.activeCount += 1;
         return () => {
           this.admit = Math.min(this.admitCap, this.admit + 1);
+          this.activeCount = Math.max(0, this.activeCount - 1);
           this.pump();
         };
       }
       if (pool === "general" && this.general > 0) {
         this.general -= 1;
+        this.activeCount += 1;
         return () => {
           this.general = Math.min(this.generalCap, this.general + 1);
+          this.activeCount = Math.max(0, this.activeCount - 1);
           this.pump();
         };
       }

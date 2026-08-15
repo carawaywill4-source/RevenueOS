@@ -38,13 +38,21 @@ type Logger = (
   meta?: Record<string, unknown>,
 ) => void;
 
+export type CodeEvolutionMutationKind =
+  | "TRUST_PREVIEW_SECTION"
+  | "VALUE_BULLET_CLARITY"
+  | "FAQ_OBJECTION"
+  | "HEADLINE_VALUE_PROP"
+  | "CTA_STRUCTURE"
+  | "PRICING_EMPHASIS";
+
 export type CodeEvolutionPlan = {
   evolutionId: string;
   siteId: string;
   observation: string;
   hypothesis: string;
   expectedEffect: string;
-  mutationKind: "TRUST_PREVIEW_SECTION" | "VALUE_BULLET_CLARITY" | "FAQ_OBJECTION";
+  mutationKind: CodeEvolutionMutationKind;
   files: string[];
   risk: "low" | "medium";
   createdAt: string;
@@ -125,44 +133,80 @@ async function saveLesson(
 
 /** Deterministic commercially-hypothesized plans for digital storefronts. */
 export function planCodeEvolution(siteId: string): CodeEvolutionPlan {
+  const kinds: Array<{
+    kind: CodeEvolutionMutationKind;
+    observation: string;
+    hypothesis: string;
+    expectedEffect: string;
+  }> = [
+    {
+      kind: "TRUST_PREVIEW_SECTION",
+      observation:
+        "Public storefront has offer + CTA but limited pre-purchase value demonstration.",
+      hypothesis:
+        "Free interactive preview above the fold increases trust and checkout-start rate.",
+      expectedEffect: "Higher checkout-start rate; gate stays READY.",
+    },
+    {
+      kind: "VALUE_BULLET_CLARITY",
+      observation: "Value bullets may be generic; buyers need outcome-specific clarity.",
+      hypothesis: "Sharper outcome bullets reduce ambiguity before CTA.",
+      expectedEffect: "Clearer offer comprehension; no gate regression.",
+    },
+    {
+      kind: "FAQ_OBJECTION",
+      observation: "Common purchase objections are unanswered on-page.",
+      hypothesis: "FAQ addressing delivery/time/fit objections raises checkout confidence.",
+      expectedEffect: "Fewer abandonments from unanswered objections.",
+    },
+    {
+      kind: "HEADLINE_VALUE_PROP",
+      observation: "Headline may not state the painful job-to-be-done.",
+      hypothesis: "Outcome-led headline improves qualified engagement.",
+      expectedEffect: "Stronger first-viewport value clarity.",
+    },
+    {
+      kind: "CTA_STRUCTURE",
+      observation: "CTA may lack urgency/specificity for the pack outcome.",
+      hypothesis: "Outcome-specific CTA copy improves click-through to checkout.",
+      expectedEffect: "Higher CTA engagement without changing price.",
+    },
+    {
+      kind: "PRICING_EMPHASIS",
+      observation: "Price/value framing may be weak near the CTA.",
+      hypothesis: "Emphasizing one-time price + keep-forever framing raises WTP clarity.",
+      expectedEffect: "Clearer willingness-to-pay signal.",
+    },
+  ];
+  const pick = kinds[Math.abs(hashSite(siteId) + Math.floor(Date.now() / 3_600_000)) % kinds.length]!;
   return {
     evolutionId: newId("cevo"),
     siteId,
-    observation:
-      "Public storefront has offer + CTA but limited pre-purchase value demonstration — visitors may not understand the pack before checkout.",
-    hypothesis:
-      "Adding a free interactive preview of pack contents above the fold increases trust and checkout-start rate without paid ads.",
-    expectedEffect:
-      "Higher checkout-start rate and clearer product differentiation; no regression in commercial-readiness gate.",
-    mutationKind: "TRUST_PREVIEW_SECTION",
-    files: ["src/app/page.tsx"],
+    observation: pick.observation,
+    hypothesis: pick.hypothesis,
+    expectedEffect: pick.expectedEffect,
+    mutationKind: pick.kind,
+    files: ["src/lib/brand.ts", "src/app/page.tsx"],
     risk: "low",
     createdAt: new Date().toISOString(),
   };
+}
+
+function hashSite(siteId: string): number {
+  let h = 0;
+  for (let i = 0; i < siteId.length; i++) h = (h * 33 + siteId.charCodeAt(i)) | 0;
+  return h;
 }
 
 function applyTrustPreviewMutation(pagePath: string): {
   ok: boolean;
   detail: string;
 } {
-  if (!existsSync(pagePath)) return { ok: false, detail: "page.tsx missing" };
-  let page = readFileSync(pagePath, "utf8");
-  if (page.includes("data-ros-code-evolution=\"trust-preview\"")) {
-    return { ok: true, detail: "mutation_already_present" };
-  }
-  const block = `
-      <section
-        data-ros-code-evolution="trust-preview"
-        data-ros-hypothesis="free_preview_increases_checkout_starts"
-        style={{
-          marginTop: "2rem",
-          padding: "1.25rem 1.35rem",
-          border: "1px solid rgba(244,241,234,0.22)",
-          borderRadius: "12px",
-          background: "rgba(12,12,12,0.35)",
-          maxWidth: "42rem",
-        }}
-      >
+  return applyMarkedSection(pagePath, {
+    marker: "trust-preview",
+    hypothesis: "free_preview_increases_checkout_starts",
+    detail: "trust_preview_injected",
+    inner: `
         <p style={{ margin: 0, fontSize: "0.78rem", letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.8 }}>
           Free preview — see inside before you buy
         </p>
@@ -173,13 +217,43 @@ function applyTrustPreviewMutation(pagePath: string): {
         </ul>
         <p style={{ margin: "0.9rem 0 0", fontSize: "0.92rem", opacity: 0.85 }}>
           Instant download after Stripe checkout. No account required to evaluate fit.
-        </p>
+        </p>`,
+  });
+}
+
+function applyMarkedSection(
+  pagePath: string,
+  opts: {
+    marker: string;
+    hypothesis: string;
+    detail: string;
+    inner: string;
+  },
+): { ok: boolean; detail: string } {
+  if (!existsSync(pagePath)) return { ok: false, detail: "page.tsx missing" };
+  let page = readFileSync(pagePath, "utf8");
+  const attr = `data-ros-code-evolution="${opts.marker}"`;
+  if (page.includes(attr)) {
+    return { ok: true, detail: "mutation_already_present" };
+  }
+  const block = `
+      <section
+        ${attr}
+        data-ros-hypothesis="${opts.hypothesis}"
+        style={{
+          marginTop: "2rem",
+          padding: "1.25rem 1.35rem",
+          border: "1px solid rgba(244,241,234,0.22)",
+          borderRadius: "12px",
+          background: "rgba(12,12,12,0.35)",
+          maxWidth: "42rem",
+        }}
+      >${opts.inner}
       </section>`;
 
   if (!page.includes("<CheckoutButton")) {
     return { ok: false, detail: "no CheckoutButton anchor" };
   }
-  // Insert preview immediately before CTA container when possible.
   if (page.includes(`<div style={{ marginTop: "1.35rem" }}>`)) {
     page = page.replace(
       `<div style={{ marginTop: "1.35rem" }}>`,
@@ -191,11 +265,136 @@ function applyTrustPreviewMutation(pagePath: string): {
       (m) => `${block}\n          ${m}`,
     );
   }
-  if (!page.includes("data-ros-code-evolution=\"trust-preview\"")) {
-    return { ok: false, detail: "inject_failed" };
-  }
+  if (!page.includes(attr)) return { ok: false, detail: "inject_failed" };
   writeFileSync(pagePath, page);
-  return { ok: true, detail: "trust_preview_injected" };
+  return { ok: true, detail: opts.detail };
+}
+
+function applyBrandMutation(
+  brandPath: string,
+  kind: CodeEvolutionMutationKind,
+): { ok: boolean; detail: string } {
+  if (!existsSync(brandPath)) return { ok: false, detail: "brand.ts missing" };
+  let src = readFileSync(brandPath, "utf8");
+  const stamp = `ros-evo-${kind.toLowerCase()}`;
+  if (src.includes(stamp)) {
+    return { ok: true, detail: "brand_mutation_already_present" };
+  }
+
+  const injectTagline = (extra: string) => {
+    const m = src.match(/(["']tagline["']\s*:\s*["'])([^"']*)(["'])/);
+    if (!m) return false;
+    if (m[2].includes(extra)) return true;
+    const next = `${m[2]} ${extra}`.slice(0, 180);
+    src = src.replace(m[0], `${m[1]}${next}${m[3]}`);
+    return true;
+  };
+  const injectBullet = (bullet: string) => {
+    if (src.includes(bullet)) return true;
+    const m = src.match(/(["']bullets["']\s*:\s*\[)/);
+    if (!m) return false;
+    src = src.replace(m[0], `${m[1]}\n      "${bullet.replace(/"/g, '\\"')}",`);
+    return true;
+  };
+
+  let ok = false;
+  switch (kind) {
+    case "TRUST_PREVIEW_SECTION":
+      ok = injectTagline("Free preview before you buy.");
+      ok = injectBullet("Free preview — see inside before you buy") || ok;
+      break;
+    case "VALUE_BULLET_CLARITY":
+      ok = injectBullet("Outcome-first deliverable — not fluff");
+      break;
+    case "FAQ_OBJECTION":
+      ok = injectTagline("Instant download. Keep forever.");
+      break;
+    case "HEADLINE_VALUE_PROP":
+      ok = injectTagline("Stop improvising — use a ready pack for the job.");
+      break;
+    case "CTA_STRUCTURE":
+      ok = injectBullet("Checkout takes under a minute");
+      break;
+    case "PRICING_EMPHASIS":
+      ok = injectTagline("One-time price. Keep forever. No seat drama.");
+      break;
+    default:
+      return { ok: false, detail: "unknown_mutation_kind" };
+  }
+  if (!ok) return { ok: false, detail: "brand_inject_failed" };
+  if (!src.includes(`// ${stamp}`)) src = `// ${stamp}\n${src}`;
+  writeFileSync(brandPath, src);
+  return { ok: true, detail: `brand_${kind.toLowerCase()}_injected` };
+}
+
+function applyCodeMutation(
+  pagePath: string,
+  kind: CodeEvolutionMutationKind,
+): { ok: boolean; detail: string } {
+  switch (kind) {
+    case "TRUST_PREVIEW_SECTION":
+      return applyTrustPreviewMutation(pagePath);
+    case "VALUE_BULLET_CLARITY":
+      return applyMarkedSection(pagePath, {
+        marker: "value-bullets",
+        hypothesis: "outcome_bullets_reduce_ambiguity",
+        detail: "value_bullets_injected",
+        inner: `
+        <p style={{ margin: 0, fontWeight: 600 }}>What you get — outcomes, not fluff</p>
+        <ul style={{ margin: "0.75rem 0 0", paddingLeft: "1.1rem", lineHeight: 1.55 }}>
+          {BRAND.product.bullets.map((b) => (
+            <li key={b}>{b}</li>
+          ))}
+        </ul>`,
+      });
+    case "FAQ_OBJECTION":
+      return applyMarkedSection(pagePath, {
+        marker: "faq-objections",
+        hypothesis: "faq_clears_purchase_objections",
+        detail: "faq_injected",
+        inner: `
+        <p style={{ margin: 0, fontWeight: 600 }}>Before you buy</p>
+        <p style={{ margin: "0.6rem 0 0", opacity: 0.9 }}><strong>Delivery?</strong> Instant digital download after checkout.</p>
+        <p style={{ margin: "0.4rem 0 0", opacity: 0.9 }}><strong>Fit?</strong> Built for a specific painful workflow — preview the contents above.</p>
+        <p style={{ margin: "0.4rem 0 0", opacity: 0.9 }}><strong>Updates?</strong> Keep the files forever; no subscription required to open them.</p>`,
+      });
+    case "HEADLINE_VALUE_PROP":
+      return applyMarkedSection(pagePath, {
+        marker: "headline-value",
+        hypothesis: "outcome_headline_improves_engagement",
+        detail: "headline_band_injected",
+        inner: `
+        <p style={{ margin: 0, fontSize: "1.25rem", fontWeight: 650, lineHeight: 1.3 }}>
+          Stop improvising the painful workflow — use a ready pack built for the job.
+        </p>`,
+      });
+    case "CTA_STRUCTURE":
+      return applyMarkedSection(pagePath, {
+        marker: "cta-structure",
+        hypothesis: "outcome_cta_raises_clickthrough",
+        detail: "cta_helper_injected",
+        inner: `
+        <p style={{ margin: 0, fontWeight: 600 }}>Next step</p>
+        <p style={{ margin: "0.5rem 0 0", opacity: 0.9 }}>
+          Get the pack now — checkout takes under a minute. Files arrive immediately.
+        </p>`,
+      });
+    case "PRICING_EMPHASIS":
+      return applyMarkedSection(pagePath, {
+        marker: "pricing-emphasis",
+        hypothesis: "price_value_framing_raises_wtp_clarity",
+        detail: "pricing_band_injected",
+        inner: `
+        <p style={{ margin: 0, fontWeight: 600 }}>
+          One-time price · keep forever · no seat drama
+        </p>
+        <p style={{ margin: "0.5rem 0 0", opacity: 0.9 }}>
+          Cheaper than one hour of agency rework on the same problem.
+        </p>`,
+      });
+    default:
+      return { ok: false, detail: "unknown_mutation_kind" };
+  }
 }
 
 export async function executeCodeEvolution(input: {
@@ -262,20 +461,31 @@ export async function executeCodeEvolution(input: {
   );
 
   const pagePath = path.join(appDir, "src/app/page.tsx");
-  const mutation = applyTrustPreviewMutation(pagePath);
-  if (!mutation.ok) {
+  const brandPath = path.join(appDir, "src/lib/brand.ts");
+  // Native Azure static hosting serves brand.ts — mutate it first (authoritative).
+  const brandMutation = applyBrandMutation(brandPath, plan.mutationKind);
+  // Keep page.tsx mutation for source continuity / future Next builds.
+  const pageMutation = applyCodeMutation(pagePath, plan.mutationKind);
+  if (!brandMutation.ok && !pageMutation.ok) {
     receipt.result = "FAILED";
-    receipt.detail = mutation.detail;
+    receipt.detail = `mutation failed brand=${brandMutation.detail} page=${pageMutation.detail}`;
     receipt.completedAt = new Date().toISOString();
     await saveReceipt(input.pool, receipt);
     return receipt;
   }
-  receipt.filesChanged = ["src/app/page.tsx"];
-  copyFileSync(pagePath, path.join(workDir, "page.tsx"));
+  receipt.filesChanged = [];
+  if (brandMutation.ok) receipt.filesChanged.push("src/lib/brand.ts");
+  if (pageMutation.ok) receipt.filesChanged.push("src/app/page.tsx");
+  if (existsSync(pagePath)) {
+    copyFileSync(pagePath, path.join(workDir, "page.tsx"));
+  }
+  if (existsSync(brandPath)) {
+    copyFileSync(brandPath, path.join(workDir, "brand.ts"));
+  }
 
   input.logger("info", "code_evolution.mutated", {
     siteId: input.siteId,
-    detail: mutation.detail,
+    detail: `${brandMutation.detail};${pageMutation.detail}`,
   });
 
   const deploy = prepareAndDeployStorefront({
@@ -300,6 +510,8 @@ export async function executeCodeEvolution(input: {
   }
 
   receipt.productionUrl = deploy.productionUrl;
+  // Brief settle for Caddy/TLS after native publish (avoids false NO_PUBLIC_STOREFRONT).
+  await new Promise((r) => setTimeout(r, 2500));
   const after = await assessCommercialReadiness({
     siteId: input.siteId,
     pool: input.pool,
@@ -402,24 +614,18 @@ export async function runCodeEvolutionLoop(deps: {
   });
   let preferSiteId = deps.preferSiteId;
   let first = true;
-  let lastSite: string | null = null;
+  let cursor = 0;
+  const COOLDOWN_MS = 6 * 60 * 60_000;
   while (!deps.signal.aborted) {
     if (!first) await sleep(interval, deps.signal);
     first = false;
     if (deps.signal.aborted) break;
     try {
       const managed = deps.getManagedSiteIds();
-      const prefer =
-        preferSiteId && managed.includes(preferSiteId) ? preferSiteId : null;
-      const siteId =
-        prefer && prefer !== lastSite
-          ? prefer
-          : managed.find((s) => s !== lastSite) ?? managed[0] ?? null;
-      if (!siteId) {
+      if (!managed.length) {
         deps.logger("info", "code_evolution.loop.idle", { reason: "no_managed" });
         continue;
       }
-      // Only evolve each site occasionally — check last receipt.
       const res = await deps.pool.query(
         `select value from ros_config_meta where key=$1`,
         [CODE_EVOLUTION_KEY],
@@ -427,31 +633,79 @@ export async function runCodeEvolutionLoop(deps: {
       const doc = (res.rows[0]?.value ?? { receipts: [] }) as {
         receipts?: CodeEvolutionReceipt[];
       };
-      const recent = (doc.receipts ?? []).filter((r) => r.siteId === siteId);
-      const last = recent[recent.length - 1];
-      if (
-        last &&
-        last.result === "RETAINED" &&
-        Date.now() - Date.parse(last.completedAt ?? last.startedAt) <
-          6 * 60 * 60_000
-      ) {
-        deps.logger("info", "code_evolution.loop.skip_recent", { siteId });
-        lastSite = siteId;
+      const receipts = doc.receipts ?? [];
+      const inCooldown = (siteId: string): boolean => {
+        const recent = receipts.filter((r) => r.siteId === siteId);
+        const last = recent[recent.length - 1];
+        if (!last || last.result !== "RETAINED") return false;
+        const t = Date.parse(last.completedAt ?? last.startedAt);
+        return Number.isFinite(t) && Date.now() - t < COOLDOWN_MS;
+      };
+      // Prefer site only until first successful retain, then rotate all managed.
+      let siteId: string | null = null;
+      if (preferSiteId && managed.includes(preferSiteId) && !inCooldown(preferSiteId)) {
+        siteId = preferSiteId;
+      } else {
+        if (preferSiteId && inCooldown(preferSiteId)) preferSiteId = undefined;
+        for (let i = 0; i < managed.length; i++) {
+          const idx = (cursor + i) % managed.length;
+          const candidate = managed[idx]!;
+          if (!inCooldown(candidate)) {
+            siteId = candidate;
+            cursor = (idx + 1) % managed.length;
+            break;
+          }
+        }
+      }
+      if (!siteId) {
+        deps.logger("info", "code_evolution.loop.idle", {
+          reason: "all_managed_in_cooldown",
+          managed: managed.length,
+        });
         continue;
       }
+
+      // CAE funnel gate + CEE v4: do not polish sites with zero verified exposure
+      try {
+        const { shouldAllowSiteEvolution } = await import(
+          "./titan-commercial-executive/customer-acquisition-evolution.js"
+        );
+        const gate = await shouldAllowSiteEvolution(deps.pool, siteId);
+        if (!gate.allow) {
+          deps.logger("info", "code_evolution.loop.skipped_funnel_gate", {
+            siteId,
+            stage: gate.stage,
+            reason: gate.reason,
+          });
+          continue;
+        }
+        const { polishAllowed, refreshExposureClock } = await import(
+          "./commercial-execution-v4/ledger.js"
+        );
+        const clock = await refreshExposureClock(deps.pool, siteId);
+        if (!polishAllowed(clock)) {
+          deps.logger("info", "code_evolution.loop.skipped_zero_exposure", {
+            siteId,
+            minutesWithoutHuman: clock.minutesSinceLastVerifiedHuman,
+          });
+          continue;
+        }
+      } catch {
+        /* gate optional if module missing */
+      }
+
       const receipt = await executeCodeEvolution({
         pool: deps.pool,
         appRoot: deps.appRoot,
         siteId,
         logger: deps.logger,
       });
-      lastSite = siteId;
       deps.logger("info", "code_evolution.loop.done", {
         siteId,
         result: receipt.result,
         evolutionId: receipt.evolutionId,
       });
-      if (receipt.result === "RETAINED" && prefer === siteId) {
+      if (receipt.result === "RETAINED" && preferSiteId === siteId) {
         preferSiteId = undefined;
       }
     } catch (err) {

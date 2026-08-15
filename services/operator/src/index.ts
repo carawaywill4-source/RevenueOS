@@ -12,6 +12,8 @@
 import {
   createFileExperimentStore,
   createOperatorAdapter,
+  discoverOpportunities,
+  opportunityToManifest,
   type ExperimentStore,
   type OperatorLoopLogger,
 } from "@revenueos/core";
@@ -21,7 +23,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type pg from "pg";
 import { hydrateEnvFromFiles, loadEnv } from "./env.js";
-import { PORTFOLIO, findBusiness, getPortfolio } from "./portfolio.js";
+import {
+  PORTFOLIO,
+  findBusiness,
+  getPortfolio,
+  registerDynamicBusiness,
+} from "./portfolio.js";
 
 // Node 20 + supabase-js realtime constructor requires a WebSocket global.
 if (typeof globalThis.WebSocket === "undefined") {
@@ -62,7 +69,23 @@ import {
 } from "./lib/agent-executor.js";
 import { PortfolioScheduler } from "./lib/scheduler.js";
 import { createHealthServer } from "./lib/health-server.js";
-import { buildOwnerDashboardNative } from "./lib/owner-api.js";
+import { buildOwnerDashboardNative, buildBusinessDetailNative } from "./lib/owner-api.js";
+import {
+  loadAdmitCheckpoint,
+  TARGET_PORTFOLIO_DEFAULT,
+} from "./lib/portfolio-admit-controller.js";
+import { PARALLEL_AUTONOMY_STATE_KEY } from "./lib/parallel-autonomy.js";
+import {
+  loadLatestJudgment,
+  loadPortfolioOriginSummary,
+} from "./lib/titan-admission-gate.js";
+import {
+  worldModelStats,
+  loadLatestEvidencePack,
+  loadCustomerModel,
+  loadMoneyModel,
+  loadLatestAcquisitionExperiment,
+} from "./lib/titan-world-store.js";
 import {
   applyOwnerControl,
   isBusinessCommerciallyPaused,
@@ -227,6 +250,32 @@ async function main() {
     degradedLocal,
     dataProvider: env.dataProvider,
   });
+
+  // MissionController — the ONE authority for the commercial mission
+  // lifecycle. Boots deterministic status machine + External Progress Clock,
+  // initializes xAI as a strategic advisor (never called on hot ticks),
+  // and runs a slow tick that detects starvation and enqueues materially
+  // different experiments from the seed catalog. Independent of but
+  // complementary to the external revenueos-mission-watchdog systemd unit.
+  if (nativePostgres && pgPool) {
+    try {
+      const { startMissionLane } = await import("./lib/mission/lane.js");
+      const missionHandle = await startMissionLane({
+        pool: pgPool,
+        logger,
+        signal: abortController.signal,
+      });
+      logger("info", "mission.lane.wired", {
+        missionId: missionHandle.mission.id,
+        status: missionHandle.mission.status,
+        objective: missionHandle.mission.objective,
+      });
+    } catch (err) {
+      logger("error", "mission.lane.wire_failed", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   // Shared lane routing state — refreshed from admit checkpoint (no global freeze).
   const admitLaneState = {
@@ -414,6 +463,7 @@ async function main() {
     port: env.PORT,
     logger: (msg, meta) => logger("info", msg, meta ?? {}),
     client,
+    pgPool: pgPool ?? undefined,
     buildNativeDashboard: nativePostgres
       ? async (snap) => {
           const since = new Date(Date.now() - 6 * 3_600_000).toISOString();
@@ -425,6 +475,107 @@ async function main() {
                 40,
               )
             : [];
+          let portfolioExtra: Record<string, unknown> = {};
+          let lanes: Record<string, string> | undefined;
+          let postgresStatus = "unknown";
+          let titanJudgment: Record<string, unknown> | null = null;
+          let portfolioOrigins: Record<string, number> | null = null;
+          let titanIntelligence: Record<string, unknown> | null = null;
+          if (pgPool) {
+            try {
+              await pgPool.query("select 1");
+              postgresStatus = "DB_HEALTHY";
+            } catch {
+              postgresStatus = "DB_UNHEALTHY";
+            }
+            try {
+              const cp = await loadAdmitCheckpoint(
+                pgPool,
+                TARGET_PORTFOLIO_DEFAULT,
+                15,
+              );
+              const accepted = cp.accepted?.length ?? 0;
+              const titan = cp.titanManaged?.length ?? 0;
+              const repair = cp.underRepair?.length ?? 0;
+              portfolioExtra = {
+                accepted: Math.max(accepted, titan),
+                active: Math.max(accepted, titan),
+                probation: cp.phase === "LIVE_PROBATION" ? 1 : 0,
+                repair,
+                building: cp.phase === "PREPARING" ? 1 : 0,
+                retired: cp.rejected?.length ?? 0,
+                rejected: cp.rejected?.length ?? 0,
+                currentCandidate: cp.currentCandidate ?? null,
+                nextCandidate: cp.candidateQueue?.[0] ?? null,
+                admitPhase: cp.phase,
+                reworkQueue: cp.reworkQueue ?? [],
+                replacementQueue: cp.replacementQueue ?? [],
+              };
+              titanJudgment =
+                (cp.lastTitanJudgment as Record<string, unknown> | null) ??
+                ((await loadLatestJudgment(
+                  pgPool,
+                  cp.currentCandidate,
+                )) as Record<string, unknown> | null);
+              portfolioOrigins = await loadPortfolioOriginSummary(pgPool);
+              try {
+                const stats = await worldModelStats(pgPool);
+                const pack = cp.currentCandidate
+                  ? await loadLatestEvidencePack(
+                      pgPool,
+                      cp.currentCandidate,
+                      "ADMISSION",
+                    )
+                  : null;
+                titanIntelligence = {
+                  ...stats,
+                  currentEvidencePack: pack
+                    ? {
+                        businessId: cp.currentCandidate,
+                        decisionHint: pack.decisionHint,
+                        usefulSources: pack.usefulSources,
+                        facts: pack.facts,
+                        tenKPath: pack.tenKPath,
+                        researchSummary: pack.researchSummary,
+                      }
+                    : null,
+                };
+              } catch {
+                titanIntelligence = null;
+              }
+            } catch {
+              /* leave empty */
+            }
+            try {
+              const hb = await pgPool.query(
+                `select value from ros_config_meta where key=$1`,
+                [PARALLEL_AUTONOMY_STATE_KEY],
+              );
+              const domains = (hb.rows[0]?.value as { domains?: Record<string, { status?: string; lastTickAt?: string; detail?: string }> })
+                ?.domains;
+              if (domains) {
+                const label = (d: string, fallback: string) => {
+                  const row = domains[d];
+                  if (!row) return fallback;
+                  return `${row.status ?? "UNKNOWN"}${row.lastTickAt ? ` · ${row.lastTickAt}` : ""}`;
+                };
+                lanes = {
+                  revenuePursuit: label("REVENUE", "scheduler"),
+                  stagedAdmission: label("ADMIT", "admit"),
+                  businessRepair: label("REPAIR", "repair"),
+                  selfRepair: label("SELF_REPAIR", "self-repair"),
+                  learning: label("LEARNING", "learning"),
+                  businessEvolution: label("EVOLUTION", "evolution"),
+                  codeEvolution: label("CODE_EVOLUTION", "code-evolution"),
+                  businessCreation: label("CREATION", "creation"),
+                  infrastructure: label("INFRA", "infra"),
+                  costControl: label("COST", "cost"),
+                };
+              }
+            } catch {
+              /* leave empty */
+            }
+          }
           return buildOwnerDashboardNative({
             businesses: snap.businesses,
             uptimeSec: snap.service.uptimeSec,
@@ -432,6 +583,61 @@ async function main() {
             ownerControls: controlState,
             recentEvents,
             dataProvider: "postgres",
+            portfolioExtra,
+            lanes,
+            azureOperator: "azure-revenueos-core",
+            postgresStatus,
+            titanJudgment: titanJudgment ?? undefined,
+            portfolioOrigins: portfolioOrigins ?? undefined,
+            titanIntelligence: titanIntelligence ?? undefined,
+          });
+        }
+      : undefined,
+    buildNativeBusinessDetail: nativePostgres
+      ? async (siteId, runtime) => {
+          const since = new Date(Date.now() - 48 * 3_600_000).toISOString();
+          const recentEvents = pgPool
+            ? await listRecentNativeActivity(pgPool, [siteId], since, 40)
+            : [];
+          let titanIntel:
+            | {
+                customer?: Record<string, unknown> | null;
+                money?: Record<string, unknown> | null;
+                latestAcquisition?: Record<string, unknown> | null;
+                evidenceHint?: string | null;
+              }
+            | undefined;
+          if (pgPool) {
+            try {
+              const [customer, money, latestAcquisition, pack] =
+                await Promise.all([
+                  loadCustomerModel(pgPool, siteId),
+                  loadMoneyModel(pgPool, siteId),
+                  loadLatestAcquisitionExperiment(pgPool, siteId),
+                  loadLatestEvidencePack(pgPool, siteId),
+                ]);
+              titanIntel = {
+                customer,
+                money,
+                latestAcquisition,
+                evidenceHint: pack
+                  ? String(
+                      pack.decisionHint ??
+                        pack.researchSummary ??
+                        "",
+                    ) || null
+                  : null,
+              };
+            } catch {
+              titanIntel = undefined;
+            }
+          }
+          return buildBusinessDetailNative({
+            siteId,
+            runtime,
+            recentEvents,
+            ownerControls: controlState,
+            titanIntel,
           });
         }
       : undefined,
@@ -467,6 +673,17 @@ async function main() {
           : `${siteId} already operating`,
       };
     },
+    onInboundEmail: nativePostgres && pgPool
+      ? async (req, res) => {
+          const mod = await import("./lib/ultron-external/inbound-email.js");
+          await mod.handleInboundEmailRequest(
+            pgPool,
+            (level, event, meta) => logger(level, event, meta ?? {}),
+            req,
+            res,
+          );
+        }
+      : undefined,
     snapshot: () => ({
       service: {
         name: SERVICE_NAME,
@@ -517,6 +734,45 @@ async function main() {
     claimEnabled,
   });
 
+  // CUSTOMER ACQUISITION EVOLUTION — freeze net-new; prove existing portfolio
+  if (nativePostgres && pgPool) {
+    try {
+      const { ensureCustomerAcquisitionEvolutionMode } = await import(
+        "./lib/titan-commercial-executive/customer-acquisition-evolution.js"
+      );
+      const cae = await ensureCustomerAcquisitionEvolutionMode(pgPool, logger);
+      logger("info", "cae.mode.boot", {
+        version: cae.version,
+        freezeNetNew: cae.freezeNetNewBusinesses,
+        objective: cae.objective,
+      });
+      const { ensureZeroTrafficWarRoom } = await import(
+        "./lib/titan-commercial-executive/zero-traffic-war-room.js"
+      );
+      const zt = await ensureZeroTrafficWarRoom(pgPool, logger);
+      logger("info", "zero_traffic.boot", {
+        status: zt.status,
+        frontier: zt.frontier,
+        thirdPartyAuto: zt.channelReality.thirdPartyAutoExecutable,
+        ownedAuto: zt.channelReality.ownedAutoExecutable,
+      });
+      const { bootCapabilityReality } = await import(
+        "./lib/capability-reality/index.js"
+      );
+      const cap = await bootCapabilityReality(pgPool, logger);
+      logger("info", "capability_reality.boot_summary", {
+        auto3p: cap.executable.autonomousThirdParty,
+        authExec: cap.executable.authenticatedExecutable,
+        launchfree: cap.launchfree.status,
+        states: cap.audit.counts,
+      });
+    } catch (e) {
+      logger("error", "cae.mode.boot_failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
   // Azure-owned serial 50-business admission (15-minute healthy probation).
   // Continues without Cursor; checkpointed in ros_config_meta.
   if (
@@ -539,6 +795,69 @@ async function main() {
         getControlState: () => controlState,
         setControlState: (state) => {
           controlState = state;
+        },
+        ensureRuntimeBusiness: async (siteId) => {
+          let biz = findBusiness(siteId);
+          if (!biz) {
+            const discovered = discoverOpportunities({
+              activeSiteIds: scheduler.getStatuses().map((b) => b.siteId),
+              activeIndustries: [],
+              telemetry: [],
+              maxNewOpportunities: 30,
+              ownerPolicy: {
+                bannedMarkets: [],
+                requestedMarkets: [],
+                lockedSiteIds: [],
+                stopCreatingNewBusinesses: false,
+                maxActiveBusinesses: 50,
+                updatedAt: new Date().toISOString(),
+              },
+              safety: {
+                maxActiveBusinesses: 50,
+                autonomousBusinessDiscovery: true,
+                autonomousIncubation: true,
+                autonomousZeroCostLaunch: true,
+                autonomousSiteImprovement: true,
+                autonomousSoftRetirement: true,
+                autonomousPermanentSourceDeletion: false,
+                autonomousSpending: false,
+                autonomousPaidAds: false,
+                autonomousDomainPurchase: false,
+                preserveAllLearning: true,
+                prioritizeExistingOverNew: false,
+                stopCreatingNewBusinesses: false,
+              },
+              referenceProof: {
+                premium_bar_passed: true,
+                independent_company_test: true,
+                stranger_purchases: 1,
+              },
+            });
+            const opp = discovered.find((o) => o.siteId === siteId);
+            if (!opp) {
+              return {
+                ok: false,
+                detail: `no_manifest_or_discovery_prior:${siteId}`,
+              };
+            }
+            biz = opportunityToManifest(
+              opp,
+              `https://${siteId}.${process.env.HOSTING_PUBLIC_BASE_HOST || process.env.REVENUEOS_PUBLIC_BASE_HOST || "130.131.15.68.sslip.io"}`,
+              300 + scheduler.getStatuses().length,
+            );
+            registerDynamicBusiness(biz);
+            logger("info", "admit.runtime.registered_dynamic", {
+              siteId,
+              displayName: biz.displayName,
+            });
+          }
+          const added = scheduler.addBusiness(biz);
+          return {
+            ok: true,
+            detail: added
+              ? `hot_added:${siteId}`
+              : `already_in_scheduler:${siteId}`,
+          };
         },
         platformHealthy: () => {
           try {
@@ -610,7 +929,7 @@ async function main() {
             version: "storefront-repair-v2",
             titanManaged: cp.titanManaged.length,
             current: cp.currentCandidate,
-            deploymentMethod: "vercel_cli_prod",
+            deploymentMethod: "native_azure_hosting_plane",
             ownerExecuteDependency: false,
           });
           // Keep lanes fresh without blocking any worker.
@@ -797,6 +1116,232 @@ async function main() {
       });
     } catch (e) {
       logger("error", "code_evolution.loop.wire_failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+
+    try {
+      const { runTitanCommercialExecutiveLane } = await import(
+        "./lib/titan-commercial-executive/index.js"
+      );
+      void runTitanCommercialExecutiveLane({
+        pool: pgPool,
+        logger,
+        signal: abortController.signal,
+        intervalMs: Number(
+          process.env.COMMERCIAL_EXECUTIVE_INTERVAL_MS || "120000",
+        ),
+        getManagedSiteIds: () => {
+          if (admitLaneState.titanManaged.size > 0) {
+            return [...admitLaneState.titanManaged];
+          }
+          return scheduler
+            .getStatuses()
+            .filter((s) => !s.commerciallyPaused)
+            .map((s) => s.siteId);
+        },
+      }).catch((err) => {
+        logger("error", "commercial.executive.lane.crash", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+      logger("info", "commercial.executive.lane.wired", {
+        version: "titan-commercial-executive-v5.3-zero-traffic",
+        unattendedOwnerOffline: true,
+        customerAcquisitionEvolution: true,
+        freezeNetNewBusinesses: true,
+        zeroTrafficWarRoom: true,
+      });
+    } catch (e) {
+      logger("error", "commercial.executive.lane.wire_failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+
+    try {
+      const { runTitanWorldIntelligenceLane } = await import(
+        "./lib/titan-world-lane.js"
+      );
+      void runTitanWorldIntelligenceLane({
+        pool: pgPool,
+        logger,
+        signal: abortController.signal,
+        intervalMs: Number(process.env.TITAN_WORLD_INTERVAL_MS || "90000"),
+        getManagedSiteIds: () => {
+          if (admitLaneState.titanManaged.size > 0) {
+            return [...admitLaneState.titanManaged];
+          }
+          return scheduler
+            .getStatuses()
+            .filter((s) => !s.commerciallyPaused)
+            .map((s) => s.siteId);
+        },
+      }).catch((err) => {
+        logger("error", "titan.world.lane.crash", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+      logger("info", "titan.world.lane.wired", {
+        version: "titan-world-lane-v1",
+      });
+    } catch (e) {
+      logger("error", "titan.world.lane.wire_failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+
+    try {
+      const { runAcceptedBusinessChallengeLane } = await import(
+        "./lib/accepted-business-challenge.js"
+      );
+      void runAcceptedBusinessChallengeLane({
+        pool: pgPool,
+        appRoot: repoRoot,
+        logger,
+        signal: abortController.signal,
+        intervalMs: Number(
+          process.env.ACCEPTED_CHALLENGE_INTERVAL_MS || "180000",
+        ),
+      }).catch((err) => {
+        logger("error", "accepted_challenge.lane.crash", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+      logger("info", "accepted_challenge.lane.wired", {
+        version: "accepted-challenge-v1",
+      });
+    } catch (e) {
+      logger("error", "accepted_challenge.lane.wire_failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+
+    try {
+      const { runCoreEvolutionLane } = await import(
+        "./lib/core-evolution-executor.js"
+      );
+      void runCoreEvolutionLane({
+        pool: pgPool,
+        appRoot: repoRoot,
+        logger,
+        signal: abortController.signal,
+        intervalMs: Number(process.env.CORE_EVOLUTION_INTERVAL_MS || "600000"),
+      }).catch((err) => {
+        logger("error", "core_evolution.lane.crash", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+      logger("info", "core_evolution.lane.wired", {
+        version: "core-evolution-v1",
+      });
+    } catch (e) {
+      logger("error", "core_evolution.lane.wire_failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+
+    // AUTONOMOUS ENGINEERING BRAIN — observe→patch→test→deploy→measure
+    try {
+      const {
+        runAutonomousEngineeringLane,
+        AE_VERSION,
+        NOVEL_VERSION,
+        NOVEL_PROJECT_DISTRIBUTION,
+      } = await import("./lib/autonomous-engineering/index.js");
+      void runAutonomousEngineeringLane({
+        pool: pgPool,
+        appRoot: repoRoot,
+        logger,
+        signal: abortController.signal,
+        intervalMs: Number(process.env.AE_INTERVAL_MS || "180000"),
+      }).catch((err) => {
+        logger("error", "ae.lane.crash", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+      logger("info", "ae.lane.wired", {
+        version: AE_VERSION,
+        novel: NOVEL_VERSION,
+        novelProject: NOVEL_PROJECT_DISTRIBUTION,
+        aeV3: "AE_NOVEL_EXTERNAL_ACTION_002",
+      });
+    } catch (e) {
+      logger("error", "ae.lane.wire_failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+
+    // ULTRON ECONOMIC CORE — cognitive substrate + first-task loop.
+    try {
+      const { runUltronCoreLane, ULTRON_VERSION } = await import(
+        "./lib/ultron-core/index.js"
+      );
+      void runUltronCoreLane({
+        pool: pgPool,
+        logger,
+        signal: abortController.signal,
+        intervalMs: Number(process.env.ULTRON_INTERVAL_MS || "300000"),
+      }).catch((err) => {
+        logger("error", "ultron.lane.crash", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+      logger("info", "ultron.lane.wired", {
+        version: ULTRON_VERSION,
+        firstTask: "ULTRON_FIRST_EXTERNAL_EXPOSURE_001",
+      });
+    } catch (e) {
+      logger("error", "ultron.lane.wire_failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+
+    // ULTRON EXTERNAL AGENCY — browser operator, attribution, verification,
+    // inbound email, identity OS, skill promotion, Cursor-teacher primitives.
+    try {
+      const { runUltronExternalLane, ULTRON_EXTERNAL_VERSION } = await import(
+        "./lib/ultron-external/lane.js"
+      );
+      void runUltronExternalLane({
+        pool: pgPool,
+        logger,
+        signal: abortController.signal,
+        intervalMs: Number(process.env.ULTRON_EXTERNAL_INTERVAL_MS || "300000"),
+      }).catch((err) => {
+        logger("error", "ultron.external.lane.crash", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+      logger("info", "ultron.external.lane.wired", {
+        version: ULTRON_EXTERNAL_VERSION,
+      });
+      const { runHardcoreLane } = await import("./lib/ultron-external/hardcore-mode.js");
+      void runHardcoreLane({
+        pool: pgPool,
+        logger,
+        signal: abortController.signal,
+      }).catch((err) => {
+        logger("error", "ultron.hardcore.lane.crash", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+      logger("info", "ultron.hardcore.lane.wired", { windowHours: 8 });
+      const { runCommercialExecutionV4Lane, CEE_VERSION } = await import(
+        "./lib/commercial-execution-v4/index.js"
+      );
+      void runCommercialExecutionV4Lane({
+        pool: pgPool,
+        logger,
+        signal: abortController.signal,
+        intervalMs: Number(process.env.CEE_V4_INTERVAL_MS || "45000"),
+      }).catch((err) => {
+        logger("error", "cee.v4.lane.crash", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+      logger("info", "cee.v4.lane.wired", { version: CEE_VERSION });
+    } catch (e) {
+      logger("error", "ultron.external.lane.wire_failed", {
         message: e instanceof Error ? e.message : String(e),
       });
     }

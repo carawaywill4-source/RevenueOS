@@ -32,18 +32,35 @@ export async function executeOperatorCommercialAction(input: {
 }): Promise<{ ok: boolean; detail: string; url?: string }> {
   const { action, manifest, store, cronSecret } = input;
 
-  // Prefer storefront limb for platform/API actions (YouTube/GSC/Gumroad/publish).
-  if (cronSecret) {
-    const remote = await executeOnStorefront({
-      appUrl: manifest.appUrl,
-      cronSecret,
-      action,
-    });
-    if (remote.ok || !/unknown_or_disallowed|Unauthorized|HTTP 401|HTTP 404/.test(remote.detail)) {
-      return remote;
+  // Broken buyer paths must not receive acquisition/distribution traffic.
+  try {
+    const { isAcquisitionBlockedCached } = await import(
+      "./storefront-repair-executor.js"
+    );
+    if (isAcquisitionBlockedCached(manifest.siteId)) {
+      const blockedTypes = new Set([
+        "distribute_owned_urls",
+        "demand_radar_sweep",
+        "syndicate_content",
+        "indexnow_submit",
+        "sitemap_ping",
+        "schema_enrichment",
+        "publish_topic_cluster",
+        "gsc_submit_sitemap",
+      ]);
+      if (blockedTypes.has(action.type)) {
+        return {
+          ok: true,
+          detail: `acquisition_suppressed:${action.type}:commercial_repair`,
+        };
+      }
     }
+  } catch {
+    /* executor module optional during early boot */
   }
 
+  // Prefer Core-native agent limbs when available — many Vercel apps lack
+  // /api/owner/execute, which previously dead-ended acquisition actions.
   if (isAgentSafeAction(action.type)) {
     const result = await executeAgentAction(
       {
@@ -63,6 +80,18 @@ export async function executeOperatorCommercialAction(input: {
       (action as { payload?: Record<string, unknown> }).payload ?? {},
     );
     if (result) return result;
+  }
+
+  // Storefront limb for platform/API actions (YouTube/GSC/Gumroad/publish).
+  if (cronSecret) {
+    const remote = await executeOnStorefront({
+      appUrl: manifest.appUrl,
+      cronSecret,
+      action,
+    });
+    if (remote.ok || !/unknown_or_disallowed|Unauthorized|HTTP 401|HTTP 404/.test(remote.detail)) {
+      return remote;
+    }
   }
 
   return {

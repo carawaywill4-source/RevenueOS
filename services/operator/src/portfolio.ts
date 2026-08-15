@@ -1,18 +1,17 @@
 import type { OperatorBusinessManifest } from "@revenueos/core";
-import { readFileSync, existsSync, writeFileSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
  * Portfolio manifest for the persistent operator.
  *
- * Static digital businesses ship under `apps/*`. Autonomously launched
- * businesses are appended via portfolio-dynamic.json (preserved learning;
- * never a memory reset of the static ten).
+ * After the owner-authorized 50-business reset, ACTIVE businesses live in
+ * portfolio-dynamic.json. Prior businesses are soft-retired into
+ * portfolio-retired.json (learning preserved — never deleted).
  *
- * The `businessModel`, `priceBand`, and `considerationLevel` fields feed
- * the transferable-lessons memory. Keep them stable — changing them will
- * decouple a business from its prior learning history.
+ * Legacy STATIC_PORTFOLIO remains as historical seed metadata only when
+ * active-mode is not dynamic_only_50.
  */
 
 const STATIC_PORTFOLIO: OperatorBusinessManifest[] = [
@@ -198,12 +197,19 @@ const STATIC_PORTFOLIO: OperatorBusinessManifest[] = [
   },
 ];
 
+type RetiredRecord = OperatorBusinessManifest & {
+  retiredAt: string;
+  retirementReason: string;
+  retirementMode: "soft" | "archive";
+};
+
+function dir() {
+  return path.dirname(fileURLToPath(import.meta.url));
+}
+
 function loadDynamic(): OperatorBusinessManifest[] {
   try {
-    const p = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      "portfolio-dynamic.json",
-    );
+    const p = path.join(dir(), "portfolio-dynamic.json");
     if (!existsSync(p)) return [];
     const raw = JSON.parse(readFileSync(p, "utf8")) as OperatorBusinessManifest[];
     return Array.isArray(raw) ? raw : [];
@@ -212,11 +218,40 @@ function loadDynamic(): OperatorBusinessManifest[] {
   }
 }
 
-/** Live view — always merges static + durable dynamic registry. */
+function loadActiveMode(): { mode?: string } {
+  try {
+    const p = path.join(dir(), "portfolio-active-mode.json");
+    if (!existsSync(p)) return {};
+    return JSON.parse(readFileSync(p, "utf8")) as { mode?: string };
+  } catch {
+    return {};
+  }
+}
+
+function loadRetired(): RetiredRecord[] {
+  try {
+    const p = path.join(dir(), "portfolio-retired.json");
+    if (!existsSync(p)) return [];
+    const raw = JSON.parse(readFileSync(p, "utf8")) as RetiredRecord[];
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Live ACTIVE catalog — dynamic_only_50 after portfolio reset. */
 export function getPortfolio(): OperatorBusinessManifest[] {
+  const mode = loadActiveMode().mode;
   const dyn = loadDynamic();
+  if (mode === "dynamic_only_50") {
+    return dyn;
+  }
   const seen = new Set(STATIC_PORTFOLIO.map((b) => b.siteId));
   return [...STATIC_PORTFOLIO, ...dyn.filter((b) => !seen.has(b.siteId))];
+}
+
+export function getRetiredPortfolio(): RetiredRecord[] {
+  return loadRetired();
 }
 
 /** @deprecated prefer getPortfolio() — kept for existing imports */
@@ -227,11 +262,55 @@ export function findBusiness(siteId: string): OperatorBusinessManifest | undefin
 }
 
 export function registerDynamicBusiness(manifest: OperatorBusinessManifest): void {
-  const p = path.join(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "portfolio-dynamic.json",
-  );
+  const p = path.join(dir(), "portfolio-dynamic.json");
   const existing = loadDynamic().filter((b) => b.siteId !== manifest.siteId);
   existing.push(manifest);
   writeFileSync(p, JSON.stringify(existing, null, 2) + "\n");
+}
+
+/** Soft-retire: preserve intelligence; never delete source or ledgers. */
+export function retireBusinessPreserve(
+  manifest: OperatorBusinessManifest,
+  meta: { retiredAt: string; reason: string; mode: "soft" | "archive" },
+): void {
+  const p = path.join(dir(), "portfolio-retired.json");
+  const existing = loadRetired().filter((b) => b.siteId !== manifest.siteId);
+  existing.push({
+    ...manifest,
+    retiredAt: meta.retiredAt,
+    retirementReason: meta.reason,
+    retirementMode: meta.mode,
+  });
+  writeFileSync(p, JSON.stringify(existing, null, 2) + "\n");
+
+  // Remove from active dynamic registry if present
+  const dynPath = path.join(dir(), "portfolio-dynamic.json");
+  const dyn = loadDynamic().filter((b) => b.siteId !== manifest.siteId);
+  writeFileSync(dynPath, JSON.stringify(dyn, null, 2) + "\n");
+
+  // Archive snapshot under .data for durable learning continuity
+  try {
+    const snapDir = path.resolve(dir(), "../../../.data/portfolio-retired");
+    mkdirSync(snapDir, { recursive: true });
+    writeFileSync(
+      path.join(snapDir, `${manifest.siteId}-${meta.retiredAt.replace(/[:.]/g, "-")}.json`),
+      JSON.stringify({ manifest, meta }, null, 2) + "\n",
+    );
+  } catch {
+    /* best effort */
+  }
+}
+
+export function setActiveMode(mode: "legacy_static_plus_dynamic" | "dynamic_only_50"): void {
+  writeFileSync(
+    path.join(dir(), "portfolio-active-mode.json"),
+    JSON.stringify({ mode, at: new Date().toISOString() }, null, 2) + "\n",
+  );
+}
+
+export function replaceDynamicPortfolio(manifests: OperatorBusinessManifest[]): void {
+  writeFileSync(
+    path.join(dir(), "portfolio-dynamic.json"),
+    JSON.stringify(manifests, null, 2) + "\n",
+  );
 }

@@ -8,6 +8,8 @@
  */
 
 import type pg from "pg";
+import fs from "node:fs";
+import path from "node:path";
 
 export const ADMISSION_GATE_VERSION = "commercial-readiness-v1";
 export const COMMERCIAL_AUDIT_KEY = "commercial_readiness_audit";
@@ -15,6 +17,8 @@ export const COMMERCIAL_REPAIR_QUEUE_KEY = "commercial_repairs_queue";
 
 export type CommercialFailureCode =
   | "NO_PUBLIC_STOREFRONT"
+  | "FULFILLMENT_MISMATCH"
+  | "FULFILLMENT_PACKAGE_MISSING"
   | "NO_COMMERCIAL_OFFER"
   | "NO_CTA"
   | "BROKEN_CTA"
@@ -77,18 +81,22 @@ export type CommercialRepairItem = {
 };
 
 const CTA_RE =
-  /\b(buy|purchase|get\s*started|start\s*now|checkout|order\s*now|subscribe|claim|unlock|pay|pricing|add\s*to\s*cart|get\s*access)\b/i;
+  /\b(buy|purchase|get\b|order\b|start\b|checkout\b|subscribe\b|claim\b|unlock\b|pay\b|pricing\b|add\s*to\s*cart|download\b|acquire\b)\b/i;
 const OFFER_RE =
   /\b(pricing|price|plan|\$\s?\d|\d+\s*usd|per\s*month|one[- ]time|license|product)\b/i;
 const CHECKOUT_HREF_RE =
-  /(?:\/api\/checkout|\/checkout|buy\.stripe\.com|checkout\.stripe\.com|billing\.stripe\.com|lemonsqueezy\.com|gumroad\.com|\/\/pay\.|action=checkout)/i;
+  /(?:\/api\/checkout|\/checkout|buy\.stripe\.com|checkout\.stripe\.com|billing\.stripe\.com|lemonsqueezy\.com|gumroad\.com|\/\/pay\.|action=checkout|data-buy-url)/i;
 const ANALYTICS_RE =
   /(?:google-analytics|gtag\(|googletagmanager|plausible\.io|segment\.com|posthog|mixpanel|revenueos[_-]?beacon|\/api\/beacon|data-revenueos|analytics\.js|va\.vercel-scripts)/i;
 const STALE_RE =
   /localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|vercel\.app\/.*-[a-f0-9]{7,}|\.vercel\.app\/_next\/static\/development/i;
 
 function defaultCanonicalUrl(siteId: string): string {
-  return `https://${siteId}.vercel.app`;
+  const base =
+    process.env.HOSTING_PUBLIC_BASE_HOST ||
+    process.env.REVENUEOS_PUBLIC_BASE_HOST ||
+    "130.131.15.68.sslip.io";
+  return `https://${siteId}.${base.replace(/^https?:\/\//, "").replace(/\/$/, "")}`;
 }
 
 export async function resolveCanonicalUrl(
@@ -186,6 +194,23 @@ function extractLinks(
       /* skip */
     }
   }
+  // Also button CTAs with data-buy-url or checkout paths
+  const btnRe =
+    /<button\b([^>]*)>([\s\S]*?)<\/button>/gi;
+  while ((m = btnRe.exec(html)) && out.length < 120) {
+    const attrs = m[1] || "";
+    const text = m[2]!.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const buyUrlMatch = attrs.match(/data-buy-url\s*=\s*["']([^"']+)["']/i);
+    if (buyUrlMatch?.[1]) {
+      try {
+        out.push({ href: new URL(buyUrlMatch[1].trim(), baseUrl).toString(), text: text || "buy" });
+      } catch {
+        out.push({ href: buyUrlMatch[1].trim(), text: text || "buy" });
+      }
+    } else if (/class\s*=\s*["'][^"']*(?:cta|buy)[^"']*["']/i.test(attrs) || /id\s*=\s*["']buy["']/i.test(attrs)) {
+      out.push({ href: `${baseUrl.replace(/\/$/, "")}/api/checkout`, text: text || "buy" });
+    }
+  }
   return out;
 }
 
@@ -206,25 +231,32 @@ function pickCta(
   html: string,
   canonicalUrl: string,
 ): { href: string; text: string } | null {
+  // 1. Direct match on link text or href
   for (const l of links) {
     if (CTA_RE.test(l.text) || CHECKOUT_HREF_RE.test(l.href)) return l;
   }
-  for (const l of links) {
-    if (CHECKOUT_HREF_RE.test(l.href)) return l;
+  // 2. data-buy-url on button or element
+  const dataBuy = html.match(/data-buy-url\s*=\s*["']([^"']+)["']/i);
+  if (dataBuy?.[1]) {
+    return {
+      href: dataBuy[1].trim(),
+      text: "Get the pack",
+    };
   }
-  // Button CTAs (RevenueOS storefronts often use <button>, not <a>).
-  const btnRe = /<button\b[^>]*>([\s\S]*?)<\/button>/gi;
+  // 3. Button CTAs (RevenueOS storefronts often use <button>, not <a>).
+  const btnRe = /<button\b([^>]*)>([\s\S]*?)<\/button>/gi;
   let m: RegExpExecArray | null;
   while ((m = btnRe.exec(html))) {
-    const text = stripTags(m[1] ?? "");
-    if (CTA_RE.test(text)) {
+    const attrs = m[1] || "";
+    const text = stripTags(m[2] ?? "");
+    if (CTA_RE.test(text) || /class\s*=\s*["'][^"']*cta[^"']*["']/i.test(attrs)) {
       return {
         href: `${canonicalUrl.replace(/\/$/, "")}/api/checkout`,
-        text,
+        text: text || "Buy",
       };
     }
   }
-  // data-cta attributes
+  // 4. data-cta attributes
   const dataCta = html.match(
     /data-(?:cta|checkout)(?:-href|-url)?\s*=\s*["']([^"']+)["']/i,
   );
@@ -245,11 +277,14 @@ function pickCheckoutHref(
   links: Array<{ href: string; text: string }>,
   html: string,
 ): string | null {
+  const buyData = html.match(/data-buy-url\s*=\s*["']([^"']+)["']/i);
+  if (buyData?.[1]) return buyData[1].trim();
+
   for (const l of links) {
     if (CHECKOUT_HREF_RE.test(l.href)) return l.href;
   }
   const m = html.match(
-    /(?:href|action|data-checkout-url)\s*=\s*["']([^"']*(?:checkout|stripe|gumroad|lemonsqueezy)[^"']*)["']/i,
+    /(?:href|action|data-checkout-url|data-buy-url)\s*=\s*["']([^"']*(?:checkout|stripe|gumroad|lemonsqueezy)[^"']*)["']/i,
   );
   return m?.[1] ?? null;
 }
@@ -288,6 +323,50 @@ export async function assessCommercialReadiness(input: {
   ).replace(/\/$/, "");
   const assessedAt = new Date().toISOString();
   const failures: CommercialFailure[] = [];
+
+function verifyFulfillmentIntegrity(siteId: string, advertisedPrice: number | null, checkoutHref: string | null): CommercialFailure[] {
+  const failures: CommercialFailure[] = [];
+  const productDir = path.join(process.cwd(), "apps", siteId, "content", "product");
+  
+  if (!fs.existsSync(productDir)) {
+    failures.push({
+      code: "FULFILLMENT_PACKAGE_MISSING",
+      detail: `Product deliverable directory missing at apps/${siteId}/content/product`,
+    });
+    return failures;
+  }
+
+  const files = fs.readdirSync(productDir).filter(f => !f.startsWith("."));
+  if (files.length === 0) {
+    failures.push({
+      code: "FULFILLMENT_PACKAGE_MISSING",
+      detail: `Product deliverable directory apps/${siteId}/content/product is empty`,
+    });
+    return failures;
+  }
+
+  // If Gumroad URL, verify it is not an unrelated product slug
+  if (checkoutHref && checkoutHref.includes("gumroad.com")) {
+    const validGumroadSlugs: Record<string, string> = {
+      buildgrid: "dlfcqr",
+      invoicechaser: "huwimk",
+      quotecraft: "nkala",
+      resumeforge: "xuqyim",
+      listinglift: "ofsnxz",
+      guestlane: "yocqcb",
+    };
+    const expectedSlug = validGumroadSlugs[siteId];
+    if (!expectedSlug || !checkoutHref.includes(expectedSlug)) {
+      failures.push({
+        code: "FULFILLMENT_MISMATCH",
+        detail: `Gumroad checkout link ${checkoutHref} does not match verified product for ${siteId} (expected ${expectedSlug || "native /api/checkout"})`,
+      });
+    }
+  }
+
+  return failures;
+}
+
   const checks: CommercialCheckSnapshot = {
     http: "unknown",
     offer: "unknown",
@@ -616,7 +695,7 @@ export async function enqueueCommercialRepairs(
 /**
  * Lightweight metadata/canonical helper only.
  * Public HTML repairs are owned by storefront-repair-executor
- * (source mutation → vercel --prod → public verify).
+ * (source mutation → native Azure deploy → public verify).
  * Never uses /api/owner/execute for CTA/checkout publish.
  */
 export async function attemptCommercialRepair(input: {
@@ -669,7 +748,7 @@ export async function attemptCommercialRepair(input: {
           at: new Date().toISOString(),
           action: "queued_for_storefront_repair_executor",
           failures: [...codes],
-          note: "public deploy via vercel_cli_prod — not owner/execute",
+          note: "public deploy via native_azure_hosting_plane — not owner/execute",
         },
       }),
     ],
@@ -679,7 +758,7 @@ export async function attemptCommercialRepair(input: {
     attempted: true,
     completed: false,
     detail:
-      "queued for storefront-repair-executor (source→vercel--prod→public verify)",
+      "queued for storefront-repair-executor (source→native Azure→public verify)",
   };
 }
 

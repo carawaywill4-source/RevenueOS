@@ -1,0 +1,4 @@
+Item_ID,Room_Number,Trade,Defect_Description,Assigned_Subcontractor,Date_Identified,Target_Date,Completed_Date,Signoff_Superintendent
+PNC-001,Room 102 - Office,Drywall & Paint,Touch-up flashing at south drywall seam,Elite Drywall,2026-08-10,2026-08-14,,Pending
+PNC-002,Room 104 - Restroom,Plumbing,Grout cleanout cover loose at floor drain,Summit MEP,2026-08-10,2026-08-12,2026-08-11,J. Miller (Super)
+PNC-003,Corridor 100,Electrical,Align duplex cover plate to level,Apex Electric,2026-08-11,2026-08-15,,Pending

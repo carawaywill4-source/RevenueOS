@@ -58,7 +58,7 @@ export async function smokeCheckoutReady(input: {
   timeoutMs?: number;
 }): Promise<{ ok: boolean; detail: string }> {
   // Non-destructive: GET checkout page / API readiness if exposed.
-  const candidates = ["/api/checkout", "/checkout", "/api/health"];
+  const candidates = ["/api/checkout/ready", "/api/checkout", "/checkout"];
   for (const p of candidates) {
     const r = await checkHttpHealth({
       baseUrl: input.baseUrl,

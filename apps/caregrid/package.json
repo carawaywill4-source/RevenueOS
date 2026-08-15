@@ -1,0 +1,32 @@
+{
+  "name": "@portfolio/caregrid",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3012",
+    "build": "next build",
+    "start": "next start --port 3012",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@revenueos/core": "file:./vendor/revenueos",
+    "@revenueos/storefront-kit": "file:./vendor/storefront-kit",
+    "@supabase/supabase-js": "^2.109.0",
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "resend": "^6.18.1",
+    "stripe": "^22.4.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5"
+  }
+}

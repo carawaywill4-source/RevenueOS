@@ -1,20 +1,902 @@
 [
   {
-    "siteId": "scopeguard",
-    "displayName": "ScopeGuard",
-    "industry": "freelancer_contracts",
-    "brandVoice": "direct, protective, no-nonsense",
-    "appUrl": "https://scopeguard-rho-jade.vercel.app",
+    "siteId": "invoicechaser",
+    "displayName": "InvoiceChaser",
+    "industry": "receivables_followup",
+    "brandVoice": "firm, respectful, cash-focused",
+    "appUrl": "https://invoicechaser.vercel.app",
     "product": {
-      "id": "scopeguard-pack",
-      "name": "Freelance SOW & Change-Order Pack",
-      "priceUsd": 45,
-      "marginEstimate": 0.94,
-      "audience": "solo freelancers losing money to scope creep"
+      "id": "invoicechaser-pack",
+      "name": "InvoiceChaser Follow-Up Pack",
+      "priceUsd": 29,
+      "marginEstimate": 0.96,
+      "audience": "freelancers and SMBs with overdue invoices"
     },
     "businessModel": "digital_product",
     "priceBand": "mid",
     "considerationLevel": "medium",
-    "sequenceIndex": 110
+    "sequenceIndex": 214
+  },
+  {
+    "siteId": "resumestrike",
+    "displayName": "ResumeStrike",
+    "industry": "career_resume_ats",
+    "brandVoice": "coach, plainspoken, results-first",
+    "appUrl": "https://resumestrike.vercel.app",
+    "product": {
+      "id": "resumestrike-pack",
+      "name": "ResumeStrike ATS Pack",
+      "priceUsd": 27,
+      "marginEstimate": 0.96,
+      "audience": "job seekers failing ATS screens"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 215
+  },
+  {
+    "siteId": "interviewforge",
+    "displayName": "InterviewForge",
+    "industry": "interview_prep",
+    "brandVoice": "coach-calm, rigorous",
+    "appUrl": "https://interviewforge.vercel.app",
+    "product": {
+      "id": "interviewforge-pack",
+      "name": "InterviewForge Prep Pack",
+      "priceUsd": 35,
+      "marginEstimate": 0.95,
+      "audience": "candidates preparing for behavioral/technical interviews"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 216
+  },
+  {
+    "siteId": "linkedlift",
+    "displayName": "LinkedLift",
+    "industry": "linkedin_optimization",
+    "brandVoice": "modern professional, non-cringe",
+    "appUrl": "https://linkedlift.vercel.app",
+    "product": {
+      "id": "linkedlift-pack",
+      "name": "LinkedLift Profile Pack",
+      "priceUsd": 31,
+      "marginEstimate": 0.96,
+      "audience": "professionals whose LinkedIn fails to attract inbound"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 217
+  },
+  {
+    "siteId": "deckready",
+    "displayName": "DeckReady",
+    "industry": "pitch_decks",
+    "brandVoice": "founder-direct, anti-hype",
+    "appUrl": "https://deckready.vercel.app",
+    "product": {
+      "id": "deckready-pack",
+      "name": "DeckReady Narrative Pack",
+      "priceUsd": 79,
+      "marginEstimate": 0.92,
+      "audience": "early founders preparing investor conversations"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 218
+  },
+  {
+    "siteId": "launchcopy",
+    "displayName": "LaunchCopy",
+    "industry": "website_copy",
+    "brandVoice": "clear commercial writer",
+    "appUrl": "https://launchcopy.vercel.app",
+    "product": {
+      "id": "launchcopy-pack",
+      "name": "LaunchCopy Site Pack",
+      "priceUsd": 49,
+      "marginEstimate": 0.95,
+      "audience": "founders launching a site without a copywriter"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 219
+  },
+  {
+    "siteId": "creatorsprint",
+    "displayName": "CreatorSprint",
+    "industry": "content_campaigns",
+    "brandVoice": "creator-operator, energetic but grounded",
+    "appUrl": "https://creatorsprint.vercel.app",
+    "product": {
+      "id": "creatorsprint-pack",
+      "name": "CreatorSprint Campaign Pack",
+      "priceUsd": 39,
+      "marginEstimate": 0.95,
+      "audience": "creators and marketers planning a focused content sprint"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 220
+  },
+  {
+    "siteId": "videobrief",
+    "displayName": "VideoBrief",
+    "industry": "short_form_video",
+    "brandVoice": "production-practical",
+    "appUrl": "https://videobrief.vercel.app",
+    "product": {
+      "id": "videobrief-pack",
+      "name": "VideoBrief Short-Form Pack",
+      "priceUsd": 43,
+      "marginEstimate": 0.94,
+      "audience": "brands and creators briefing short-form video"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 221
+  },
+  {
+    "siteId": "openhousekit",
+    "displayName": "OpenHouseKit",
+    "industry": "open_house_marketing",
+    "brandVoice": "agent-field practical",
+    "appUrl": "https://openhousekit.vercel.app",
+    "product": {
+      "id": "openhousekit-pack",
+      "name": "OpenHouseKit Marketing Pack",
+      "priceUsd": 45,
+      "marginEstimate": 0.94,
+      "audience": "realtors running weekend open houses"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 222
+  },
+  {
+    "siteId": "contractorgrowthkit",
+    "displayName": "ContractorGrowthKit",
+    "industry": "trades_marketing",
+    "brandVoice": "trades-plainspoken, growth-minded",
+    "appUrl": "https://contractorgrowthkit.vercel.app",
+    "product": {
+      "id": "contractorgrowthkit-pack",
+      "name": "ContractorGrowthKit Campaign Pack",
+      "priceUsd": 52,
+      "marginEstimate": 0.93,
+      "audience": "trade contractors needing local lead campaigns"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 223
+  },
+  {
+    "siteId": "salesbattlecard",
+    "displayName": "SalesBattlecard",
+    "industry": "sales_intelligence",
+    "brandVoice": "sales-enablement crisp",
+    "appUrl": "https://salesbattlecard.vercel.app",
+    "product": {
+      "id": "salesbattlecard-pack",
+      "name": "SalesBattlecard Build Pack",
+      "priceUsd": 61,
+      "marginEstimate": 0.93,
+      "audience": "AEs needing battlecards without a product-marketing team"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 224
+  },
+  {
+    "siteId": "tradeos",
+    "displayName": "TradeOS",
+    "industry": "trades_operations_platform",
+    "brandVoice": "operations-serious trades",
+    "appUrl": "https://tradeos.vercel.app",
+    "product": {
+      "id": "tradeos-pack",
+      "name": "TradeOS Job Control Wedge",
+      "priceUsd": 79,
+      "marginEstimate": 0.9,
+      "audience": "growing trade contractors coordinating jobs, crews, and materials"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 225
+  },
+  {
+    "siteId": "agentdesk",
+    "displayName": "AgentDesk",
+    "industry": "agent_productivity_platform",
+    "brandVoice": "agent-efficiency polished",
+    "appUrl": "https://agentdesk.vercel.app",
+    "product": {
+      "id": "agentdesk-pack",
+      "name": "AgentDesk Transaction Wedge",
+      "priceUsd": 69,
+      "marginEstimate": 0.91,
+      "audience": "producing realtors drowning in admin between showings"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 226
+  },
+  {
+    "siteId": "merchantbrain",
+    "displayName": "MerchantBrain",
+    "industry": "merchant_intelligence",
+    "brandVoice": "merchant-analytic",
+    "appUrl": "https://merchantbrain.vercel.app",
+    "product": {
+      "id": "merchantbrain-pack",
+      "name": "MerchantBrain Assortment Wedge",
+      "priceUsd": 85,
+      "marginEstimate": 0.9,
+      "audience": "multi-SKU ecommerce operators guessing assortment"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 227
+  },
+  {
+    "siteId": "buildgrid",
+    "displayName": "BuildGrid",
+    "industry": "construction_coordination",
+    "brandVoice": "field PM precise",
+    "appUrl": "https://buildgrid.vercel.app",
+    "product": {
+      "id": "buildgrid-pack",
+      "name": "BuildGrid Coordination Wedge",
+      "priceUsd": 89,
+      "marginEstimate": 0.89,
+      "audience": "project managers coordinating subcontractors on small/mid builds"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 228
+  },
+  {
+    "siteId": "caregrid",
+    "displayName": "CareGrid",
+    "industry": "care_coordination",
+    "brandVoice": "clinical-calm ops",
+    "appUrl": "https://caregrid.vercel.app",
+    "product": {
+      "id": "caregrid-pack",
+      "name": "CareGrid Front-Office Wedge",
+      "priceUsd": 75,
+      "marginEstimate": 0.9,
+      "audience": "clinic ops leads reducing patient friction (non-clinical)"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 229
+  },
+  {
+    "siteId": "propertyos",
+    "displayName": "PropertyOS",
+    "industry": "property_operations",
+    "brandVoice": "property-ops grounded",
+    "appUrl": "https://propertyos.vercel.app",
+    "product": {
+      "id": "propertyos-pack",
+      "name": "PropertyOS Turn & Maintenance Wedge",
+      "priceUsd": 65,
+      "marginEstimate": 0.91,
+      "audience": "small landlords and property managers"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 230
+  },
+  {
+    "siteId": "autoshopos",
+    "displayName": "AutoShop OS",
+    "industry": "auto_shop_operations",
+    "brandVoice": "shop-floor practical",
+    "appUrl": "https://autoshopos.vercel.app",
+    "product": {
+      "id": "autoshopos-pack",
+      "name": "AutoShop OS RO Flow Wedge",
+      "priceUsd": 72,
+      "marginEstimate": 0.9,
+      "audience": "independent auto shop owners"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 231
+  },
+  {
+    "siteId": "fleetbrain",
+    "displayName": "FleetBrain",
+    "industry": "fleet_operations",
+    "brandVoice": "fleet-ops analytical",
+    "appUrl": "https://fleetbrain.vercel.app",
+    "product": {
+      "id": "fleetbrain-pack",
+      "name": "FleetBrain Utilization Wedge",
+      "priceUsd": 95,
+      "marginEstimate": 0.88,
+      "audience": "ops managers of small commercial fleets"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 232
+  },
+  {
+    "siteId": "securesmb",
+    "displayName": "SecureSMB",
+    "industry": "smb_security",
+    "brandVoice": "security-practical, calm",
+    "appUrl": "https://securesmb.vercel.app",
+    "product": {
+      "id": "securesmb-pack",
+      "name": "SecureSMB Hygiene Wedge",
+      "priceUsd": 59,
+      "marginEstimate": 0.92,
+      "audience": "SMB owners without a security team"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 233
+  },
+  {
+    "siteId": "complianceos",
+    "displayName": "ComplianceOS",
+    "industry": "compliance_operations",
+    "brandVoice": "compliance-clear, non-legal-advice",
+    "appUrl": "https://complianceos.vercel.app",
+    "product": {
+      "id": "complianceos-pack",
+      "name": "ComplianceOS Evidence Wedge",
+      "priceUsd": 99,
+      "marginEstimate": 0.88,
+      "audience": "ops leads facing recurring policy/evidence requests"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 234
+  },
+  {
+    "siteId": "vendorgraph",
+    "displayName": "VendorGraph",
+    "industry": "vendor_management",
+    "brandVoice": "procurement-practical",
+    "appUrl": "https://vendorgraph.vercel.app",
+    "product": {
+      "id": "vendorgraph-pack",
+      "name": "VendorGraph Inventory Wedge",
+      "priceUsd": 69,
+      "marginEstimate": 0.91,
+      "audience": "ops/finance leads with sprawling vendors"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 235
+  },
+  {
+    "siteId": "localmarket",
+    "displayName": "LocalMarket",
+    "industry": "local_marketplace",
+    "brandVoice": "civic-commercial practical",
+    "appUrl": "https://localmarket.vercel.app",
+    "product": {
+      "id": "localmarket-pack",
+      "name": "LocalMarket Directory Wedge",
+      "priceUsd": 55,
+      "marginEstimate": 0.92,
+      "audience": "local service aggregators and chamber-style organizers"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 236
+  },
+  {
+    "siteId": "serviceexchange",
+    "displayName": "ServiceExchange",
+    "industry": "service_exchange",
+    "brandVoice": "partnership-clear",
+    "appUrl": "https://serviceexchange.vercel.app",
+    "product": {
+      "id": "serviceexchange-pack",
+      "name": "ServiceExchange Handoff Wedge",
+      "priceUsd": 49,
+      "marginEstimate": 0.93,
+      "audience": "agencies and freelancers swapping overflow work"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 237
+  },
+  {
+    "siteId": "workgraph",
+    "displayName": "WorkGraph",
+    "industry": "work_graph",
+    "brandVoice": "org-design practical",
+    "appUrl": "https://workgraph.vercel.app",
+    "product": {
+      "id": "workgraph-pack",
+      "name": "WorkGraph Ownership Wedge",
+      "priceUsd": 64,
+      "marginEstimate": 0.91,
+      "audience": "ops leads mapping who-does-what across tools"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 238
+  },
+  {
+    "siteId": "revenuecloud",
+    "displayName": "RevenueCloud",
+    "industry": "revenue_operations",
+    "brandVoice": "revops-precise",
+    "appUrl": "https://revenuecloud.vercel.app",
+    "product": {
+      "id": "revenuecloud-pack",
+      "name": "RevenueCloud Ritual Wedge",
+      "priceUsd": 79,
+      "marginEstimate": 0.9,
+      "audience": "founders/RevOps without a full RevOps hire"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 239
+  },
+  {
+    "siteId": "commercegraph",
+    "displayName": "CommerceGraph",
+    "industry": "commerce_graph",
+    "brandVoice": "commerce-systems",
+    "appUrl": "https://commercegraph.vercel.app",
+    "product": {
+      "id": "commercegraph-pack",
+      "name": "CommerceGraph Catalog Truth Wedge",
+      "priceUsd": 88,
+      "marginEstimate": 0.89,
+      "audience": "operators connecting catalog, channel, and fulfillment facts"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 240
+  },
+  {
+    "siteId": "recommerce",
+    "displayName": "ReCommerce",
+    "industry": "recommerce_ops",
+    "brandVoice": "resale-ops sharp",
+    "appUrl": "https://recommerce.vercel.app",
+    "product": {
+      "id": "recommerce-pack",
+      "name": "ReCommerce Intake Wedge",
+      "priceUsd": 67,
+      "marginEstimate": 0.9,
+      "audience": "resale/refurb operators scaling intake"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 241
+  },
+  {
+    "siteId": "homegrid",
+    "displayName": "HomeGrid",
+    "industry": "home_systems",
+    "brandVoice": "home-ops calm",
+    "appUrl": "https://homegrid.vercel.app",
+    "product": {
+      "id": "homegrid-pack",
+      "name": "HomeGrid Maintenance Wedge",
+      "priceUsd": 39,
+      "marginEstimate": 0.94,
+      "audience": "proactive homeowners and property pros coordinating home systems"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 242
+  },
+  {
+    "siteId": "energyhome",
+    "displayName": "EnergyHome",
+    "industry": "home_energy",
+    "brandVoice": "education-first energy",
+    "appUrl": "https://energyhome.vercel.app",
+    "product": {
+      "id": "energyhome-pack",
+      "name": "EnergyHome Decision Wedge",
+      "priceUsd": 45,
+      "marginEstimate": 0.93,
+      "audience": "homeowners evaluating efficiency upgrades without sales pressure"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 243
+  },
+  {
+    "siteId": "creatorcommerce",
+    "displayName": "CreatorCommerce",
+    "industry": "creator_commerce",
+    "brandVoice": "creator-commercial honest",
+    "appUrl": "https://creatorcommerce.vercel.app",
+    "product": {
+      "id": "creatorcommerce-pack",
+      "name": "CreatorCommerce Offer Wedge",
+      "priceUsd": 57,
+      "marginEstimate": 0.93,
+      "audience": "creators monetizing beyond ads"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 244
+  },
+  {
+    "siteId": "careergraph",
+    "displayName": "CareerGraph",
+    "industry": "career_graph",
+    "brandVoice": "career-strategic calm",
+    "appUrl": "https://careergraph.vercel.app",
+    "product": {
+      "id": "careergraph-pack",
+      "name": "CareerGraph Mapping Wedge",
+      "priceUsd": 42,
+      "marginEstimate": 0.94,
+      "audience": "ambitious ICs planning multi-year career moves"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 245
+  },
+  {
+    "siteId": "knowledgeos",
+    "displayName": "KnowledgeOS",
+    "industry": "knowledge_operations",
+    "brandVoice": "knowledge-ops disciplined",
+    "appUrl": "https://knowledgeos.vercel.app",
+    "product": {
+      "id": "knowledgeos-pack",
+      "name": "KnowledgeOS Freshness Wedge",
+      "priceUsd": 58,
+      "marginEstimate": 0.91,
+      "audience": "teams whose wiki is stale and unused"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 246
+  },
+  {
+    "siteId": "financeops",
+    "displayName": "FinanceOps",
+    "industry": "finance_operations",
+    "brandVoice": "finance-ops exacting",
+    "appUrl": "https://financeops.vercel.app",
+    "product": {
+      "id": "financeops-pack",
+      "name": "FinanceOps Close Wedge",
+      "priceUsd": 82,
+      "marginEstimate": 0.9,
+      "audience": "startup finance leads closing books without full team"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 247
+  },
+  {
+    "siteId": "supplybrain",
+    "displayName": "SupplyBrain",
+    "industry": "supply_intelligence",
+    "brandVoice": "supply-chain pragmatic",
+    "appUrl": "https://supplybrain.vercel.app",
+    "product": {
+      "id": "supplybrain-pack",
+      "name": "SupplyBrain Risk Wedge",
+      "priceUsd": 91,
+      "marginEstimate": 0.88,
+      "audience": "ops leads managing critical suppliers"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 248
+  },
+  {
+    "siteId": "businessgraph",
+    "displayName": "BusinessGraph",
+    "industry": "business_graph",
+    "brandVoice": "operator-strategic",
+    "appUrl": "https://businessgraph.vercel.app",
+    "product": {
+      "id": "businessgraph-pack",
+      "name": "BusinessGraph Relationship Wedge",
+      "priceUsd": 77,
+      "marginEstimate": 0.9,
+      "audience": "operators mapping company relationships (customers, vendors, partners)"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 249
+  },
+  {
+    "siteId": "rfpstrike",
+    "displayName": "RFPStrike",
+    "industry": "rfp_response",
+    "brandVoice": "precise, government-adjacent professional",
+    "appUrl": "https://rfpstrike.vercel.app",
+    "product": {
+      "id": "rfpstrike-pack",
+      "name": "RFPStrike Response Pack",
+      "priceUsd": 69,
+      "marginEstimate": 0.93,
+      "audience": "SMB services firms answering RFPs without a proposal team"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 201
+  },
+  {
+    "siteId": "bidforge",
+    "displayName": "BidForge",
+    "industry": "contractor_estimates",
+    "brandVoice": "no-nonsense contractor, clear numbers",
+    "appUrl": "https://bidforge-five.vercel.app",
+    "product": {
+      "id": "bidforge-pack",
+      "name": "BidForge Estimate & Proposal Pack",
+      "priceUsd": 49,
+      "marginEstimate": 0.94,
+      "audience": "residential GCs and specialty trades writing bids under time pressure"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 200
+  },
+  {
+    "siteId": "scopesmith",
+    "displayName": "ScopeSmith",
+    "industry": "professional_sow",
+    "brandVoice": "calm specialist, boundary-clear",
+    "appUrl": "https://scopesmith-rho.vercel.app",
+    "product": {
+      "id": "scopesmith-pack",
+      "name": "ScopeSmith SOW Studio Pack",
+      "priceUsd": 45,
+      "marginEstimate": 0.95,
+      "audience": "consultants and agencies scoping fixed-fee work"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 202
+  },
+  {
+    "siteId": "quotecraft",
+    "displayName": "QuoteCraft",
+    "industry": "smb_quotes",
+    "brandVoice": "clean, local-business confident",
+    "appUrl": "https://quotecraft-zeta-eight.vercel.app",
+    "product": {
+      "id": "quotecraft-pack",
+      "name": "QuoteCraft Branded Quote Pack",
+      "priceUsd": 39,
+      "marginEstimate": 0.95,
+      "audience": "local SMBs sending messy quotes from Word/Docs"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 203
+  },
+  {
+    "siteId": "leadreply",
+    "displayName": "LeadReply",
+    "industry": "lead_response",
+    "brandVoice": "fast, sales-practical",
+    "appUrl": "https://leadreply-eight.vercel.app",
+    "product": {
+      "id": "leadreply-pack",
+      "name": "LeadReply Speed Pack",
+      "priceUsd": 29,
+      "marginEstimate": 0.96,
+      "audience": "sales reps and owners drowning in inbound form leads"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 204
+  },
+  {
+    "siteId": "coldforge",
+    "displayName": "ColdForge",
+    "industry": "b2b_outreach",
+    "brandVoice": "sharp, anti-spam, research-first",
+    "appUrl": "https://coldforge-two.vercel.app",
+    "product": {
+      "id": "coldforge-pack",
+      "name": "ColdForge Research-to-Send Pack",
+      "priceUsd": 59,
+      "marginEstimate": 0.94,
+      "audience": "founders and AEs running compliant outbound"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 205
+  },
+  {
+    "siteId": "reviewrescue",
+    "displayName": "ReviewRescue",
+    "industry": "reputation_ops",
+    "brandVoice": "empathetic, reputation-steady",
+    "appUrl": "https://reviewrescue-woad.vercel.app",
+    "product": {
+      "id": "reviewrescue-pack",
+      "name": "ReviewRescue Response Pack",
+      "priceUsd": 27,
+      "marginEstimate": 0.96,
+      "audience": "local businesses managing Google/Yelp reviews"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 206
+  },
+  {
+    "siteId": "locallaunch",
+    "displayName": "LocalLaunch",
+    "industry": "local_seo_profiles",
+    "brandVoice": "local-growth practical",
+    "appUrl": "https://locallaunch-ten.vercel.app",
+    "product": {
+      "id": "locallaunch-pack",
+      "name": "LocalLaunch Profile Optimization Pack",
+      "priceUsd": 35,
+      "marginEstimate": 0.95,
+      "audience": "owners launching or fixing Google Business Profiles"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 207
+  },
+  {
+    "siteId": "listingpilot",
+    "displayName": "ListingPilot",
+    "industry": "vacation_rental_listings",
+    "brandVoice": "host-operator, conversion-minded",
+    "appUrl": "https://listingpilot-five.vercel.app",
+    "product": {
+      "id": "listingpilot-pack",
+      "name": "ListingPilot Optimization Pack",
+      "priceUsd": 47,
+      "marginEstimate": 0.94,
+      "audience": "Airbnb/VRBO hosts underperforming on occupancy"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 208
+  },
+  {
+    "siteId": "homelistpro",
+    "displayName": "HomeList Pro",
+    "industry": "real_estate_listing_marketing",
+    "brandVoice": "polished agent-professional",
+    "appUrl": "https://homelistpro.vercel.app",
+    "product": {
+      "id": "homelistpro-pack",
+      "name": "HomeList Pro Launch Kit",
+      "priceUsd": 59,
+      "marginEstimate": 0.93,
+      "audience": "solo agents marketing new listings fast"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 209
+  },
+  {
+    "siteId": "autolistai",
+    "displayName": "AutoList AI",
+    "industry": "vehicle_listings",
+    "brandVoice": "straight-talk automotive",
+    "appUrl": "https://autolistai.vercel.app",
+    "product": {
+      "id": "autolistai-pack",
+      "name": "AutoList Listing Optimization Pack",
+      "priceUsd": 33,
+      "marginEstimate": 0.95,
+      "audience": "private sellers and small dealers listing cars online"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 210
+  },
+  {
+    "siteId": "marketplacemax",
+    "displayName": "MarketplaceMax",
+    "industry": "marketplace_listings",
+    "brandVoice": "seller-operator, conversion sharp",
+    "appUrl": "https://marketplacemax.vercel.app",
+    "product": {
+      "id": "marketplacemax-pack",
+      "name": "MarketplaceMax Listing Pack",
+      "priceUsd": 41,
+      "marginEstimate": 0.94,
+      "audience": "Etsy/eBay/Amazon sellers improving listing conversion"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 211
+  },
+  {
+    "siteId": "menumoney",
+    "displayName": "MenuMoney",
+    "industry": "restaurant_menus",
+    "brandVoice": "hospitality-practical, margin-aware",
+    "appUrl": "https://menumoney.vercel.app",
+    "product": {
+      "id": "menumoney-pack",
+      "name": "MenuMoney Menu Engineering Pack",
+      "priceUsd": 37,
+      "marginEstimate": 0.95,
+      "audience": "independent restaurant owners redesigning menus for margin"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 213
+  },
+  {
+    "siteId": "storelift",
+    "displayName": "StoreLift",
+    "industry": "ecommerce_merchandising",
+    "brandVoice": "growth-merchandiser, evidence-led",
+    "appUrl": "https://storelift-alpha.vercel.app",
+    "product": {
+      "id": "storelift-pack",
+      "name": "StoreLift Merchandising Pack",
+      "priceUsd": 55,
+      "marginEstimate": 0.93,
+      "audience": "DTC operators with traffic but weak PDP conversion"
+    },
+    "businessModel": "digital_product",
+    "priceBand": "mid",
+    "considerationLevel": "medium",
+    "sequenceIndex": 212
   }
 ]

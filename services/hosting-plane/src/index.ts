@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { createDeploymentManager } from "./deployment-manager.js";
 import { loadLocalMemory, improvedVsBaseline } from "./deployment-memory.js";
 import { loadState } from "./state.js";
+import { startStorefrontApi } from "./storefront-api.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT =
@@ -235,6 +236,9 @@ server.listen(PORT, BIND, () => {
   );
 });
 
+// Shared checkout/beacon API for all static native sites (no Vercel functions).
+const storefrontApi = startStorefrontApi({ repoRoot: REPO_ROOT });
+
 const HEALTH_MS = Number(process.env.HOSTING_HEALTH_INTERVAL_MS || 60_000);
 const healthTimer = setInterval(() => {
   void mgr.tickHealth().catch((e) => {
@@ -244,9 +248,11 @@ const healthTimer = setInterval(() => {
 
 process.on("SIGTERM", () => {
   clearInterval(healthTimer);
+  storefrontApi.close();
   server.close(() => process.exit(0));
 });
 process.on("SIGINT", () => {
   clearInterval(healthTimer);
+  storefrontApi.close();
   server.close(() => process.exit(0));
 });

@@ -61,6 +61,9 @@ const schema = z
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_MODEL: z.string().optional(),
     REVENUEOS_STRATEGIST_MODEL: z.string().optional(),
+    XAI_API_KEY: z.string().optional(),
+    XAI_BASE_URL: z.string().optional(),
+    XAI_MODEL: z.string().optional(),
     RESEND_API_KEY: z.string().optional(),
     STRIPE_SECRET_KEY: z.string().optional(),
   })

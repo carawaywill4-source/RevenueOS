@@ -1,7 +1,7 @@
 /**
  * Deterministic storefront repair executor (no AI).
  *
- * diagnose → scoped source mutation → typecheck → vercel --prod →
+ * diagnose → scoped source mutation → typecheck → native Azure deploy →
  * public verification → COMMERCIAL_READY
  *
  * Never marks complete on local-only writes. One repair at a time.
@@ -352,7 +352,7 @@ function applySourceMutation(input: {
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: { userAgent: "*", allow: "/" },
-    sitemap: "https://${input.siteId}.vercel.app/sitemap.xml",
+    sitemap: "https://${input.siteId}.${process.env.HOSTING_PUBLIC_BASE_HOST || "130.131.15.68.sslip.io"}/sitemap.xml",
   };
 }
 `,
@@ -892,7 +892,7 @@ export async function executeOneStorefrontRepair(input: {
     await recordRepairLesson(input.pool, {
       lessonId: newId("lesson"),
       category: "WRONG_SITE_IDENTITY",
-      architecture: "vercel_next_storefront",
+      architecture: "native_azure_static_storefront",
       rootCause: diagnosis.rootCause.slice(0, 240),
       repairType: action,
       success: false,
@@ -948,7 +948,7 @@ export async function executeOneStorefrontRepair(input: {
      where site_id=$1`,
     [
       input.siteId,
-      deploy.productionUrl ?? `https://${input.siteId}.vercel.app`,
+      deploy.productionUrl ?? `https://${input.siteId}.${process.env.HOSTING_PUBLIC_BASE_HOST || process.env.REVENUEOS_PUBLIC_BASE_HOST || "130.131.15.68.sslip.io"}`,
       JSON.stringify({
         commercialState: "COMMERCIAL_READY",
         commercialRepairedAt: new Date().toISOString(),
@@ -985,7 +985,7 @@ export async function executeOneStorefrontRepair(input: {
     category: diagnosis.evidence.identityMatch
       ? "NO_CTA"
       : "WRONG_SITE_IDENTITY",
-    architecture: "vercel_next_storefront",
+    architecture: "native_azure_static_storefront",
     rootCause: diagnosis.rootCause.slice(0, 240),
     repairType: action,
     success: true,
@@ -1039,7 +1039,7 @@ export async function runStorefrontRepairExecutor(deps: {
   deps.logger("info", "storefront.repair.executor.start", {
     version: REPAIR_EXECUTOR_VERSION,
     ownerExecuteDependency: false,
-    deploymentMethod: "vercel_cli_prod",
+    deploymentMethod: "native_azure_hosting_plane",
   });
 
   // Initial classification of managed businesses (non-destructive).

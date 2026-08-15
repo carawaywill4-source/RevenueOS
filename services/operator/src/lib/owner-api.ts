@@ -9,6 +9,21 @@ import type { BusinessRuntimeStatus } from "./scheduler.js";
 import { PORTFOLIO } from "../portfolio.js";
 import type { OwnerControlState } from "./owner-controls.js";
 import { loadArchitectState } from "./portfolio-evolution.js";
+import { buyUrlFor, isGumroadLive } from "./commercial-execution-v4/offer.js";
+
+function ownerPublicUrls(siteId: string): {
+  siteUrl: string;
+  buyUrl: string;
+  gumroadLive: boolean;
+} {
+  const host = process.env.HOSTING_PUBLIC_BASE_HOST || "130.131.15.68.sslip.io";
+  const siteUrl = `https://${siteId}.${host}/`;
+  return {
+    siteUrl,
+    buyUrl: buyUrlFor(siteId, siteUrl),
+    gumroadLive: isGumroadLive(siteId),
+  };
+}
 
 /** Classify pursuit actions for owner reporting — not all work is commercial. */
 export function classifyActionQuality(actionType: string):
@@ -72,16 +87,28 @@ export async function buildOwnerDashboardNative(input: {
     ok?: boolean;
   }>;
   dataProvider?: string;
+  /** Admit / lane enrichment from Postgres (optional). */
+  portfolioExtra?: Record<string, unknown>;
+  lanes?: Record<string, string>;
+  azureOperator?: string;
+  postgresStatus?: string;
+  titanJudgment?: Record<string, unknown>;
+  portfolioOrigins?: Record<string, number>;
+  titanIntelligence?: Record<string, unknown>;
 }): Promise<Record<string, unknown>> {
   const openai = getOpenAICapabilityStatus();
   const controls = input.ownerControls;
   const cards = input.businesses.map((b) => {
     const manifest = PORTFOLIO.find((p) => p.siteId === b.siteId);
+    const urls = ownerPublicUrls(b.siteId);
     return {
       id: b.siteId,
       name: manifest?.displayName ?? b.displayName,
       revenueTodayLabel: "$—",
       status: plainStatus(b, controls),
+      siteUrl: urls.siteUrl,
+      buyUrl: urls.buyUrl,
+      gumroadLive: urls.gumroadLive,
       currentlyDoing:
         controls?.portfolioPaused || controls?.pausedBusinesses?.includes(b.siteId)
           ? "Paused — claim held, queues retained"
@@ -147,7 +174,7 @@ export async function buildOwnerDashboardNative(input: {
   return {
     ok: true,
     brand: "RevenueOS",
-    authority: "mac/native",
+    authority: "azure/native",
     dataProvider: input.dataProvider ?? "postgres",
     health: {
       label: controls?.portfolioPaused ? "Paused" : "Operating",
@@ -161,6 +188,7 @@ export async function buildOwnerDashboardNative(input: {
       ownerBlocked: 0,
       claimed: input.businesses.length,
       maxActive: 50,
+      ...(input.portfolioExtra ?? {}),
     },
     capabilities: {
       commercialExecution: true,
@@ -176,6 +204,12 @@ export async function buildOwnerDashboardNative(input: {
     },
     businesses: cards,
     activity,
+    lanes: input.lanes ?? null,
+    azureOperator: input.azureOperator ?? "azure-revenueos-core",
+    postgres: input.postgresStatus ?? "unknown",
+    titanJudgment: input.titanJudgment ?? null,
+    portfolioOrigins: input.portfolioOrigins ?? null,
+    titanIntelligence: input.titanIntelligence ?? null,
     needsYou:
       openai.status !== "ok"
         ? [
@@ -186,6 +220,124 @@ export async function buildOwnerDashboardNative(input: {
           ]
         : [],
     ownerControls: controls ?? null,
+  };
+}
+
+/** Native Postgres business detail — no Supabase. */
+export function buildBusinessDetailNative(input: {
+  siteId: string;
+  runtime?: BusinessRuntimeStatus;
+  recentEvents?: Array<{
+    at: string;
+    siteId: string;
+    eventType?: string;
+    actionType?: string;
+    detail?: string;
+    ok?: boolean;
+  }>;
+  ownerControls?: OwnerControlState;
+  /** Titan customer / money / acquisition intel from Postgres (nulls = UNKNOWN). */
+  titanIntel?: {
+    customer?: Record<string, unknown> | null;
+    money?: Record<string, unknown> | null;
+    latestAcquisition?: Record<string, unknown> | null;
+    evidenceHint?: string | null;
+  };
+}): Record<string, unknown> {
+  const manifest = PORTFOLIO.find((p) => p.siteId === input.siteId);
+  if (!manifest) return { ok: false, reason: "unknown_business", siteId: input.siteId };
+  const rt = input.runtime;
+  const controls = input.ownerControls;
+  const recentActions = (input.recentEvents ?? [])
+    .filter((ev) => ev.siteId === input.siteId)
+    .slice(0, 25)
+    .map((ev) => ({
+      at: ev.at,
+      summary: ownerLanguage(
+        String(ev.actionType ?? ev.eventType ?? "action"),
+        String(ev.detail ?? ev.actionType ?? ev.eventType ?? "action").slice(0, 160),
+      ),
+      ok: ev.ok !== false,
+    }));
+  const money = input.titanIntel?.money ?? null;
+  const customer = input.titanIntel?.customer ?? null;
+  const dailyTarget = Number(money?.daily_target ?? 10000);
+  const dailyRevenue =
+    money?.daily_revenue === null || money?.daily_revenue === undefined
+      ? null
+      : Number(money.daily_revenue);
+  const progressPct =
+    dailyRevenue === null || !Number.isFinite(dailyRevenue)
+      ? null
+      : Math.round((dailyRevenue / dailyTarget) * 10000) / 100;
+  return {
+    ok: true,
+    name: manifest.displayName,
+    id: manifest.siteId,
+    revenueTodayLabel: dailyRevenue === null ? "$—" : `$${dailyRevenue}`,
+    purchases: null,
+    visitors: null,
+    checkoutStarts: null,
+    note: "Figures come from Core/Postgres — not invented by the Mac app",
+    status: plainStatus(
+      rt ?? {
+        siteId: input.siteId,
+        displayName: manifest.displayName,
+        ticks: 0,
+        lastTickAt: null,
+        lastOk: null,
+        lastDurationMs: null,
+        lastExecuted: null,
+        lastEnqueued: null,
+        lastError: null,
+        claimedUntil: null,
+        nextEligibleAt: null,
+      },
+      controls,
+    ),
+    currentlyDoing:
+      controls?.portfolioPaused || controls?.pausedBusinesses?.includes(input.siteId)
+        ? "Paused — claim held, queues retained"
+        : (rt?.lastExecuted ?? 0) > 0
+          ? "Executing commercial work"
+          : (rt?.lastEnqueued ?? 0) > 0
+            ? "Selecting next commercial actions"
+            : "Observing market and cooldowns",
+    currentStrategy: manifest.brandVoice
+      ? `Brand stance: ${manifest.brandVoice}`
+      : "Permissionless acquisition",
+    latestLearning: null,
+    recentActions,
+    revenueHistory: [],
+    lastTickAt: rt?.lastTickAt ?? null,
+    lastError: rt?.lastError ?? null,
+    claimedUntil: rt?.claimedUntil ?? null,
+    ticks: rt?.ticks ?? 0,
+    needsYou: [],
+    dataProvider: "postgres",
+    dailyTargetUsd: dailyTarget,
+    dailyRevenueUsd: dailyRevenue,
+    targetProgressPct: progressPct,
+    ...ownerPublicUrls(input.siteId),
+    currentBottleneck:
+      (money?.current_bottleneck as string | undefined) ?? "unknown_needs_measurement",
+    growthThesis:
+      (money?.current_growth_thesis as string | undefined) ?? null,
+    nextHighestValueAction:
+      (money?.next_highest_value_action as string | undefined) ?? null,
+    targetPathClass: (money?.target_path_class as string | undefined) ?? null,
+    customerIntel: customer
+      ? {
+          whoBuys: customer.whoBuys ?? null,
+          coreProblem: customer.coreProblem ?? null,
+          purchaseTrigger: customer.purchaseTrigger ?? null,
+          majorObjections: customer.majorObjections ?? [],
+          customerLanguage: customer.customerLanguage ?? [],
+          acquisitionEnvironments: customer.acquisitionEnvironments ?? [],
+        }
+      : null,
+    acquisitionIntel: input.titanIntel?.latestAcquisition ?? null,
+    titanEvidenceHint: input.titanIntel?.evidenceHint ?? null,
   };
 }
 
@@ -200,11 +352,15 @@ export async function buildOwnerDashboard(input: {
   const controls = input.ownerControls;
   const cards = input.businesses.map((b) => {
     const manifest = PORTFOLIO.find((p) => p.siteId === b.siteId);
+    const urls = ownerPublicUrls(b.siteId);
     return {
       id: b.siteId,
       name: manifest?.displayName ?? b.displayName,
       revenueTodayLabel: "$—",
       status: plainStatus(b, controls),
+      siteUrl: urls.siteUrl,
+      buyUrl: urls.buyUrl,
+      gumroadLive: urls.gumroadLive,
       currentlyDoing:
         controls?.portfolioPaused || controls?.pausedBusinesses?.includes(b.siteId)
           ? "Paused — claim held, queues retained"

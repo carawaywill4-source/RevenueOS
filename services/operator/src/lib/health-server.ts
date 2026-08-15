@@ -4,7 +4,8 @@
 
 import http from "node:http";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getOpenAICapabilityStatus } from "@revenueos/core";
+import type pg from "pg";
+import { getOpenAICapabilityStatus, getAiBudgetStatus, xaiHealth } from "@revenueos/core";
 import type { BusinessRuntimeStatus } from "./scheduler.js";
 import { buildOwnerDashboard } from "./owner-api.js";
 import { buildBusinessDetail, ownerChat } from "./owner-chat.js";
@@ -173,9 +174,15 @@ export function createHealthServer(input: {
   snapshot: StatusSnapshotProvider;
   logger: (msg: string, meta?: Record<string, unknown>) => void;
   client?: SupabaseClient;
+  pgPool?: pg.Pool;
   /** Native Postgres dashboard builder (no Supabase). */
   buildNativeDashboard?: (
     snap: ReturnType<StatusSnapshotProvider>,
+  ) => Promise<Record<string, unknown>>;
+  /** Native Postgres business detail (no Supabase). */
+  buildNativeBusinessDetail?: (
+    siteId: string,
+    runtime: BusinessRuntimeStatus | undefined,
   ) => Promise<Record<string, unknown>>;
   onAddBusiness?: (siteId: string) => { ok: boolean; detail: string };
   getOwnerControls?: () => OwnerControlState;
@@ -183,6 +190,11 @@ export function createHealthServer(input: {
     command: string,
     siteId?: string,
   ) => Promise<{ ok: boolean; state: OwnerControlState; detail: string }>;
+  /** Optional inbound webhook handler (registered by ULTRON external lane). */
+  onInboundEmail?: (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ) => Promise<void>;
 }): { server: http.Server; close: () => Promise<void> } {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -193,6 +205,66 @@ export function createHealthServer(input: {
 
     if (req.method === "GET" && url.pathname === "/healthz") {
       json(200, { ok: true, at: new Date().toISOString() });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/commercial") {
+      if (!authorizedLocal(req)) return json(401, { error: "Unauthorized" });
+      if (!input.pgPool) {
+        json(200, { ok: false, reason: "pg_unavailable" });
+        return;
+      }
+      void import("./commercial-execution-v4/owner-status.js")
+        .then(async (m) => {
+          const status = await m.ownerCommercialStatus(input.pgPool!);
+          json(200, {
+            ok: true,
+            answer: m.formatOwnerNow(status),
+            status,
+          });
+        })
+        .catch((e) =>
+          json(500, {
+            ok: false,
+            reason: e instanceof Error ? e.message : "commercial_status_failed",
+          }),
+        );
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/ultron/browser-fixture") {
+      res.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      res.end(`<!doctype html>
+<html><head><title>RevenueOS browser fixture</title></head>
+<body>
+  <h1>RevenueOS owned fixture</h1>
+  <button id="ros-fixture-btn">Click</button>
+  <form id="ros-fixture-form" onsubmit="event.preventDefault(); document.getElementById('ros-fixture-ok').hidden=false;">
+    <input id="ros-fixture-input" name="q" />
+    <button id="ros-fixture-submit" type="submit">Submit</button>
+  </form>
+  <p id="ros-fixture-ok" hidden>ok</p>
+</body></html>`);
+      return;
+    }
+
+    // ULTRON EXTERNAL — inbound email webhook (public path via Caddy).
+    if (url.pathname === "/inbound/email" || url.pathname.startsWith("/inbound/email/")) {
+      if (input.onInboundEmail) {
+        void input.onInboundEmail(req, res).catch((e) => {
+          input.logger("ultron.inbound.email.handler_error", {
+            error: e instanceof Error ? e.message : String(e),
+          });
+          if (!res.writableEnded) {
+            json(500, { error: "inbound_handler_failed" });
+          }
+        });
+      } else {
+        json(503, { error: "inbound_handler_not_wired" });
+      }
       return;
     }
 
@@ -213,21 +285,40 @@ export function createHealthServer(input: {
       if (!authorizedLocal(req)) return json(401, { error: "Unauthorized" });
       const snap = input.snapshot();
       const openai = getOpenAICapabilityStatus();
+      const xai = xaiHealth();
+      const aiBudget = getAiBudgetStatus();
       json(200, {
         ...snap,
         capabilities: {
           ...(snap.capabilities ?? {}),
           openai,
+          xai,
+          aiBudget,
           commercialExecution: true,
           memory: true,
           learning: true,
           portfolio: true,
           openaiReasoning: openai.status === "ok" ? "ok" : "degraded",
+          xaiStatus: xai.status,
+          xaiModel: xai.status === "AVAILABLE" ? xai.model : null,
+          xaiNote:
+            xai.status === "AVAILABLE"
+              ? `Grok chat ready (${xai.model})`
+              : xai.status === "DISABLED"
+                ? `Grok disabled: ${"reason" in xai ? xai.reason : "disabled"}`
+                : xai.status === "FAILED"
+                  ? `Grok failed: ${"lastError" in xai ? xai.lastError : "failed"}`
+                  : xai.status === "RATE_LIMITED"
+                    ? "Grok rate-limited — retry shortly"
+                    : "Grok unavailable",
+          primaryBrain: "xai_grok",
           revenueosStatus: "operating",
           revenueosNote:
-            openai.status === "ok"
-              ? "Full generative + commercial limbs available"
-              : openai.note,
+            xai.status === "AVAILABLE"
+              ? `In-app chat powered by ${xai.model}`
+              : openai.status === "ok"
+                ? "Grok unavailable — OpenAI fallback for chat"
+                : openai.note,
         },
       });
       return;
@@ -414,17 +505,97 @@ export function createHealthServer(input: {
             json(400, { ok: false, reason: "empty_message" });
             return;
           }
-          if (!input.client) {
+          const snap = input.snapshot();
+          // Prefer Grok owner-dialog even when Supabase client is absent
+          // (native Azure Core path). Tasks/fixes must reach the brain.
+          try {
+            const { handleOwnerMessage, xaiHealth: xh } = await import(
+              "@revenueos/core"
+            );
+            const dialog = await handleOwnerMessage({
+              message,
+              preferProvider: "auto",
+              state: {
+                hoursSinceStart: Math.round(snap.service.uptimeSec / 3600),
+                activeBusinesses: snap.businesses.slice(0, 20).map((b) => ({
+                  siteId: b.siteId,
+                  displayName: b.displayName,
+                  revenueUsd: 0,
+                  firstCustomerMode: true,
+                  paused: b.commerciallyPaused === true,
+                })),
+                missionSummary:
+                  "Primary mission: create real distribution opportunities and get the first proven external human. No ads. No domain excuse. Prefer Etsy/Pinterest/GitHub over storefront polish.",
+              },
+            });
+            const xai = xh();
             json(200, {
               ok: true,
-              answer:
-                "Core memory client unavailable — cannot query RevenueOS state.",
-              source: "deterministic",
-              capabilities: { openaiReasoning: "unavailable" },
+              answer: dialog.answer,
+              proposedChanges: dialog.proposedChanges,
+              source: dialog.source,
+              model: dialog.model ?? null,
+              capabilities: {
+                xai:
+                  xai.status === "AVAILABLE"
+                    ? { status: "ok", model: xai.model }
+                    : { status: xai.status.toLowerCase(), detail: xai },
+                primaryBrain: "xai_grok",
+              },
+              at: new Date().toISOString(),
+            });
+            return;
+          } catch (err) {
+            // Fall through to legacy paths below.
+            void err;
+          }
+          if (!input.client) {
+            if (input.pgPool) {
+              try {
+                const m = await import("./commercial-execution-v4/owner-status.js");
+                if (m.isCommercialNowQuestion(message)) {
+                  const status = await m.ownerCommercialStatus(input.pgPool);
+                  json(200, {
+                    ok: true,
+                    answer: m.formatOwnerNow(status),
+                    source: "commercial_execution_v4",
+                    status,
+                  });
+                  return;
+                }
+              } catch {
+                /* fall through to deterministic */
+              }
+            }
+            const active = snap.businesses.filter(
+              (b) => !(b.commerciallyPaused === true),
+            ).length;
+            const recent = snap.businesses
+              .filter((b) => b.lastTickAt)
+              .sort(
+                (a, b) =>
+                  Date.parse(b.lastTickAt ?? "0") -
+                  Date.parse(a.lastTickAt ?? "0"),
+              )
+              .slice(0, 5)
+              .map((b) => b.displayName)
+              .join(", ");
+            json(200, {
+              ok: true,
+              answer: [
+                `RevenueOS Azure Core is up (${snap.service.uptimeSec}s).`,
+                `${active} businesses in the operating set of ${snap.businesses.length}.`,
+                recent ? `Most recent ticks: ${recent}.` : "",
+                "Ask from the Mac owner UI after refresh for live dashboard numbers.",
+                message ? `(Heard: ${message.slice(0, 120)})` : "",
+              ]
+                .filter(Boolean)
+                .join(" "),
+              source: "deterministic_native",
+              capabilities: { openaiReasoning: "degraded" },
             });
             return;
           }
-          const snap = input.snapshot();
           const result = await ownerChat({
             message,
             client: input.client,
@@ -444,6 +615,19 @@ export function createHealthServer(input: {
       );
       const snap = input.snapshot();
       const runtime = snap.businesses.find((b) => b.siteId === siteId);
+      if (!input.client && input.buildNativeBusinessDetail) {
+        void input
+          .buildNativeBusinessDetail(siteId, runtime)
+          .then((detail) => json(200, detail))
+          .catch((err) =>
+            json(500, {
+              ok: false,
+              reason: (err as Error).message?.slice(0, 160) ?? "detail_failed",
+              siteId,
+            }),
+          );
+        return;
+      }
       if (!input.client) {
         json(200, { ok: false, reason: "supabase_unavailable", siteId });
         return;
@@ -550,8 +734,11 @@ export function createHealthServer(input: {
     json(404, { error: "not_found" });
   });
 
-  server.listen(input.port, () => {
-    input.logger(`operator.health.listening`, { port: input.port });
+  // Default loopback — public ingress (Caddy) terminates TLS and proxies in.
+  // Override with BIND_HOST=0.0.0.0 only for deliberate LAN/dev exposure.
+  const host = process.env.BIND_HOST || process.env.HOST || "127.0.0.1";
+  server.listen(input.port, host, () => {
+    input.logger(`operator.health.listening`, { port: input.port, host });
   });
 
   return {

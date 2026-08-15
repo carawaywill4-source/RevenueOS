@@ -45,9 +45,12 @@ export function createPostgresExperimentStore(
 ): PostgresStoreHandle {
   const pool = new pg.Pool({
     connectionString,
-    max: 12,
+    max: 8,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 8_000,
+  });
+  pool.on("connect", (client) => {
+    void client.query("SET statement_timeout = 20000");
   });
 
   const store: ExperimentStore = {

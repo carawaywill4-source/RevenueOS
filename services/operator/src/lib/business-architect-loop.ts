@@ -24,6 +24,15 @@ import {
   type ArchitectLifecycleState,
 } from "./architect-pg-store.js";
 import { materializeBusinessApp } from "./business-launcher.js";
+import {
+  evaluateBusinessFitness,
+  fitnessToArchitectTelemetry,
+} from "./accepted-business-fitness.js";
+import {
+  evaluateTitanAdmissionQuality,
+  architectTowardPerfect,
+  TITAN_ADMIT_MIN_SCORE,
+} from "./titan-admission-gate.js";
 
 export const BUSINESS_ARCHITECT_VERSION = "business-architect-pg-v1";
 
@@ -42,6 +51,8 @@ function thesisFromOpportunity(o: BusinessOpportunity): Record<string, unknown> 
     targetCustomer: o.buyer,
     problem: o.problem,
     offer: o.productName,
+    demandEvidence: "INFERRED_from_opportunity_spec",
+    wtpEvidence: "UNKNOWN",
     monetizationModel: "digital_download",
     priceUsd: o.priceUsd,
     acquisitionHypotheses: [o.acquisitionHypothesis],
@@ -63,7 +74,7 @@ function architectureFromOpportunity(
   o: BusinessOpportunity,
 ): Record<string, unknown> {
   return {
-    stack: "nextjs_vercel_digital_commerce",
+    stack: "native_azure_static_commerce",
     template: "ledgerleaf",
     routes: ["/", "/api/checkout", "/api/beacon", "/robots.txt", "/sitemap.xml"],
     integrations: ["stripe_checkout", "revenueos_beacon", "indexnow"],
@@ -78,7 +89,7 @@ function buildSpecFromOpportunity(
     siteId: o.siteId,
     displayName: o.displayName,
     materializeFrom: "ledgerleaf",
-    deployVia: "vercel_cli_prod",
+    deployVia: "native_azure_hosting_plane",
     commercialGate: "commercial-readiness-v1",
     admitPath: "LIVE_PROBATION",
   };
@@ -113,8 +124,71 @@ export async function runBusinessArchitectTick(input: {
   state?: ArchitectLifecycleState;
   detail: string;
 }> {
+  // CUSTOMER_ACQUISITION_EVOLUTION: freeze net-new discovery/build
+  try {
+    const cae = await input.pool.query(
+      `select value->>'enabled' as en, value->>'freezeNetNewBusinesses' as fr
+       from ros_config_meta where key='customer_acquisition_evolution_mode'`,
+    );
+    if (cae.rows[0]?.en === "true" || cae.rows[0]?.fr === "true") {
+      input.logger("info", "architect.tick.frozen_cae", {
+        reason: "prove_existing_portfolio_customer_acquisition",
+      });
+      return {
+        advanced: false,
+        detail: "frozen_customer_acquisition_evolution_mode",
+      };
+    }
+  } catch {
+    /* continue if meta missing */
+  }
+
   const activeSiteIds = await loadAcceptedSiteIds(input.pool);
   const prev = await loadArchitectStatePg(input.pool);
+
+  // REAL fitness telemetry — prefer durable snapshots; never invent mature stubs.
+  const telemetry = [];
+  let snapshotBySite: Record<string, import("./accepted-business-fitness.js").BusinessFitnessRecord> =
+    {};
+  try {
+    const snap = await input.pool.query(
+      `select value from ros_config_meta where key='portfolio_fitness_snapshots'`,
+    );
+    const doc = (snap.rows[0]?.value ?? {}) as {
+      updatedAt?: string;
+      bySite?: Record<
+        string,
+        import("./accepted-business-fitness.js").BusinessFitnessRecord
+      >;
+    };
+    const age = doc.updatedAt
+      ? Date.now() - Date.parse(doc.updatedAt)
+      : Number.POSITIVE_INFINITY;
+    if (age < 10 * 60_000 && doc.bySite) snapshotBySite = doc.bySite;
+  } catch {
+    /* */
+  }
+  for (const siteId of activeSiteIds) {
+    try {
+      const fitness =
+        snapshotBySite[siteId] ??
+        (await evaluateBusinessFitness(input.pool, siteId));
+      telemetry.push(fitnessToArchitectTelemetry(fitness));
+    } catch {
+      telemetry.push({
+        siteId,
+        purchases: -1,
+        revenueUsd: 0,
+        landingViews: 0,
+        checkoutStarts: 0,
+        ageDays: 0,
+        experimentCount: 0,
+        ownerLocked: false,
+        engineeringBlocked: false,
+      });
+    }
+  }
+
   const cycle = runPortfolioArchitectCycle({
     activeSiteIds,
     activeIndustries: [],
@@ -136,17 +210,7 @@ export async function runBusinessArchitectTick(input: {
         prev.ownerPolicy.portfolioResetAuthorizedAt ??
         "2026-08-10T00:00:00.000Z",
     },
-    telemetry: activeSiteIds.map((siteId) => ({
-      siteId,
-      purchases: 0,
-      revenueUsd: 0,
-      landingViews: 0,
-      checkoutStarts: 0,
-      ageDays: 30,
-      experimentCount: 0,
-      ownerLocked: false,
-      engineeringBlocked: false,
-    })),
+    telemetry,
     referenceProof: {
       premium_bar_passed: true,
       independent_company_test: true,
@@ -217,15 +281,43 @@ export async function runBusinessArchitectTick(input: {
     };
   }
 
+  // Prefer Opportunity Bench (open-world) over priors / PORTFOLIO_50.
+  const bench = await bestBenchOpportunity(input.pool, activeSiteIds);
+  const benchCandidate = bench ? benchEntryToOpportunity(bench) : null;
+
   // Seed from launch candidate or next unaccepted PORTFOLIO_50 spec.
-  const candidate =
+  const rawCandidate =
+    benchCandidate ??
     cycle.launchCandidate ??
     opportunityFromNextSpec(activeSiteIds, nextState.opportunities);
 
-  if (!candidate) {
+  if (!rawCandidate) {
     return {
       advanced: false,
       detail: "no_opportunity — portfolio full or no safe candidate",
+    };
+  }
+
+  const candidate = architectTowardPerfect(rawCandidate);
+  const bar = evaluateTitanAdmissionQuality({
+    siteId: candidate.siteId,
+    opportunity: candidate,
+    activeSiteIds,
+    activeIndustries: [],
+    titanManagedCount: activeSiteIds.length,
+    isReplacement: true,
+  });
+  if (bar.businessQualityScore < TITAN_ADMIT_MIN_SCORE) {
+    input.logger("info", "architect.tick.below_bar", {
+      siteId: candidate.siteId,
+      score: bar.businessQualityScore,
+      decision: bar.decision,
+      defects: bar.weaknesses,
+    });
+    return {
+      advanced: false,
+      siteId: candidate.siteId,
+      detail: `below_bar:${bar.businessQualityScore} — will not build an ${bar.businessQualityScore}/100 thesis`,
     };
   }
 
@@ -290,6 +382,90 @@ export async function runBusinessArchitectTick(input: {
   };
 }
 
+/**
+ * Seed a replacement opportunity into the architect lifecycle queue.
+ * Does not destroy rejected-candidate knowledge — only starts a new build.
+ */
+export async function seedArchitectReplacement(input: {
+  pool: pg.Pool;
+  logger: Logger;
+  opportunity: BusinessOpportunity;
+  replacesSiteId: string;
+  criteria?: string;
+}): Promise<{ ok: boolean; siteId: string; detail: string }> {
+  const opportunity = architectTowardPerfect(input.opportunity);
+  const records = await loadLifecycleQueue(input.pool);
+  if (
+    records.some(
+      (r) =>
+        r.siteId === opportunity.siteId &&
+        !["RETIRED", "REPLACED"].includes(r.state),
+    )
+  ) {
+    return {
+      ok: true,
+      siteId: opportunity.siteId,
+      detail: "replacement_lifecycle_already_exists",
+    };
+  }
+  // Mark prior architect records for the rejected site as REPLACED (preserve evidence).
+  const nextRecords = records.map((r) =>
+    r.siteId === input.replacesSiteId &&
+    !["RETIRED", "REPLACED", "ACCEPTED"].includes(r.state)
+      ? {
+          ...r,
+          state: "REPLACED" as ArchitectLifecycleState,
+          updatedAt: new Date().toISOString(),
+          evidence: [
+            ...r.evidence,
+            `replaced_by:${opportunity.siteId}`,
+            input.criteria ? `criteria:${input.criteria}` : "",
+          ].filter(Boolean),
+        }
+      : r,
+  );
+  const record: ArchitectLifecycleRecord = {
+    recordId: newId("arch"),
+    siteId: opportunity.siteId,
+    state: "DISCOVERED",
+    opportunityId: opportunity.id,
+    thesis: thesisFromOpportunity(opportunity),
+    architecture: architectureFromOpportunity(opportunity),
+    buildSpec: buildSpecFromOpportunity(opportunity),
+    commercialHypothesis: opportunity.acquisitionHypothesis,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    evidence: [
+      ...(opportunity.evidence ?? []),
+      `replacement_for:${input.replacesSiteId}`,
+      input.criteria ? `criteria:${input.criteria}` : "titan_reject_and_replace",
+    ].filter(Boolean),
+    killCriteria: [
+      "structurally_weak_demand_after_sufficient_experimentation",
+      "repeated_evolution_no_improvement",
+    ],
+    successMetrics: ["first_attributed_purchase", "checkout_start_rate"],
+    inFlightBuild: false,
+  };
+  nextRecords.push(record);
+  await saveLifecycleQueue(input.pool, nextRecords);
+  await appendArchitectEventPg(input.pool, {
+    kind: "lifecycle_replacement_discovered",
+    summary: `REPLACEMENT DISCOVERED ${opportunity.siteId} for ${input.replacesSiteId}: ${opportunity.productName}`,
+    siteId: opportunity.siteId,
+  });
+  input.logger("info", "architect.replacement.seeded", {
+    siteId: opportunity.siteId,
+    replaces: input.replacesSiteId,
+    version: BUSINESS_ARCHITECT_VERSION,
+  });
+  return {
+    ok: true,
+    siteId: opportunity.siteId,
+    detail: "seeded_replacement_discovered",
+  };
+}
+
 function opportunityFromNextSpec(
   activeSiteIds: string[],
   existing: BusinessOpportunity[],
@@ -348,6 +524,19 @@ async function advanceRecord(input: {
   }
 
   if (r.state === "THESIS") {
+    const thesis = (r.thesis ?? {}) as Record<string, unknown>;
+    const demandOk = Boolean(
+      thesis.demandEvidence &&
+        thesis.demandEvidence !== "INFERRED_from_opportunity_spec" &&
+        thesis.demandEvidence !== "UNKNOWN",
+    );
+    if (!demandOk) {
+      input.logger("warn", "architect.lifecycle.thesis_blocked", {
+        siteId: r.siteId,
+        reason: "commercial_thesis_incomplete",
+      });
+      return r;
+    }
     r.state = "ARCHITECTING";
     r.architecture =
       r.architecture ?? (opp ? architectureFromOpportunity(opp) : {});

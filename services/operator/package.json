@@ -19,6 +19,7 @@
     "@revenueos/storefront-kit": "file:../../packages/storefront-kit",
     "@supabase/supabase-js": "^2.109.0",
     "pg": "^8.16.3",
+    "playwright": "^1.47.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

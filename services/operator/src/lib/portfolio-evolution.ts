@@ -89,6 +89,8 @@ export async function runEvolutionCycle(input: {
   safetyOverride?: Partial<PortfolioArchitectSafety>;
   /** When true, do not auto-select a launch (proof already done / owner paused creations). */
   suppressLaunchSelection?: boolean;
+  /** Sites blocked by autonomous engineering repair — do not commercially retire. */
+  engineeringBlockedSiteIds?: string[];
 }): Promise<{
   state: PortfolioArchitectState;
   launchCandidate: BusinessOpportunity | null;
@@ -100,7 +102,16 @@ export async function runEvolutionCycle(input: {
     ...prev.safety,
     ...input.safetyOverride,
   };
-  if (input.suppressLaunchSelection || prev.launches.length >= 1) {
+  const ownerRaisedThroughput =
+    prev.ownerPolicy.stopCreatingNewBusinesses === false &&
+    (prev.ownerPolicy.maxActiveBusinesses ?? 0) >= 50;
+  if (input.suppressLaunchSelection) {
+    safety.stopCreatingNewBusinesses = true;
+  } else if (ownerRaisedThroughput) {
+    // Owner final portfolio reset / throughput raise — keep creating up to cap.
+    safety.stopCreatingNewBusinesses = false;
+    safety.maxActiveBusinesses = prev.ownerPolicy.maxActiveBusinesses ?? 50;
+  } else if (prev.launches.length >= 1) {
     // First-proof gate: after one autonomous launch, stop creating until owner raises throughput.
     safety.stopCreatingNewBusinesses = true;
   }
@@ -109,6 +120,7 @@ export async function runEvolutionCycle(input: {
     .filter((b) => input.activeSiteIds.includes(b.siteId))
     .map((b) => b.industry);
 
+  const engBlocked = new Set(input.engineeringBlockedSiteIds ?? []);
   const telemetry = input.activeSiteIds.map((siteId) => ({
     siteId,
     purchases: 0,
@@ -118,6 +130,7 @@ export async function runEvolutionCycle(input: {
     ageDays: 30,
     experimentCount: 100,
     ownerLocked: prev.ownerPolicy.lockedSiteIds.includes(siteId),
+    engineeringBlocked: engBlocked.has(siteId),
   }));
 
   const cycle = runPortfolioArchitectCycle({
@@ -192,7 +205,12 @@ export async function recordAutonomousLaunch(
     ...prev,
     safety: {
       ...prev.safety,
-      stopCreatingNewBusinesses: true, // await owner approval for throughput
+      // Keep creating when owner authorized full portfolio throughput.
+      stopCreatingNewBusinesses:
+        prev.ownerPolicy.stopCreatingNewBusinesses === false &&
+        (prev.ownerPolicy.maxActiveBusinesses ?? 0) >= 50
+          ? false
+          : true,
     },
     launches: [
       ...prev.launches,
