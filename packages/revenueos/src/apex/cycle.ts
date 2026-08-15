@@ -23,7 +23,7 @@ import { newTraceId } from "./trace";
 import {
   decisionConfidence,
 } from "./evidence-sufficiency";
-import { selectActiveClock } from "./learning-clocks";
+import { classifyActionClock, selectActiveClock } from "./learning-clocks";
 import { guardExperiment } from "./experiment-guard";
 import {
   disconfirmingTestsForBelief,
@@ -137,11 +137,24 @@ export async function runApexCycle(input: {
     const candidate = ranked.find((a) => a.action === lv.action);
     if (!candidate) continue;
 
+    if (
+      productMutationBlocked &&
+      classifyActionClock(candidate.action) === "SLOW_PRODUCT_CONVERSION" &&
+      candidate.action !== "checkout_friction_audit"
+    ) {
+      constitutionBlocks.push(
+        `first_customer_mode:block_${candidate.action} — favor exposure/distribution`,
+      );
+      continue;
+    }
+
     const expGuard = guardExperiment({
       action: candidate.action,
       evidenceLevel: evidence.evidence_level,
       recentDecisions: state.recent_decisions,
       capabilityManifest: capability,
+      productMutationBlocked,
+      bottleneck: bottleneck.kind,
     });
     if (!expGuard.allowed) {
       if (

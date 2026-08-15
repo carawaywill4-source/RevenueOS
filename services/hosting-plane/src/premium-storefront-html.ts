@@ -458,7 +458,7 @@ const SCOPESMITH: CopyDeck = {
     </div>
   </div>`,
   without: [
-    "Doing 20 hours of unpaid extra revisions because the contract said \"complete redesign\" without limits.",
+    "Doing unpaid extra revisions because the contract had no revision limit.",
     "Feeling awkward telling a client that their \"quick request\" requires additional budget.",
     "Clients withholding final invoice payments over features that were never part of the original agreement.",
     "Vague project timelines that drag on for 6 months beyond the deadline."
@@ -475,7 +475,7 @@ const SCOPESMITH: CopyDeck = {
   ],
   faqs: [
     { q: "What file formats do I get?", a: "Editable Word (.docx), Google Docs, and PDF templates with highlighted placeholder fields for easy customization." },
-    { q: "Is this legally binding?", a: "Yes, these agreements are drafted using standard commercial contract principles for independent service providers." },
+    { q: "Are these templates legally binding?", a: "These are customizable commercial operational templates based on standard industry contracts. As with any commercial contract, consult qualified legal counsel in your jurisdiction for specific legal advice." },
     { q: "How much does it cost?", a: "One-time $39 payment. No monthly recurring fee." },
     { q: "What if I need assistance?", a: "Email updates@tributeready.org for support." }
   ],
@@ -483,7 +483,7 @@ const SCOPESMITH: CopyDeck = {
 };
 
 const RFPSTRIKE: CopyDeck = {
-  headline: "Stop spending 40 hours on RFPs you're set up to lose.",
+  headline: "Stop bidding on RFPs you're set up to lose.",
   lede: "RFPStrike is the proposal response framework and compliance matrix spreadsheet built for B2B service providers and government contractors. One payment of $49. Evaluate bid/no-bid decisions fast and submit compliant proposals.",
   inside: [
     { title: "RFP Bid/No-Bid Decision Scorecard", body: "Objective 10-point scoring matrix to filter out wired or unprofitable RFPs before wasting team hours." },

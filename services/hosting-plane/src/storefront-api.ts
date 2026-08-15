@@ -1,3 +1,6 @@
+import { createReadStream } from "node:fs";
+import { execSync } from "node:child_process";
+import fs from "node:fs";
 /**
  * Shared storefront API — one process serves /api/* for all native sites.
  * Site resolved from Host header: {siteId}.*.sslip.io
@@ -264,37 +267,49 @@ export function startStorefrontApi(input: {
         let purchase = sessionId
           ? await lookupPurchaseBySession(sessionId)
           : null;
-        if (purchase && token && purchase.downloadToken !== token) {
-          return json(403, { error: "invalid_token" });
-        }
-        if (!purchase && token) {
-          // Token-only lookup via Postgres when session omitted
-          return json(400, { error: "session_id required" });
-        }
-        if (!purchase) return json(404, { error: "not_found" });
 
-        // Digital fulfillment: serve asset pack listing / zip pointer from app content.
+        if (!purchase || !token || purchase.downloadToken !== token) {
+          return json(403, { error: "invalid_download_token" });
+        }
+        if (purchase.businessId && purchase.businessId !== siteId) {
+          return json(403, { error: "cross_business_forbidden" });
+        }
+
         const contentDir = path.join(
           input.repoRoot,
           "apps",
           siteId,
           "content/product",
         );
-        const files = existsSync(contentDir)
-          ? readFileSync(
-              existsSync(path.join(contentDir, "readme.md"))
-                ? path.join(contentDir, "readme.md")
-                : path.join(contentDir, "README.md"),
-              "utf8",
-            ).slice(0, 20_000)
-          : `Purchase confirmed for ${purchase.productName ?? siteId}. Contact care@${siteId}.com if files are missing.`;
 
-        res.writeHead(200, {
-          "content-type": "text/markdown; charset=utf-8",
-          "content-disposition": `inline; filename="${siteId}-pack.md"`,
-        });
-        res.end(files);
-        return;
+        if (!existsSync(contentDir) || fs.readdirSync(contentDir).length === 0) {
+          return json(404, { error: "product_deliverables_not_found" });
+        }
+
+        const tmpZipPath = path.join("/tmp", `ros_${siteId}_${Date.now()}_${Math.random().toString(36).slice(2)}.zip`);
+        try {
+          if (existsSync(tmpZipPath)) fs.rmSync(tmpZipPath, { force: true });
+          execSync(`zip -j -r "${tmpZipPath}" "${contentDir}"/*`);
+          const stat = fs.statSync(tmpZipPath);
+
+          res.writeHead(200, {
+            "content-type": "application/zip",
+            "content-disposition": `attachment; filename="${siteId}-toolkit.zip"`,
+            "content-length": stat.size,
+            "cache-control": "no-store, no-cache, must-revalidate",
+          });
+
+          const stream = createReadStream(tmpZipPath);
+          stream.pipe(res);
+          stream.on("close", () => {
+            try { if (existsSync(tmpZipPath)) fs.rmSync(tmpZipPath, { force: true }); } catch {}
+          });
+          return;
+        } catch (zipErr) {
+          console.error("zip_packaging_error:", zipErr);
+          try { if (existsSync(tmpZipPath)) fs.rmSync(tmpZipPath, { force: true }); } catch {}
+          return json(500, { error: "failed_to_generate_zip_package" });
+        }
       }
 
       json(404, { error: "not_found", path: url.pathname, siteId });

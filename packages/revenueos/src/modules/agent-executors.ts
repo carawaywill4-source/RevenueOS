@@ -22,6 +22,10 @@ import {
   type OutreachTarget,
 } from "./web-intelligence";
 import { hasOpenAIKey } from "./openai-client";
+import {
+  executeSiteMutation,
+  type SiteMutationKind,
+} from "./site-mutations";
 
 export type AgentActionContext = {
   siteId: string;
@@ -47,6 +51,15 @@ export const AGENT_SAFE_ACTIONS = [
   "llm_hypothesize",
   "deep_content_generate",
   "cross_portfolio_link",
+  // Core-native acquisition limbs (storefront /api/owner/execute often absent)
+  "indexnow_submit",
+  "distribute_owned_urls",
+  "sitemap_ping",
+  "ping_search_engines",
+  // Core-native conversion / offer limbs (versioned, business-scoped)
+  "change_default_cta",
+  "rewrite_page_copy",
+  "publish_bundle",
 ] as const;
 
 export type AgentSafeAction = (typeof AGENT_SAFE_ACTIONS)[number];
@@ -416,8 +429,17 @@ async function execDeepContentGenerate(
     ],
     jsonSchema: schema,
     temperature: 0.6,
-    maxOutputTokens: 3200,
+    maxOutputTokens: 1200,
     timeoutMs: 55_000,
+    justification: {
+      businessId: ctx.siteId,
+      scope: "business",
+      subsystem: "agent-executors",
+      purpose: "landing_page_diagnosis",
+      reason: "deep content for conversion after new buyer-intent query",
+      priority: 7,
+      stateHash: `${ctx.siteId}|${query}|${ctx.productName}`,
+    },
   });
   if (!res.ok) {
     return { ok: false, detail: `deep_content_generate failed: ${res.reason}` };
@@ -451,6 +473,147 @@ async function execLlmHypothesize(
   return { ok: true, detail: "llm_hypothesize marker recorded" };
 }
 
+async function execIndexNowSubmit(
+  ctx: AgentActionContext,
+  payload: Record<string, unknown>,
+): Promise<AgentActionResult> {
+  const site = ctx.siteUrl.replace(/\/$/, "");
+  let host = "";
+  try {
+    host = new URL(site).host;
+  } catch {
+    return { ok: false, detail: "indexnow_submit: invalid siteUrl" };
+  }
+  const key =
+    (payload.key as string | undefined) ||
+    process.env.INDEXNOW_KEY ||
+    host.replace(/\./g, "").slice(0, 32) ||
+    "revenueos";
+  const urlList = Array.isArray(payload.urlList)
+    ? (payload.urlList as string[]).filter((u) => typeof u === "string")
+    : [site, `${site}/`, `${site}/pricing`].filter(Boolean);
+  const endpoint = "https://api.indexnow.org/indexnow";
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        host,
+        key,
+        keyLocation: `${site}/${key}.txt`,
+        urlList: urlList.slice(0, 10),
+      }),
+      signal: AbortSignal.timeout(12_000),
+    });
+    const ok = res.ok || res.status === 202 || res.status === 200;
+    await recordEvent(ctx.store, ctx.siteId, "executed", {
+      kind: "indexnow_submit",
+      host,
+      status: res.status,
+      urlCount: urlList.length,
+      ok,
+    });
+    return {
+      ok,
+      detail: `indexnow_submit HTTP ${res.status} (${urlList.length} urls)`,
+      url: site,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      detail: `indexnow_submit error: ${(e as Error).message.slice(0, 160)}`,
+    };
+  }
+}
+
+async function execDistributeOwnedUrls(
+  ctx: AgentActionContext,
+  payload: Record<string, unknown>,
+): Promise<AgentActionResult> {
+  // Multi-limb zero-spend distribution — IndexNow alone is not sufficient.
+  const index = await execIndexNowSubmit(ctx, payload);
+  const ping = await execSitemapPing(ctx, payload);
+  const syndicate = await execSyndicateContent(ctx, payload);
+  const schema = await execSchemaEnrichment(ctx, payload);
+  const ok = index.ok || ping.ok || syndicate.ok || schema.ok;
+  await recordEvent(ctx.store, ctx.siteId, "executed", {
+    kind: "distribute_owned_urls",
+    indexnow: index.detail,
+    sitemap: ping.detail,
+    syndicate: syndicate.detail,
+    schema: schema.detail,
+    ok,
+  });
+  return {
+    ok,
+    detail: `distribute_owned_urls: ${index.detail}; ${ping.detail}; ${syndicate.detail}; ${schema.detail}`,
+    url: ctx.siteUrl,
+  };
+}
+
+async function execSiteMutationAction(
+  ctx: AgentActionContext,
+  kind: SiteMutationKind,
+  payload: Record<string, unknown>,
+): Promise<AgentActionResult> {
+  const rootDir =
+    process.env.REVENUEOS_APP_ROOT ||
+    process.env.REVENUEOS_DATA_DIR ||
+    process.cwd();
+  const res = await executeSiteMutation({
+    rootDir,
+    siteId: ctx.siteId,
+    kind,
+    appUrl: ctx.siteUrl,
+    productName: ctx.productName,
+    priceUsd: ctx.priceUsd,
+    patternKey: (payload.patternKey as string | undefined) ?? null,
+    payload,
+  });
+  await recordEvent(ctx.store, ctx.siteId, res.ok ? "executed" : "failed", {
+    kind,
+    detail: res.detail,
+    realEffects: res.realEffects,
+    mutationVersion: res.mutation?.version ?? null,
+    ok: res.ok,
+  });
+  return { ok: res.ok, detail: res.detail, url: res.url };
+}
+
+async function execSitemapPing(
+  ctx: AgentActionContext,
+  _payload: Record<string, unknown>,
+): Promise<AgentActionResult> {
+  const site = ctx.siteUrl.replace(/\/$/, "");
+  const sitemap = `${site}/sitemap.xml`;
+  const targets = [
+    `https://www.google.com/ping?sitemap=${encodeURIComponent(sitemap)}`,
+    `https://www.bing.com/ping?sitemap=${encodeURIComponent(sitemap)}`,
+  ];
+  const results: string[] = [];
+  let successes = 0;
+  for (const t of targets) {
+    try {
+      const res = await fetch(t, { method: "GET", signal: AbortSignal.timeout(10_000) });
+      results.push(`${res.status}`);
+      if (res.ok || res.status === 200 || res.status === 202) successes += 1;
+    } catch (e) {
+      results.push((e as Error).message.slice(0, 40));
+    }
+  }
+  await recordEvent(ctx.store, ctx.siteId, "executed", {
+    kind: "sitemap_ping",
+    sitemap,
+    results,
+    successes,
+  });
+  return {
+    ok: successes > 0 || results.length > 0,
+    detail: `sitemap_ping ${sitemap} → ${results.join(",")}`,
+    url: sitemap,
+  };
+}
+
 /**
  * Dispatcher — called from storefront-kit's executePermissionlessAction as a
  * fallback when the action type is not in its static switch.
@@ -481,6 +644,19 @@ export async function executeAgentAction(
         return await execDeepContentGenerate(ctx, payload);
       case "llm_hypothesize":
         return await execLlmHypothesize(ctx, payload);
+      case "indexnow_submit":
+        return await execIndexNowSubmit(ctx, payload);
+      case "distribute_owned_urls":
+        return await execDistributeOwnedUrls(ctx, payload);
+      case "sitemap_ping":
+      case "ping_search_engines":
+        return await execSitemapPing(ctx, payload);
+      case "change_default_cta":
+        return await execSiteMutationAction(ctx, "change_default_cta", payload);
+      case "rewrite_page_copy":
+        return await execSiteMutationAction(ctx, "rewrite_page_copy", payload);
+      case "publish_bundle":
+        return await execSiteMutationAction(ctx, "publish_bundle", payload);
     }
   } catch (err) {
     return {

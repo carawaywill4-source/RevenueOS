@@ -38,15 +38,25 @@ export function countChangedDimensions(d: ExperimentDimensions): number {
   return Object.values(d).filter(Boolean).length;
 }
 
+/** Same action cannot repeat without a meaningful new signal (default 45m). */
+export const ACTION_COOLDOWN_MS = 45 * 60_000;
+/** Max identical actions inside the cooldown window. */
+export const MAX_SAME_ACTION_IN_COOLDOWN = 1;
+
 export function guardExperiment(input: {
   action: string;
   evidenceLevel: EvidenceLevel;
   recentDecisions?: ApexDecision[];
   dimensions?: ExperimentDimensions;
   capabilityManifest?: BusinessCapabilityManifest | null;
+  /** When true (first-customer / insufficient traffic), block product mutations. */
+  productMutationBlocked?: boolean;
+  /** Current bottleneck — used to detect whether a repeat would learn nothing. */
+  bottleneck?: string;
 }): ExperimentGuardVerdict {
   const dims = input.dimensions ?? inferDimensions(input.action);
   const changed = countChangedDimensions(dims);
+  const recent = input.recentDecisions ?? [];
 
   if (input.capabilityManifest) {
     const cap = apexMayExecuteAction(input.capabilityManifest, input.action);
@@ -61,7 +71,8 @@ export function guardExperiment(input: {
   }
 
   if (
-    trafficInsufficient(input.evidenceLevel) &&
+    (input.productMutationBlocked ||
+      trafficInsufficient(input.evidenceLevel)) &&
     isProductMutationAction(input.action) &&
     !isAllowedDefectRepair(input.action)
   ) {
@@ -74,8 +85,42 @@ export function guardExperiment(input: {
     };
   }
 
+  // Anti-loop: identical action + same bottleneck without new signal → cooldown.
+  const now = Date.now();
+  const sameRecent = recent.filter((d) => {
+    if (d.selected_action !== input.action) return false;
+    const ts = Date.parse(d.timestamp);
+    if (!Number.isFinite(ts) || now - ts > ACTION_COOLDOWN_MS) return false;
+    if (input.bottleneck && d.bottleneck && d.bottleneck === input.bottleneck) {
+      return true;
+    }
+    return !input.bottleneck || !d.bottleneck;
+  });
+  if (sameRecent.length >= MAX_SAME_ACTION_IN_COOLDOWN) {
+    return {
+      allowed: false,
+      reason: `action_cooldown:${input.action} — await new funnel signal or diversify limb`,
+      isolation: "partial",
+      attributionConfidenceMultiplier: 0,
+    };
+  }
+
+  // Require action diversity: last 3 decisions must not all be the same limb.
+  const last3 = recent.slice(0, 3).map((d) => d.selected_action);
+  if (
+    last3.length >= 3 &&
+    last3.every((a) => a === input.action)
+  ) {
+    return {
+      allowed: false,
+      reason: `action_diversity:${input.action} — three identical limbs; choose a different acquisition/conversion path`,
+      isolation: "partial",
+      attributionConfidenceMultiplier: 0,
+    };
+  }
+
   // Collision: too many dimensions + recent product mutations
-  const recentProduct = (input.recentDecisions ?? [])
+  const recentProduct = recent
     .slice(0, 5)
     .filter((d) => isProductMutationAction(d.selected_action)).length;
 

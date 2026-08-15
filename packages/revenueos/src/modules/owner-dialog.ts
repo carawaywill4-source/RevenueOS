@@ -9,15 +9,15 @@
  *     proposedChanges: Array<{ op, target, value }>,
  *     toolCalls?: Array<{ name, arguments }> }
  *
- * The LLM is called via the read-only openai-client (import only). When the
- * model or API is unavailable, a deterministic fallback still produces a
- * usable answer + zero proposed changes so the operator flow never dead-ends.
+ * Primary brain: xAI / Grok (OWNER_DIALOG). Fallback: OpenAI. Final fallback:
+ * deterministic keyword heuristics so the operator flow never dead-ends.
  *
  * All op values are enumerated and validated — the UI must inspect and
  * confirm before any change is applied.
  */
 
 import { callOpenAI, hasOpenAIKey, DEFAULT_MODELS } from "./openai-client";
+import { callXai, xaiEnv, xaiHealth } from "./xai-client";
 
 export type OwnerProposedOp =
   | "set_target"
@@ -29,7 +29,9 @@ export type OwnerProposedOp =
   | "decrease_concurrency"
   | "enable_mechanism"
   | "disable_mechanism"
-  | "add_note";
+  | "add_note"
+  | "queue_task"
+  | "request_fix";
 
 export type OwnerProposedChange = {
   op: OwnerProposedOp;
@@ -57,13 +59,15 @@ export type OwnerDialogState = {
   }>;
   recentAsks?: string[];
   hoursSinceStart?: number;
+  missionSummary?: string;
 };
 
 export type OwnerDialogResult = {
   answer: string;
   proposedChanges: OwnerProposedChange[];
   toolCalls?: OwnerToolCall[];
-  source: "ai" | "deterministic";
+  source: "xai" | "openai" | "deterministic";
+  model?: string;
   reason?: string;
 };
 
@@ -78,6 +82,8 @@ const VALID_OPS: OwnerProposedOp[] = [
   "enable_mechanism",
   "disable_mechanism",
   "add_note",
+  "queue_task",
+  "request_fix",
 ];
 
 const RESPONSE_SCHEMA = {
@@ -126,6 +132,9 @@ function summarizeState(state: OwnerDialogState): string {
   if (typeof state.hoursSinceStart === "number") {
     lines.push(`hours_since_start: ${state.hoursSinceStart.toFixed(1)}`);
   }
+  if (state.missionSummary?.trim()) {
+    lines.push(`mission: ${state.missionSummary.trim()}`);
+  }
   const biz = (state.activeBusinesses ?? []).slice(0, 15);
   if (biz.length) {
     lines.push("businesses:");
@@ -143,6 +152,38 @@ function summarizeState(state: OwnerDialogState): string {
   return lines.join("\n");
 }
 
+function defaultSystemPrompt(): string {
+  return [
+    "You are RevenueOS — the owner's in-app operator brain.",
+    "You handle tasks, diagnoses, and fixes the owner types into the Mac app chat.",
+    "Be direct, evidence-based, and commercially focused.",
+    "Prefer concrete next actions over abstract strategy.",
+    "When the owner asks for a fix or task, propose queue_task or request_fix changes with a clear target and value.",
+    "Never invent purchases, humans, or revenue.",
+    "Never propose paid ads or buying domains unless the owner explicitly unlocks capital.",
+    "Output STRICT JSON matching the provided schema.",
+    "answer must be concise and usable as an operator reply.",
+  ].join(" ");
+}
+
+function validateProposed(
+  changes: OwnerProposedChange[] | undefined,
+): OwnerProposedChange[] {
+  const validated: OwnerProposedChange[] = [];
+  for (const c of changes ?? []) {
+    if (!VALID_OPS.includes(c.op)) continue;
+    if (typeof c.target !== "string" || c.target.length === 0) continue;
+    if (c.value === null || c.value === undefined) continue;
+    validated.push({
+      op: c.op,
+      target: c.target.slice(0, 100),
+      value: c.value,
+      reason: typeof c.reason === "string" ? c.reason.slice(0, 240) : undefined,
+    });
+  }
+  return validated;
+}
+
 function deterministicFallback(input: {
   message: string;
   state: OwnerDialogState;
@@ -152,11 +193,7 @@ function deterministicFallback(input: {
   const changes: OwnerProposedChange[] = [];
   const businesses = input.state.activeBusinesses ?? [];
 
-  // Very light keyword heuristics — enough to keep the chat useful offline.
-  if (
-    /\bfocus (on|)\s*(\S+)/.test(msg) ||
-    /\bprioritize\s+(\S+)/.test(msg)
-  ) {
+  if (/\bfocus (on|)\s*(\S+)/.test(msg) || /\bprioritize\s+(\S+)/.test(msg)) {
     const m = msg.match(/\b(?:focus on|focus|prioritize)\s+([a-z0-9\-]+)/);
     if (m && businesses.find((b) => b.siteId === m[1])) {
       changes.push({
@@ -192,26 +229,100 @@ function deterministicFallback(input: {
       }
     }
   }
+  if (/\b(fix|bug|broken|repair|task)\b/.test(msg)) {
+    changes.push({
+      op: "request_fix",
+      target: "mission",
+      value: input.message.slice(0, 500),
+      reason: "owner-reported task/fix via chat",
+    });
+  }
 
   return {
     answer:
       changes.length > 0
-        ? `Understood — I've drafted ${changes.length} change(s). Review below before applying. (offline fallback)`
-        : "I couldn't reach the strategist model; I heard you but I'm not going to make changes without confirmation. (offline fallback)",
+        ? `Understood — I've drafted ${changes.length} change(s). Review below before applying. (offline fallback — Grok unavailable)`
+        : "I couldn't reach Grok; I heard you but I'm not going to make changes without confirmation. (offline fallback)",
     proposedChanges: changes,
     source: "deterministic",
     reason: input.reason,
   };
 }
 
+async function tryXaiDialog(input: {
+  message: string;
+  state: OwnerDialogState;
+  systemPrompt: string;
+  model?: string;
+}): Promise<OwnerDialogResult | null> {
+  const env = xaiEnv();
+  if (!env.apiKey) return null;
+  const health = xaiHealth();
+  if (health.status === "RATE_LIMITED" || health.status === "DISABLED") return null;
+
+  const stateSummary = summarizeState(input.state);
+  const userContent = `Owner message:\n${input.message}\n\nCurrent state:\n${stateSummary || "(no state provided)"}`;
+
+  const result = await callXai<{
+    answer: string;
+    proposedChanges: OwnerProposedChange[];
+    toolCalls?: OwnerToolCall[];
+  }>({
+    reason: "OWNER_DIALOG",
+    model: input.model || env.configuredModel || undefined,
+    messages: [
+      { role: "system", content: input.systemPrompt },
+      { role: "user", content: userContent },
+    ],
+    jsonSchema: RESPONSE_SCHEMA,
+    temperature: 0.35,
+    maxOutputTokens: 900,
+    timeoutMs: 45_000,
+  });
+
+  if (!result.ok) return null;
+  let parsed: {
+    answer?: string;
+    proposedChanges?: OwnerProposedChange[];
+    toolCalls?: OwnerToolCall[];
+  } = {};
+  if (result.json && typeof result.json === "object") {
+    parsed = result.json as typeof parsed;
+  } else {
+    try {
+      parsed = JSON.parse(result.text) as typeof parsed;
+    } catch {
+      return {
+        answer: result.text.trim() || "Grok responded without structured JSON.",
+        proposedChanges: [],
+        source: "xai",
+        model: result.model,
+      };
+    }
+  }
+
+  return {
+    answer:
+      typeof parsed.answer === "string" && parsed.answer.trim().length > 0
+        ? parsed.answer
+        : "Done — see proposed changes.",
+    proposedChanges: validateProposed(parsed.proposedChanges),
+    toolCalls: Array.isArray(parsed.toolCalls) ? parsed.toolCalls : undefined,
+    source: "xai",
+    model: result.model,
+  };
+}
+
 /**
  * Handle one owner message. Never throws.
+ * Preference order: xAI/Grok → OpenAI → deterministic.
  */
 export async function handleOwnerMessage(input: {
   message: string;
   state: OwnerDialogState;
   systemPromptOverride?: string;
   model?: string;
+  preferProvider?: "xai" | "openai" | "auto";
 }): Promise<OwnerDialogResult> {
   const message = String(input.message ?? "").slice(0, 4000);
   if (!message.trim()) {
@@ -223,44 +334,51 @@ export async function handleOwnerMessage(input: {
     };
   }
 
-  if (!hasOpenAIKey()) {
-    return deterministicFallback({
+  const system = input.systemPromptOverride ?? defaultSystemPrompt();
+  const prefer = input.preferProvider ?? "auto";
+
+  if (prefer === "xai" || prefer === "auto") {
+    const xai = await tryXaiDialog({
       message,
       state: input.state,
-      reason: "no_openai_key",
+      systemPrompt: system,
+      model: input.model,
     });
+    if (xai) return xai;
   }
 
-  const system =
-    input.systemPromptOverride ??
-    [
-      "You are RevenueOS operator dialog.",
-      "You output STRICT JSON matching the provided schema.",
-      "Only include proposedChanges you're confident the operator will approve.",
-      "Never propose changes that would require paid ads or owner logins.",
-      "answer must be concise, dollar-anchored, and reference sites by siteId.",
-    ].join(" ");
+  if ((prefer === "openai" || prefer === "auto") && hasOpenAIKey()) {
+    const stateSummary = summarizeState(input.state);
+    const userContent = `Owner message:\n${message}\n\nCurrent state:\n${stateSummary || "(no state provided)"}`;
+    const result = await callOpenAI<{
+      answer: string;
+      proposedChanges: OwnerProposedChange[];
+      toolCalls?: OwnerToolCall[];
+    }>({
+      model: input.model ?? DEFAULT_MODELS.cheap,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: userContent },
+      ],
+      jsonSchema: RESPONSE_SCHEMA,
+      temperature: 0.4,
+      maxOutputTokens: 700,
+    });
 
-  const stateSummary = summarizeState(input.state);
-  const userContent =
-    `Owner message:\n${message}\n\nCurrent state:\n${stateSummary || "(no state provided)"}`;
+    if (result.ok) {
+      const raw = result.data;
+      return {
+        answer:
+          typeof raw.answer === "string" && raw.answer.trim().length > 0
+            ? raw.answer
+            : "Done — see proposed changes.",
+        proposedChanges: validateProposed(raw.proposedChanges),
+        toolCalls: Array.isArray(raw.toolCalls) ? raw.toolCalls : undefined,
+        source: "openai",
+        model: input.model ?? DEFAULT_MODELS.cheap,
+      };
+    }
 
-  const result = await callOpenAI<{
-    answer: string;
-    proposedChanges: OwnerProposedChange[];
-    toolCalls?: OwnerToolCall[];
-  }>({
-    model: input.model ?? DEFAULT_MODELS.cheap,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: userContent },
-    ],
-    jsonSchema: RESPONSE_SCHEMA,
-    temperature: 0.4,
-    maxOutputTokens: 700,
-  });
-
-  if (!result.ok) {
     return deterministicFallback({
       message,
       state: input.state,
@@ -268,28 +386,9 @@ export async function handleOwnerMessage(input: {
     });
   }
 
-  const raw = result.data;
-  const changes = Array.isArray(raw.proposedChanges) ? raw.proposedChanges : [];
-  const validated: OwnerProposedChange[] = [];
-  for (const c of changes) {
-    if (!VALID_OPS.includes(c.op)) continue;
-    if (typeof c.target !== "string" || c.target.length === 0) continue;
-    if (c.value === null || c.value === undefined) continue;
-    validated.push({
-      op: c.op,
-      target: c.target.slice(0, 100),
-      value: c.value,
-      reason: typeof c.reason === "string" ? c.reason.slice(0, 240) : undefined,
-    });
-  }
-
-  return {
-    answer:
-      typeof raw.answer === "string" && raw.answer.trim().length > 0
-        ? raw.answer
-        : "Done — see proposed changes.",
-    proposedChanges: validated,
-    toolCalls: Array.isArray(raw.toolCalls) ? raw.toolCalls : undefined,
-    source: "ai",
-  };
+  return deterministicFallback({
+    message,
+    state: input.state,
+    reason: prefer === "xai" ? "xai_unavailable" : "no_ai_provider",
+  });
 }

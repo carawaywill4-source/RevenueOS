@@ -149,8 +149,19 @@ export async function huntPortfolioRevenue(
       messages: [system, user],
       jsonSchema: HUNTER_SCHEMA,
       temperature: 0.5,
-      maxOutputTokens: 900,
+      maxOutputTokens: 500,
       timeoutMs: 30_000,
+      justification: {
+        scope: "portfolio",
+        subsystem: "revenue-hunter",
+        purpose: "experiment_selection",
+        reason: "portfolio focus site + mechanism selection for stranger revenue",
+        priority: 4,
+        stateHash: input.snapshots
+          .map((s) => `${s.siteId}:${s.purchases}:${s.landingViews}`)
+          .join("|")
+          .slice(0, 200),
+      },
     });
     if (!res.ok) {
       return {

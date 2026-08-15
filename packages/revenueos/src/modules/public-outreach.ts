@@ -82,8 +82,17 @@ export async function draftOutreachMessage(input: {
       messages: [system, user],
       jsonSchema: DRAFT_SCHEMA,
       temperature: 0.6,
-      maxOutputTokens: 700,
+      maxOutputTokens: 500,
       timeoutMs: 25_000,
+      justification: {
+        businessId: null,
+        scope: "business",
+        subsystem: "public-outreach",
+        purpose: "messaging_variant",
+        reason: "draft personalized public-surface outreach for a scored lead",
+        priority: 4,
+        stateHash: `${input.lead.url}|${input.brand.productName}`,
+      },
     });
     if (!res.ok) return { ok: false, reason: res.reason };
     if (res.data.templated) {

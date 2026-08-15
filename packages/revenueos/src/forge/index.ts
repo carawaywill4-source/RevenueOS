@@ -19,3 +19,4 @@ export * from "./universal-engine";
 export * from "./hypotheticals";
 export * from "./reference-proof";
 export * from "./admission";
+export * from "./portfolio-50-spec";

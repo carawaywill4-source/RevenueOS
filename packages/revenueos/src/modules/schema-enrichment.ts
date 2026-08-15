@@ -160,8 +160,16 @@ export async function enrichPageSchema(
       messages: [system, user],
       jsonSchema: SCHEMA_JSON_SCHEMA,
       temperature: 0.4,
-      maxOutputTokens: 1600,
+      maxOutputTokens: 600,
       timeoutMs: 30_000,
+      justification: {
+        scope: "business",
+        subsystem: "schema-enrichment",
+        purpose: "search_intent_analysis",
+        reason: "generate schema/FAQ for intent topic page indexability",
+        priority: 6,
+        stateHash: `${input.slug}|${input.brand.displayName}`,
+      },
     });
     if (!res.ok) {
       return {

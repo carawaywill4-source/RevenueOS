@@ -98,6 +98,15 @@ async function draftMessage(
     temperature: 0.7,
     maxOutputTokens: 700,
     timeoutMs: 20_000,
+    justification: {
+      businessId: null,
+      scope: "business",
+      subsystem: "email-outreach",
+      purpose: "messaging_variant",
+      reason: "high-intent buyer outreach draft with recipient-specific public context",
+      priority: 3,
+      stateHash: `${input.toEmail}|${input.reasonToReach}|${input.productName}`,
+    },
   });
   if (!res.ok) return { error: res.reason };
   return res.data;

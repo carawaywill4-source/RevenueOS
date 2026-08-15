@@ -77,6 +77,13 @@ export type OwnerPortfolioPolicy = {
   maxActiveBusinesses?: number;
   stopCreatingNewBusinesses?: boolean;
   prioritizeExistingOverNew?: boolean;
+  /**
+   * Owner final intervention: allow FORGE/architect creation even when
+   * reference-proof stranger purchase is not yet observed.
+   */
+  allowCreationWithoutReferenceProof?: boolean;
+  /** Marks that the 50-business reset was owner-authorized. */
+  portfolioResetAuthorizedAt?: string;
   updatedAt: string;
 };
 
@@ -180,6 +187,11 @@ export type PortfolioArchitectInput = {
     ageDays: number;
     experimentCount: number;
     ownerLocked?: boolean;
+    /**
+     * When RevenueOS itself is broken for this business, Titan must not
+     * commercially kill/retire — repair first, then evaluate commerce.
+     */
+    engineeringBlocked?: boolean;
   }>;
   portableLessonHints?: string[];
   safety?: Partial<PortfolioArchitectSafety>;
@@ -525,7 +537,10 @@ export function discoverOpportunities(
     independent_company_test: input.referenceProof?.independent_company_test ?? false,
     stranger_purchases: input.referenceProof?.stranger_purchases ?? 0,
   });
-  if (forgeStopCreatingNewBusinesses(forgeProof)) {
+  if (
+    forgeStopCreatingNewBusinesses(forgeProof) &&
+    !policy.allowCreationWithoutReferenceProof
+  ) {
     return [];
   }
   if (!safety.autonomousBusinessDiscovery || policy.stopCreatingNewBusinesses || safety.stopCreatingNewBusinesses) {
@@ -609,6 +624,14 @@ export async function enrichOpportunitiesWithModel(
     },
     temperature: 0.3,
     maxOutputTokens: 600,
+    justification: {
+      scope: "portfolio",
+      subsystem: "portfolio-architect",
+      purpose: "experiment_selection",
+      reason: "candidate business creation / portfolio opportunity ranking",
+      priority: 5,
+      stateHash: top.map((o) => `${o.siteId}:${o.productName}:${o.priceUsd}`).join("|"),
+    },
   });
   if (!result.ok) return opportunities;
   const map = new Map(result.data.rankings.map((r) => [r.siteId, r]));
@@ -688,7 +711,12 @@ export function runPortfolioArchitectCycle(
   const safety = { ...DEFAULT_ARCHITECT_SAFETY, ...input.safety };
   const ownerPolicy = { ...DEFAULT_OWNER_PORTFOLIO_POLICY, ...input.ownerPolicy };
   const fitness = input.telemetry.map((t) =>
-    scoreActiveFitness(t, Boolean(t.ownerLocked) || ownerPolicy.lockedSiteIds.includes(t.siteId)),
+    scoreActiveFitness(
+      t,
+      Boolean(t.ownerLocked) ||
+        Boolean(t.engineeringBlocked) ||
+        ownerPolicy.lockedSiteIds.includes(t.siteId),
+    ),
   );
   const retirementCandidates = fitness
     .map((f) => {

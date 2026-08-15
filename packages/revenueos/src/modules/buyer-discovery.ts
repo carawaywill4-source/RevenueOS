@@ -135,8 +135,17 @@ export async function discoverBuyers(
       messages: [system, user],
       jsonSchema: LEAD_SCHEMA,
       temperature: 0.35,
-      maxOutputTokens: 1600,
+      maxOutputTokens: 600,
       timeoutMs: 30_000,
+      justification: {
+        businessId: null,
+        scope: "business",
+        subsystem: "buyer-discovery",
+        purpose: "channel_selection",
+        reason: "rank public buyer surfaces for permissionless outreach",
+        priority: 5,
+        stateHash: `${input.topic}|${input.productName}|${web.results.length}`,
+      },
     });
     if (!res.ok) {
       return {

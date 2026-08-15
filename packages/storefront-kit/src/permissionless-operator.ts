@@ -48,6 +48,7 @@ import {
   executeYelpBusinessPost,
   executeYelpReviewResponse,
   executeYoutubeShortsPublish,
+  executeSiteMutation,
   type DurableBuyerLead,
 } from "@revenueos/core";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -122,6 +123,9 @@ export function listPermissionlessSafeActions(): SafeAction[] {
     { type: "youtube_community_reply_draft", risk: "safe", description: "Draft (or post w/ oauth token) a helpful YouTube reply to a discovered intent comment" },
     { type: "exit_intent_deploy", risk: "safe", description: "Deploy the exit-intent email capture snippet for this site" },
     { type: "order_bump_deploy", risk: "safe", description: "Enable a Stripe checkout order bump for this site" },
+    { type: "change_default_cta", risk: "safe", description: "Route CTAs to checkout (versioned site mutation)" },
+    { type: "rewrite_page_copy", risk: "safe", description: "Rewrite guarantee/urgency/trust copy (versioned)" },
+    { type: "publish_bundle", risk: "safe", description: "Publish starter-tier / bundle offer (versioned)" },
     { type: "gumroad_product_sync", risk: "safe", description: "Ensure product is listed on Gumroad (needs GUMROAD_ACCESS_TOKEN)" },
     { type: "gumroad_sales_import", risk: "safe", description: "Import Gumroad sales into local attribution ledger" },
     { type: "gbp_post", risk: "safe", description: "Draft a free Google Business Profile post (owner paste / SA when granted)" },
@@ -1049,6 +1053,24 @@ export async function executePermissionlessAction(input: {
       });
       if (!res.ok) return { ok: false, detail: res.detail };
       return { ok: true, detail: res.detail, url: res.url };
+    }
+    case "change_default_cta":
+    case "rewrite_page_copy":
+    case "publish_bundle": {
+      const res = await executeSiteMutation({
+        rootDir,
+        siteId: brand.siteId,
+        kind: actionType as
+          | "change_default_cta"
+          | "rewrite_page_copy"
+          | "publish_bundle",
+        appUrl,
+        productName: brand.product.name,
+        priceUsd: brand.product.priceUsd,
+        patternKey: null,
+        payload: {},
+      });
+      return { ok: res.ok, detail: res.detail, url: res.url };
     }
     case "gumroad_product_sync": {
       if (!hasGumroadCreds()) {

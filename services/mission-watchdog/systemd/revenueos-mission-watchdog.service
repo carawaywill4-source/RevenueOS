@@ -1,0 +1,35 @@
+[Unit]
+Description=RevenueOS Mission Watchdog (deterministic external liveness enforcer)
+Documentation=file:///opt/revenueos/app/services/mission-watchdog/README.md
+After=network-online.target docker.service
+Wants=network-online.target
+# Deliberately NOT PartOf revenueos-operator — the whole point is that the
+# watchdog survives an operator crash.
+StartLimitIntervalSec=300
+StartLimitBurst=8
+
+[Service]
+Type=simple
+User=azureuser
+Group=azureuser
+WorkingDirectory=/opt/revenueos/app
+EnvironmentFile=-/etc/revenueos/revenueos.env
+Environment=NODE_ENV=production
+Environment=MISSION_WATCHDOG_INTERVAL_MS=60000
+Environment=OPERATOR_HEALTH_URL=http://127.0.0.1:8080/heartbeat
+Environment=OPERATOR_STALE_MINUTES=5
+ExecStart=/opt/revenueos/app/node_modules/.bin/tsx /opt/revenueos/app/services/mission-watchdog/src/index.ts
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStartSec=45
+TimeoutStopSec=15
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=revenueos-mission-watchdog
+NoNewPrivileges=true
+PrivateTmp=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

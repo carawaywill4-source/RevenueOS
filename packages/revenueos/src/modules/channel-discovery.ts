@@ -405,8 +405,17 @@ export async function discoverChannels(
       messages: [system, user],
       jsonSchema: CANDIDATE_SCHEMA,
       temperature: 0.4,
-      maxOutputTokens: 2000,
+      maxOutputTokens: 600,
       timeoutMs: 35_000,
+      justification: {
+        businessId: input.context.siteId,
+        scope: "business",
+        subsystem: "channel-discovery",
+        purpose: "channel_selection",
+        reason: "select business-specific acquisition channels from public evidence",
+        priority: 5,
+        stateHash: `${input.context.siteId}|${searchResults.length}|${seeds.length}`,
+      },
     });
     if (!res.ok) {
       return {

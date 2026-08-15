@@ -36,6 +36,8 @@
     "@revenueos/core": "file:packages/revenueos",
     "@revenueos/storefront-kit": "file:packages/storefront-kit",
     "@supabase/supabase-js": "^2.109.0",
+    "@types/archiver": "^8.0.0",
+    "archiver": "^8.0.0",
     "docx": "^9.7.1",
     "lucide-react": "^1.29.0",
     "next": "16.3.0",

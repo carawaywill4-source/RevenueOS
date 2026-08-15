@@ -143,7 +143,7 @@ fs.writeFileSync(path.join(icDir, "03-Late-Fee-and-Work-Pause-Contract-Clauses.m
 "If Client fails to pay any undisputed invoice within twenty-one (21) days after written notice of delinquency, Provider reserves the right to suspend performance of all Services and withhold access to deliverables until all outstanding balances, including accrued interest, are paid in full. Provider shall not be liable for any project delays resulting from such suspension."
 ${legalDisclaimer}`);
 
-fs.writeFileSync(path.join(icDir, "04-Binding-B2B-Installment-Payment-Plan-Agreement.md"), `# Customizable B2B Installment Payment Agreement Template
+fs.writeFileSync(path.join(icDir, "04-Customizable-B2B-Installment-Payment-Agreement-Template.md"), `# Customizable B2B Installment Payment Agreement Template
 
 **PARTIES:**
 This Payment Plan Agreement ("Agreement") is made effective as of {{effective_date}}, by and between **{{creditor_company}}** ("Creditor") and **{{debtor_company}}** ("Debtor").

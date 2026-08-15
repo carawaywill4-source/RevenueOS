@@ -509,6 +509,10 @@ export async function planAndEnqueuePursuits(
     opportunities.sort((a, b) => b.score - a.score);
   }
 
+  // CRITICAL: LLM / channel registry / conversion-lab inject AFTER the first
+  // demote. Re-demote so we never enqueue Adapter-missing pursuits.
+  opportunities = demoteUnavailableSafeActions(opportunities, availableTypes);
+
   // Thompson-sampling mechanism bandit — makes each cycle GENUINELY different
   // by sampling from a posterior over mechanism classes, so we don't keep
   // running the same ordering every hour.
@@ -594,6 +598,9 @@ export async function planAndEnqueuePursuits(
     now,
   });
   opportunities = floorReport.opportunities;
+
+  // Final demote after exploration floor injections — never enqueue unexecutable types.
+  opportunities = demoteUnavailableSafeActions(opportunities, availableTypes);
 
   const hypotheses = opportunitiesToHypotheses(opportunities);
   let existing = store.listPursuits

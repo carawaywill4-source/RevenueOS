@@ -1,0 +1,12 @@
+[
+  {
+    "stateHash": "defee8270131c0031bd1bf542737d0a9",
+    "at": "2026-08-11T05:18:10.196Z",
+    "model": "gpt-5-mini",
+    "businessId": "bidforge",
+    "reason": "prior",
+    "data": {
+      "decision": "distribute_owned_urls"
+    }
+  }
+]
