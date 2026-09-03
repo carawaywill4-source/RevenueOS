@@ -1,0 +1,104 @@
+{
+  "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
+  "name": "revenueos",
+  "post": {
+    "dir": "dist/client",
+    "entrypoints": {
+      "default": {
+        "inline": true,
+        "entry": "splash.html"
+      },
+      "game": {
+        "entry": "game.html"
+      }
+    }
+  },
+  "server": {
+    "dir": "dist/server",
+    "entry": "index.cjs"
+  },
+  "permissions": {
+    "reddit": {
+      "enable": true,
+      "scope": "user"
+    },
+    "redis": true,
+    "http": {
+      "enable": true,
+      "domains": [
+        "api.openai.com",
+        "raiseready-seven.vercel.app",
+        "waitroom-sepia.vercel.app",
+        "bidbinder.vercel.app",
+        "closeshift.vercel.app",
+        "depositproof-omega.vercel.app",
+        "ledgerleaf-ashen.vercel.app",
+        "listinglift-eight.vercel.app",
+        "resumeforge-liard.vercel.app",
+        "shopbeacon.vercel.app",
+        "turnoverkit.vercel.app",
+        "tributeready.vercel.app"
+      ]
+    }
+  },
+  "menu": {
+    "items": [
+      {
+        "label": "Create RevenueOS post",
+        "description": "Pin a RevenueOS helper post in this community",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/post-create"
+      },
+      {
+        "label": "Help latest posts (RevenueOS)",
+        "description": "Scan new posts and leave a genuinely helpful reply when relevant",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/help-latest"
+      }
+    ]
+  },
+  "scheduler": {
+    "tasks": {
+      "hourly-help": {
+        "endpoint": "/internal/scheduler/hourly-help",
+        "cron": "15 * * * *"
+      }
+    }
+  },
+  "triggers": {
+    "onAppInstall": "/internal/triggers/on-app-install"
+  },
+  "settings": {
+    "subreddit": {
+      "productName": {
+        "type": "string",
+        "label": "Product name",
+        "defaultValue": "RevenueOS portfolio product"
+      },
+      "productUrl": {
+        "type": "string",
+        "label": "Product URL",
+        "defaultValue": "https://raiseready-seven.vercel.app"
+      },
+      "productPitch": {
+        "type": "paragraph",
+        "label": "One-line offer (used only when the product is the real answer)",
+        "defaultValue": "A focused digital product that solves a specific buyer problem."
+      },
+      "dailyReplyCap": {
+        "type": "number",
+        "label": "Max helpful replies per day in this subreddit",
+        "defaultValue": 4
+      }
+    }
+  },
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build"
+  },
+  "dev": {
+    "subreddit": "revenueos_dev"
+  }
+}

@@ -9,7 +9,11 @@ test("policy keeps the brain inside hard boundaries", async () => {
     "@revenueos/core"
   );
   assert.equal(classifyActionType("indexnow_submit"), "safe");
+  assert.equal(classifyActionType("publish_free_resource"), "safe");
+  assert.equal(classifyActionType("distribute_owned_urls"), "safe");
   assert.equal(classifyActionType("spend_ads"), "owner_gate");
+  assert.equal(classifyActionType("create_account"), "owner_gate");
+  assert.equal(classifyActionType("login_account"), "owner_gate");
   assert.equal(classifyActionType("delete_production_data"), "forbidden");
   assert.equal(
     policyAllows({
@@ -1767,4 +1771,2849 @@ test("capability gaps upsert across siteIds and count blocked EV", async () => {
   assert.ok(gsc);
   assert.ok(gsc!.timesBlocked >= 1);
   assert.ok(gsc!.expectedValueUsd > 0);
+});
+
+test("demoteUnavailableSafeActions strips limbs the adapter cannot run", async () => {
+  const { demoteUnavailableSafeActions } = await import("@revenueos/core");
+  const demoted = demoteUnavailableSafeActions(
+    [
+      {
+        id: "a",
+        title: "Publish",
+        metric: "views",
+        category: "acquisition",
+        action: "publish",
+        expectedImpact: 8,
+        confidence: 0.5,
+        effort: 1,
+        score: 10,
+        safeActionType: "publish_intent_page",
+        predicted: {
+          precursorMetric: "landing_views",
+          expectedProfitUsd: 100,
+          confidence: 0.4,
+          effort: 1,
+          costUsd: 0,
+          timeToSignalDays: 7,
+        },
+      },
+      {
+        id: "b",
+        title: "IndexNow",
+        metric: "views",
+        category: "acquisition",
+        action: "index",
+        expectedImpact: 5,
+        confidence: 0.5,
+        effort: 1,
+        score: 8,
+        safeActionType: "indexnow_submit",
+        predicted: {
+          precursorMetric: "landing_views",
+          expectedProfitUsd: 40,
+          confidence: 0.4,
+          effort: 1,
+          costUsd: 0,
+          timeToSignalDays: 3,
+        },
+      },
+    ],
+    new Set(["indexnow_submit"]),
+  );
+  assert.equal(demoted[0]!.safeActionType, undefined);
+  assert.equal(demoted[1]!.safeActionType, "indexnow_submit");
+});
+
+test("enqueue skips opportunities demoted to no safeActionType", async () => {
+  const {
+    demoteUnavailableSafeActions,
+    enqueuePursuitsFromOpportunities,
+    opportunitiesToHypotheses,
+  } = await import("@revenueos/core");
+
+  const opportunities = demoteUnavailableSafeActions(
+    [
+      {
+        id: "missing-limb",
+        title: "Needs GSC",
+        metric: "views",
+        category: "acquisition",
+        action: "read gsc",
+        expectedImpact: 9,
+        confidence: 0.5,
+        effort: 1,
+        score: 90,
+        safeActionType: "publish_intent_page",
+        patternKey: "door:a",
+        predicted: {
+          precursorMetric: "landing_views",
+          expectedProfitUsd: 200,
+          confidence: 0.4,
+          effort: 1,
+          costUsd: 0,
+          timeToSignalDays: 7,
+        },
+      },
+      {
+        id: "ok-limb",
+        title: "IndexNow",
+        metric: "views",
+        category: "acquisition",
+        action: "index",
+        expectedImpact: 5,
+        confidence: 0.5,
+        effort: 1,
+        score: 50,
+        safeActionType: "indexnow_submit",
+        patternKey: "index:a",
+        predicted: {
+          precursorMetric: "landing_views",
+          expectedProfitUsd: 40,
+          confidence: 0.4,
+          effort: 1,
+          costUsd: 0,
+          timeToSignalDays: 3,
+        },
+      },
+    ],
+    new Set(["indexnow_submit"]),
+  );
+  const jobs = enqueuePursuitsFromOpportunities({
+    siteId: "example-static",
+    opportunities,
+    hypotheses: opportunitiesToHypotheses(opportunities),
+    existing: [],
+  });
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0]!.actionType, "indexnow_submit");
+});
+
+test("WAITING_FOR_EVIDENCE does not block claiming an independent EXECUTE job", async () => {
+  const {
+    createFileExperimentStore,
+    createExampleStaticAdapter,
+    advancePursuit,
+    drainPursuits,
+  } = await import("@revenueos/core");
+
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-wait-"));
+  const adapter = createExampleStaticAdapter(dir);
+  const store = createFileExperimentStore(dir);
+  const now = new Date("2026-08-08T12:00:00.000Z");
+  const waiting = {
+    id: "pursuit_wait",
+    siteId: "example-static",
+    state: "WAITING_FOR_EVIDENCE" as const,
+    kind: "organic_revenue" as const,
+    actionType: "publish_intent_page",
+    priority: 100,
+    effort: 1,
+    idempotencyKey: "wait:publish",
+    attempts: 1,
+    maxAttempts: 3,
+    title: "Waiting publish",
+    action: "measure",
+    notBefore: new Date(now.getTime() + 7 * 86_400_000).toISOString(),
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  };
+  const ready = {
+    id: "pursuit_ready",
+    siteId: "example-static",
+    state: "EXECUTE" as const,
+    kind: "ops" as const,
+    actionType: "scorecard_snapshot",
+    priority: 50,
+    effort: 1,
+    idempotencyKey: "exec:scorecard",
+    attempts: 0,
+    maxAttempts: 3,
+    title: "Scorecard",
+    action: "snapshot",
+    hypothesis: {
+      id: "h1",
+      title: "Scorecard",
+      metric: "ops",
+      predictedDelta: "+1",
+      expectedImpact: 1,
+      confidence: 0.9,
+      effort: 1,
+      action: "snapshot",
+      constraintsChecked: ["policy"],
+      category: "operations" as const,
+      safeActionType: "scorecard_snapshot",
+    },
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  };
+  await store.savePursuit!(waiting);
+  await store.savePursuit!(ready);
+
+  const observation = await adapter.observe();
+  const drain = await drainPursuits({
+    adapter: { ...adapter, getExperimentStore: () => store },
+    store,
+    observation,
+    budgetMs: 10_000,
+    maxJobs: 4,
+    now,
+  });
+  assert.ok(drain.advanced >= 1);
+  const after = await store.listPursuits!("example-static");
+  const waitJob = after.find((j) => j.id === "pursuit_wait");
+  const readyJob = after.find((j) => j.id === "pursuit_ready");
+  assert.equal(waitJob?.state, "WAITING_FOR_EVIDENCE");
+  assert.ok(
+    readyJob?.state === "WAITING_FOR_EVIDENCE" || readyJob?.state === "DONE",
+  );
+  // Independent execute progressed despite a waiting experiment occupying a slot.
+  assert.notEqual(readyJob?.attempts, 0);
+
+  // Attribute only after notBefore
+  const early = await advancePursuit({
+    job: waitJob!,
+    adapter: { ...adapter, getExperimentStore: () => store },
+    store,
+    observation,
+    now,
+  });
+  assert.equal(early.state, "WAITING_FOR_EVIDENCE");
+  const later = await advancePursuit({
+    job: waitJob!,
+    adapter: { ...adapter, getExperimentStore: () => store },
+    store,
+    observation,
+    now: new Date(now.getTime() + 8 * 86_400_000),
+  });
+  assert.notEqual(later.state, "WAITING_FOR_EVIDENCE");
+});
+
+test("drainPursuits respects maxJobs budget", async () => {
+  const { createFileExperimentStore, createExampleStaticAdapter, drainPursuits } =
+    await import("@revenueos/core");
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-budget-"));
+  const adapter = createExampleStaticAdapter(dir);
+  const store = createFileExperimentStore(dir);
+  const now = new Date("2026-08-08T12:00:00.000Z");
+  for (let i = 0; i < 5; i += 1) {
+    await store.savePursuit!({
+      id: `pursuit_${i}`,
+      siteId: "example-static",
+      state: "EXECUTE",
+      kind: "ops",
+      actionType: "scorecard_snapshot",
+      priority: 10 - i,
+      effort: 1,
+      idempotencyKey: `exec:${i}`,
+      attempts: 0,
+      maxAttempts: 3,
+      title: `Job ${i}`,
+      action: "snapshot",
+      hypothesis: {
+        id: `h${i}`,
+        title: `Job ${i}`,
+        metric: "ops",
+        predictedDelta: "+1",
+        expectedImpact: 1,
+        confidence: 0.9,
+        effort: 1,
+        action: "snapshot",
+        constraintsChecked: ["policy"],
+        category: "operations",
+        safeActionType: "scorecard_snapshot",
+      },
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+  }
+  const drain = await drainPursuits({
+    adapter: { ...adapter, getExperimentStore: () => store },
+    store,
+    observation: await adapter.observe(),
+    budgetMs: 30_000,
+    maxJobs: 2,
+    now,
+  });
+  assert.ok(drain.claimed <= 2);
+  assert.ok(drain.advanced <= 2);
+});
+
+test("owner report summary shape answers what/learn/next", async () => {
+  const { buildOwnerReportSummary, formatOwnerReport } = await import(
+    "@revenueos/core"
+  );
+  const summary = buildOwnerReportSummary({
+    siteId: "tributeready",
+    windowStart: "2026-08-08T11:00:00.000Z",
+    windowEnd: "2026-08-08T12:00:00.000Z",
+    events: [
+      {
+        id: "e1",
+        pursuitId: "p1",
+        siteId: "tributeready",
+        eventType: "claimed",
+        detail: {},
+        createdAt: "2026-08-08T11:10:00.000Z",
+      },
+      {
+        id: "e2",
+        pursuitId: "p1",
+        siteId: "tributeready",
+        eventType: "executed",
+        detail: { ok: true, actionType: "indexnow_submit" },
+        createdAt: "2026-08-08T11:11:00.000Z",
+      },
+      {
+        id: "e3",
+        pursuitId: "p1",
+        siteId: "tributeready",
+        eventType: "wait",
+        detail: { until: "2026-08-15T11:11:00.000Z" },
+        createdAt: "2026-08-08T11:11:01.000Z",
+      },
+    ],
+    pursuits: [
+      {
+        id: "p1",
+        siteId: "tributeready",
+        state: "WAITING_FOR_EVIDENCE",
+        kind: "discovery_door",
+        priority: 10,
+        effort: 1,
+        idempotencyKey: "k1",
+        attempts: 1,
+        maxAttempts: 3,
+        title: "Index door",
+        action: "index",
+        createdAt: "2026-08-08T11:00:00.000Z",
+        updatedAt: "2026-08-08T11:11:00.000Z",
+      },
+      {
+        id: "p2",
+        siteId: "tributeready",
+        state: "EXECUTE",
+        kind: "ops",
+        priority: 8,
+        effort: 1,
+        idempotencyKey: "k2",
+        attempts: 0,
+        maxAttempts: 3,
+        title: "Next merch",
+        action: "merch",
+        createdAt: "2026-08-08T11:00:00.000Z",
+        updatedAt: "2026-08-08T11:00:00.000Z",
+      },
+    ],
+    hourRevenueUsd: 0,
+    hourPurchases: 0,
+    hourLandingViews: 4,
+    hadExecutableCapacity: true,
+  });
+  assert.equal(summary.actionsCompleted, 1);
+  assert.equal(summary.experimentsLaunched, 1);
+  assert.equal(summary.waitingForEvidence, 1);
+  assert.ok(summary.nextQueue.length >= 1);
+  assert.ok(summary.workLines.some((line) => line.includes("executed")));
+  const text = formatOwnerReport(summary);
+  assert.match(text, /\$0\.00 · 4 visitors/);
+  // Progress happened → not operational failure even with $0 sales.
+  assert.equal(summary.operationalFailure, false);
+});
+
+test("FIRST_CUSTOMER_MODE boosts buyer-exposure actions when purchases are zero", async () => {
+  const {
+    evaluateFirstCustomerMode,
+    applyFirstCustomerPressure,
+  } = await import("@revenueos/core");
+
+  const mode = evaluateFirstCustomerMode({
+    observedAt: new Date().toISOString(),
+    money: {
+      revenueUsd: 0,
+      purchases: 0,
+      awaitingPayment: 0,
+      refunded: 0,
+      estimatedVariableCostUsd: 0,
+      estimatedProfitUsd: 0,
+      mrr: 0,
+      arr: 0,
+    },
+    funnel: {
+      steps: [],
+      largestDrop: null,
+      landingViews: 10,
+      checkouts: 0,
+      fulfillmentFailed: 0,
+    },
+    bottleneck: { level: 2, label: "traffic", detail: "need buyers" },
+    openExperimentIds: [],
+    errors: [],
+  });
+  assert.equal(mode.active, true);
+
+  const ranked = applyFirstCustomerPressure({
+    mode,
+    opportunities: [
+      {
+        id: "polish",
+        title: "Polish footer",
+        metric: "views",
+        category: "operations",
+        action: "polish",
+        expectedImpact: 1,
+        confidence: 0.5,
+        effort: 1,
+        score: 50,
+        safeActionType: "scorecard_snapshot",
+      },
+      {
+        id: "door",
+        title: "Publish intent door",
+        metric: "views",
+        category: "acquisition",
+        action: "publish",
+        expectedImpact: 8,
+        confidence: 0.5,
+        effort: 1,
+        score: 50,
+        safeActionType: "publish_intent_page",
+      },
+    ],
+  });
+  assert.equal(ranked[0]!.safeActionType, "publish_intent_page");
+  assert.ok(ranked[0]!.score > ranked[1]!.score);
+});
+
+test("negative transfer blocks death-care lessons on freelancer tools", async () => {
+  const { isNegativeTransfer, filterTransferableLessons } = await import(
+    "@revenueos/core"
+  );
+  assert.equal(isNegativeTransfer("death-care", "freelancer-finance"), true);
+  assert.equal(isNegativeTransfer("freelancer-finance", "freelancer-finance"), false);
+
+  const filtered = filterTransferableLessons({
+    target: { industry: "freelancer-finance", businessModel: "digital_download" },
+    lessons: [
+      {
+        id: "l1",
+        scope: "industry",
+        industry: "death-care",
+        patternKey: "ever-loved",
+        summary: "Funeral partner door",
+        evidenceCount: 3,
+        transferable: true,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "l2",
+        scope: "industry",
+        industry: "freelancer-finance",
+        patternKey: "invoice-template-seo",
+        summary: "Invoice SEO works",
+        evidenceCount: 2,
+        transferable: true,
+        commercial: {
+          businessModel: "digital_download",
+          industry: "freelancer-finance",
+        },
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ],
+  });
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0]!.id, "l2");
+});
+
+test("portfolio allocator ranks FIRST_CUSTOMER businesses for effort", async () => {
+  const { rankPortfolioEffort, snapshotFromMetrics } = await import(
+    "@revenueos/core"
+  );
+  const allocation = rankPortfolioEffort([
+    snapshotFromMetrics({
+      siteId: "raiseready",
+      displayName: "RaiseReady",
+      sequenceIndex: 1,
+      revenueUsd: 0,
+      contributionProfitUsd: 0,
+      purchases: 0,
+      landingViews: 5,
+      activePursuits: 0,
+      waitingForEvidence: 0,
+      claimableBacklog: 0,
+    }),
+    snapshotFromMetrics({
+      siteId: "ledgerleaf",
+      displayName: "Ledgerleaf",
+      sequenceIndex: 2,
+      revenueUsd: 290,
+      contributionProfitUsd: 260,
+      purchases: 10,
+      landingViews: 400,
+      activePursuits: 2,
+      waitingForEvidence: 1,
+      claimableBacklog: 3,
+    }),
+  ]);
+  assert.ok(allocation.effortOrder.includes("raiseready"));
+  assert.ok(allocation.notes.some((n) => n.includes("FIRST_CUSTOMER")));
+});
+
+test("three identical zero-result cycles force strategy mutation", async () => {
+  const {
+    buildCycleFingerprint,
+    detectExecutionStagnation,
+    mutateOpportunitiesAfterStagnation,
+  } = await import("@revenueos/core");
+
+  const fp = () =>
+    buildCycleFingerprint({
+      actionTypes: ["indexnow_submit", "distribute_owned_urls"],
+      purchases: 0,
+      revenueUsd: 0,
+      landingViews: 0,
+      checkouts: 0,
+      stage: "buyer_exposure",
+    });
+
+  const hour1 = fp();
+  const hour2 = fp();
+  const hour3 = fp();
+  const verdict = detectExecutionStagnation({
+    prior: [hour1, hour2],
+    current: hour3,
+  });
+  assert.equal(verdict.systemFailure, true);
+  assert.ok(verdict.consecutiveIdentical >= 3);
+  assert.ok(verdict.killActionTypes.includes("indexnow_submit"));
+
+  const mutated = mutateOpportunitiesAfterStagnation({
+    opportunities: [
+      {
+        id: "a",
+        title: "IndexAgain",
+        metric: "views",
+        category: "acquisition",
+        action: "index",
+        expectedImpact: 8,
+        confidence: 0.6,
+        effort: 1,
+        score: 90,
+        safeActionType: "indexnow_submit",
+      },
+      {
+        id: "b",
+        title: "Comparison page",
+        metric: "views",
+        category: "acquisition",
+        action: "publish",
+        expectedImpact: 7,
+        confidence: 0.55,
+        effort: 1,
+        score: 40,
+        safeActionType: "publish_comparison_page",
+      },
+    ],
+    killActionTypes: verdict.killActionTypes,
+  });
+  assert.equal(mutated[0]?.safeActionType, "publish_comparison_page");
+  assert.ok((mutated[0]?.score ?? 0) > (mutated[1]?.score ?? 0));
+});
+
+test("infrastructure-only zero-result cycle is stagnant without waiting for hour 3", async () => {
+  const { buildCycleFingerprint, detectExecutionStagnation } = await import(
+    "@revenueos/core"
+  );
+  const current = buildCycleFingerprint({
+    actionTypes: ["indexnow_submit", "sitemap_ping"],
+    purchases: 0,
+    revenueUsd: 0,
+    landingViews: 0,
+    stage: "buyer_exposure",
+  });
+  const verdict = detectExecutionStagnation({ prior: [], current });
+  assert.equal(verdict.stagnant, true);
+  assert.match(verdict.reason, /Infrastructure-only|mutate/i);
+});
+
+test("pattern posteriors ban a mechanism after N attempts with zero signal", async () => {
+  const {
+    buildPatternPosteriors,
+    computePatternGate,
+    PATTERN_ATTEMPT_BUDGET,
+  } = await import("@revenueos/core");
+
+  const events = Array.from({ length: PATTERN_ATTEMPT_BUDGET }, (_, i) => ({
+    id: `e${i}`,
+    pursuitId: `p${i}`,
+    siteId: "raiseready",
+    eventType: "executed" as const,
+    detail: {
+      ok: true,
+      actionType: "publish_free_resource",
+      patternKey: "permissionless-free-resource",
+      actionClass: "production",
+    },
+    createdAt: new Date(Date.now() - (i + 1) * 60_000).toISOString(),
+  }));
+
+  const posteriors = buildPatternPosteriors({
+    events,
+    observation: {
+      observedAt: new Date().toISOString(),
+      money: {
+        revenueUsd: 0,
+        purchases: 0,
+        awaitingPayment: 0,
+        refunded: 0,
+        estimatedVariableCostUsd: 0,
+        estimatedProfitUsd: 0,
+        mrr: 0,
+        arr: 0,
+      },
+      funnel: {
+        steps: [],
+        largestDrop: null,
+        landingViews: 0,
+        checkouts: 0,
+        fulfillmentFailed: 0,
+      },
+      bottleneck: { level: 2, label: "no buyers", detail: "invisible" },
+      openExperimentIds: [],
+      errors: [],
+    },
+  });
+  const p = posteriors["permissionless-free-resource"];
+  assert.ok(p, "posterior recorded");
+  assert.equal(p.banned, true);
+  const gate = computePatternGate(posteriors);
+  assert.ok(gate.bannedPatterns.has("permissionless-free-resource"));
+  assert.ok(gate.bannedMechanisms.has("owned_content"));
+});
+
+test("banned patterns are dropped and banned mechanisms are demoted", async () => {
+  const { applyPatternGate } = await import("@revenueos/core");
+  const gate = {
+    bannedPatterns: new Set(["permissionless-free-resource"]),
+    bannedMechanisms: new Set(["owned_content" as const]),
+    reasons: { "permissionless-free-resource": "no signal" },
+  };
+  const kept = applyPatternGate({
+    gate,
+    opportunities: [
+      {
+        id: "a",
+        title: "another content page",
+        metric: "views",
+        category: "acquisition",
+        action: "publish",
+        expectedImpact: 8,
+        confidence: 0.6,
+        effort: 1,
+        score: 90,
+        safeActionType: "publish_comparison_page",
+        patternKey: "permissionless-comparison",
+      },
+      {
+        id: "b",
+        title: "same banned pattern",
+        metric: "views",
+        category: "acquisition",
+        action: "publish",
+        expectedImpact: 8,
+        confidence: 0.6,
+        effort: 1,
+        score: 95,
+        safeActionType: "publish_free_resource",
+        patternKey: "permissionless-free-resource",
+      },
+      {
+        id: "c",
+        title: "distribution",
+        metric: "urls",
+        category: "acquisition",
+        action: "ping",
+        expectedImpact: 6,
+        confidence: 0.55,
+        effort: 1,
+        score: 40,
+        safeActionType: "indexnow_submit",
+        patternKey: "indexnow-discovery",
+      },
+    ],
+  });
+  const keys = kept.map((o) => o.patternKey);
+  assert.ok(!keys.includes("permissionless-free-resource"));
+  const distribution = kept.find((o) => o.patternKey === "indexnow-discovery");
+  const bannedFamily = kept.find(
+    (o) => o.patternKey === "permissionless-comparison",
+  );
+  assert.ok(distribution);
+  assert.ok(bannedFamily);
+  assert.ok((distribution!.score ?? 0) > (bannedFamily!.score ?? 0));
+});
+
+test("mechanism diversity caps same-family enqueue and prefers unbanned", async () => {
+  const { enforceMechanismDiversity } = await import("@revenueos/core");
+  const opps = [
+    { id: "1", title: "content1", metric: "v", category: "acquisition", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 90, safeActionType: "publish_free_resource", patternKey: "p1" },
+    { id: "2", title: "content2", metric: "v", category: "acquisition", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 85, safeActionType: "publish_howto_cluster", patternKey: "p2" },
+    { id: "3", title: "content3", metric: "v", category: "acquisition", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 80, safeActionType: "publish_intent_page", patternKey: "p3" },
+    { id: "4", title: "content4", metric: "v", category: "acquisition", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 75, safeActionType: "publish_comparison_page", patternKey: "p4" },
+    { id: "5", title: "distribute", metric: "v", category: "acquisition", action: "x", expectedImpact: 6, confidence: 0.6, effort: 1, score: 50, safeActionType: "distribute_owned_urls", patternKey: "d1" },
+  ] as const;
+  const capped = enforceMechanismDiversity({
+    opportunities: opps.map((o) => ({ ...o })),
+    bannedMechanisms: new Set(["owned_content"]),
+    maxPerMechanism: 3,
+  });
+  const first = capped[0]!;
+  assert.equal(first.patternKey, "d1");
+  const contentCount = capped.filter(
+    (o) => (o.safeActionType ?? "").startsWith("publish_"),
+  ).length;
+  assert.ok(contentCount <= 3);
+});
+
+test("revenue priority boosts patterns with own commercial signal", async () => {
+  const {
+    applyRevenuePriority,
+    EMPTY_PORTFOLIO_SIGNAL,
+  } = await import("@revenueos/core");
+  const ownPosteriors: Record<string, any> = {
+    "proven-checkout": {
+      patternKey: "proven-checkout",
+      mechanism: "conversion_optimization",
+      attempts: 3,
+      distributionAttempts: 0,
+      productionAttempts: 0,
+      verifiedExposures: 12,
+      intents: 4,
+      commercialOutcomes: 2,
+      commercialScore: 60,
+      banned: false,
+      lastAttemptAt: new Date().toISOString(),
+      firstAttemptAt: new Date().toISOString(),
+    },
+  };
+  const scored = applyRevenuePriority({
+    opportunities: [
+      { id: "a", title: "proven", metric: "purchases", category: "conversion", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 10, safeActionType: "rewrite_page_copy", patternKey: "proven-checkout" } as any,
+      { id: "b", title: "unknown", metric: "views", category: "acquisition", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 90, safeActionType: "publish_free_resource", patternKey: "unknown-pattern" } as any,
+    ],
+    ownPosteriors,
+    portfolioSignal: EMPTY_PORTFOLIO_SIGNAL,
+    bannedMechanisms: new Set(),
+  });
+  assert.equal(scored[0]!.patternKey, "proven-checkout");
+});
+
+test("revenue priority transfers portfolio commercial signal across sites", async () => {
+  const {
+    applyRevenuePriority,
+    buildPortfolioSignal,
+  } = await import("@revenueos/core");
+  const portfolioSignal = buildPortfolioSignal({
+    perSitePosteriors: [
+      {
+        siteId: "raiseready",
+        posteriors: {
+          "outreach-A": {
+            patternKey: "outreach-A",
+            mechanism: "direct_outreach",
+            attempts: 3,
+            distributionAttempts: 0,
+            productionAttempts: 0,
+            verifiedExposures: 5,
+            intents: 2,
+            commercialOutcomes: 1,
+            commercialScore: 25,
+            banned: false,
+            lastAttemptAt: new Date().toISOString(),
+            firstAttemptAt: new Date().toISOString(),
+          } as any,
+        },
+      },
+    ],
+    excludeSiteId: "ledgerleaf",
+  });
+  const scored = applyRevenuePriority({
+    opportunities: [
+      { id: "a", title: "transferable", metric: "purchases", category: "acquisition", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 10, safeActionType: "cold_outreach", patternKey: "outreach-A" } as any,
+      { id: "b", title: "cold content", metric: "views", category: "acquisition", action: "x", expectedImpact: 8, confidence: 0.6, effort: 1, score: 30, safeActionType: "publish_free_resource", patternKey: "cold-content" } as any,
+    ],
+    ownPosteriors: {},
+    portfolioSignal,
+    bannedMechanisms: new Set(),
+  });
+  assert.equal(scored[0]!.patternKey, "outreach-A");
+});
+
+test("portfolio allocator drops suspended sites and demotes exhausted ones", async () => {
+  const { rankPortfolioEffort, snapshotFromMetrics } = await import(
+    "@revenueos/core"
+  );
+  const alloc = rankPortfolioEffort([
+    snapshotFromMetrics({
+      siteId: "raiseready",
+      displayName: "raiseready",
+      sequenceIndex: 1,
+      revenueUsd: 0,
+      contributionProfitUsd: 0,
+      purchases: 0,
+      landingViews: 0,
+      activePursuits: 0,
+      waitingForEvidence: 0,
+      claimableBacklog: 2,
+    }),
+    snapshotFromMetrics({
+      siteId: "mendhaus",
+      displayName: "mendhaus",
+      sequenceIndex: 2,
+      revenueUsd: 0,
+      contributionProfitUsd: 0,
+      purchases: 0,
+      landingViews: 0,
+      activePursuits: 0,
+      waitingForEvidence: 0,
+      claimableBacklog: 2,
+      suspended: true,
+    }),
+    snapshotFromMetrics({
+      siteId: "closeshift",
+      displayName: "closeshift",
+      sequenceIndex: 3,
+      revenueUsd: 0,
+      contributionProfitUsd: 0,
+      purchases: 0,
+      landingViews: 0,
+      activePursuits: 0,
+      waitingForEvidence: 0,
+      claimableBacklog: 2,
+      bannedPatternCount: 6,
+    }),
+  ]);
+  assert.equal(alloc.effortOrder[0], "raiseready");
+  assert.equal(alloc.effortOrder[alloc.effortOrder.length - 1], "mendhaus");
+});
+
+test("beacon ingests page_view as verified_exposure and dedupes within window", async () => {
+  const { ingestBeaconEvent } = await import("@revenueos/core");
+  const events: any[] = [];
+  const store = {
+    listPursuitEvents: async () => events.slice(),
+    appendPursuitEvent: async (e: any) => {
+      events.push(e);
+    },
+  } as any;
+  const first = await ingestBeaconEvent({
+    event: {
+      kind: "page_view",
+      siteId: "raiseready",
+      url: "https://x.dev/topics/foo",
+      path: "/topics/foo",
+      ua: "Mozilla/5.0 real browser",
+      ip: "203.0.113.10",
+    },
+    store,
+  });
+  assert.equal(first.ok, true);
+  assert.equal((first as any).actionClass, "verified_exposure");
+  const dupe = await ingestBeaconEvent({
+    event: {
+      kind: "page_view",
+      siteId: "raiseready",
+      url: "https://x.dev/topics/foo",
+      path: "/topics/foo",
+      ua: "Mozilla/5.0 real browser",
+      ip: "203.0.113.10",
+    },
+    store,
+  });
+  assert.equal(dupe.ok, false);
+});
+
+test("beacon rejects bot user agents", async () => {
+  const { ingestBeaconEvent } = await import("@revenueos/core");
+  const store = { appendPursuitEvent: async () => {} } as any;
+  const r = await ingestBeaconEvent({
+    event: {
+      kind: "page_view",
+      siteId: "raiseready",
+      url: "x",
+      ua: "Googlebot/2.1 (+http://google.com/bot.html)",
+    },
+    store,
+  });
+  assert.equal(r.ok, false);
+});
+
+test("mechanism bandit picks proven mechanism with high probability", async () => {
+  const {
+    buildMechanismArms,
+    sampleMechanismRanking,
+  } = await import("@revenueos/core");
+  const ownPosteriors: Record<string, any> = {
+    "outreach-A": {
+      patternKey: "outreach-A",
+      mechanism: "direct_outreach",
+      attempts: 3,
+      distributionAttempts: 0,
+      productionAttempts: 0,
+      verifiedExposures: 8,
+      intents: 4,
+      commercialOutcomes: 2,
+      commercialScore: 60,
+      banned: false,
+      lastAttemptAt: null,
+      firstAttemptAt: null,
+    },
+    "content-B": {
+      patternKey: "content-B",
+      mechanism: "owned_content",
+      attempts: 10,
+      distributionAttempts: 0,
+      productionAttempts: 10,
+      verifiedExposures: 0,
+      intents: 0,
+      commercialOutcomes: 0,
+      commercialScore: 0,
+      banned: true,
+      lastAttemptAt: null,
+      firstAttemptAt: null,
+    },
+  };
+  const arms = buildMechanismArms({
+    ownPosteriors,
+    bannedMechanisms: new Set(["owned_content"]),
+  });
+  // Deterministic sampler for test — pull the same values so proven arm wins.
+  const rand = mulberry32(42);
+  let wins = 0;
+  for (let i = 0; i < 50; i++) {
+    const s = sampleMechanismRanking({ arms, rand });
+    if (s.best === "direct_outreach") wins += 1;
+  }
+  assert.ok(wins > 30, `direct_outreach should dominate; won ${wins}/50`);
+});
+
+function mulberry32(a: number) {
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+test("conversion lab injects offer/CTA/urgency when landing_views > 0", async () => {
+  const { proposeConversionExperiments } = await import("@revenueos/core");
+  const items = proposeConversionExperiments({
+    observation: {
+      observedAt: new Date().toISOString(),
+      money: {
+        revenueUsd: 0,
+        purchases: 0,
+        awaitingPayment: 0,
+        refunded: 0,
+        estimatedVariableCostUsd: 0,
+        estimatedProfitUsd: 0,
+        mrr: 0,
+        arr: 0,
+      },
+      funnel: {
+        steps: [],
+        largestDrop: null,
+        landingViews: 25,
+        checkouts: 3,
+        fulfillmentFailed: 0,
+      },
+      bottleneck: { level: 3, label: "funnel", detail: "no purchases" },
+      openExperimentIds: [],
+      errors: [],
+    } as any,
+  });
+  assert.ok(items.length >= 4);
+  const kinds = items.map((i) => i.patternKey!).join("|");
+  assert.ok(kinds.includes("conv:cta_directness"));
+  assert.ok(kinds.includes("conv:guarantee"));
+  assert.ok(kinds.includes("conv:urgency"));
+});
+
+test("conversion lab is silent when no verified traffic yet", async () => {
+  const { proposeConversionExperiments } = await import("@revenueos/core");
+  const items = proposeConversionExperiments({
+    observation: {
+      observedAt: new Date().toISOString(),
+      money: {
+        revenueUsd: 0,
+        purchases: 0,
+        awaitingPayment: 0,
+        refunded: 0,
+        estimatedVariableCostUsd: 0,
+        estimatedProfitUsd: 0,
+        mrr: 0,
+        arr: 0,
+      },
+      funnel: {
+        steps: [],
+        largestDrop: null,
+        landingViews: 0,
+        checkouts: 0,
+        fulfillmentFailed: 0,
+      },
+      bottleneck: { level: 2, label: "no buyers", detail: "invisible" },
+      openExperimentIds: [],
+      errors: [],
+    } as any,
+  });
+  assert.equal(items.length, 0);
+});
+
+test("concrete escalations propose specific providers with cost", async () => {
+  const { proposeUnlocksForBannedMechanisms } = await import("@revenueos/core");
+  const proposals = proposeUnlocksForBannedMechanisms({
+    bannedMechanisms: new Set(["owned_content", "owned_distribution"]),
+    siteId: "raiseready",
+  });
+  assert.ok(proposals.length >= 1);
+  assert.ok(proposals[0]!.providers.length >= 1);
+  assert.ok(typeof proposals[0]!.providers[0]!.costPerMonthUsd === "number");
+  // Owned content is banned → should NOT be top proposal
+  assert.notEqual(proposals[0]!.mechanism, "owned_content");
+});
+
+test("owner-blocked business is suspended and enqueue is skipped", async () => {
+  const { evaluateBusinessSuspension } = await import("@revenueos/core");
+  const v = evaluateBusinessSuspension({
+    context: {
+      siteId: "mendhaus",
+      displayName: "Mendhaus",
+      industry: "retail",
+      products: [],
+      funnelSteps: [],
+      brandVoice: "",
+      allowedChannels: [],
+      autonomousDailyCapUsd: 0,
+      timezone: "UTC",
+      constraints: ["OWNER_BLOCKED_FULFILLMENT"],
+    } as any,
+  });
+  assert.equal(v.suspended, true);
+  assert.ok(v.blockingConstraints.includes("OWNER_BLOCKED_FULFILLMENT"));
+});
+
+test("portfolio digest marks zero-action FCM cycle as FAILED", async () => {
+  const {
+    buildPortfolioDigest,
+    formatPortfolioOwnerEmail,
+    portfolioDigestSubject,
+  } = await import("@revenueos/core");
+  const digest = buildPortfolioDigest({
+    windowStart: "2026-08-09T06:00:00.000Z",
+    windowEnd: "2026-08-09T07:00:00.000Z",
+    sites: [
+      {
+        siteId: "raiseready",
+        displayName: "RaiseReady",
+        url: "https://raiseready.example",
+        commerciallyLive: true,
+        checkoutOpen: true,
+        purchases: 0,
+        revenueUsd: 0,
+        firstCustomerMode: true,
+        firstCustomerStage: "buyer_exposure",
+        actionsCompleted: 0,
+        exposureNotes: ["https://raiseready.example/topics/x"],
+        blockers: [],
+        durableLedger: "ephemeral",
+      },
+    ],
+  });
+  assert.equal(digest.cycleStatus, "failed");
+  assert.equal(digest.totalActionsCompleted, 0);
+  const text = formatPortfolioOwnerEmail(digest);
+  assert.match(text, /CYCLE FAILED|FAILED/);
+  assert.match(text, /THIS HOUR/);
+  assert.match(portfolioDigestSubject(digest), /CYCLE FAILED/);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Learning & self-improvement layer
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("knowledge-graph records and queries outcome edges", async () => {
+  const { recordOutcomeEdge, queryKnowledgeGraph, createFileExperimentStore } =
+    await import("@revenueos/core");
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-kg-"));
+  const store = createFileExperimentStore(dir);
+  await recordOutcomeEdge({
+    store,
+    edge: {
+      siteId: "raiseready",
+      segment: "small_biz_owner",
+      mechanism: "direct_outreach",
+      surface: "email",
+      outcome: "commercial",
+      revenueUsd: 199,
+      business: "raiseready",
+    },
+  });
+  await recordOutcomeEdge({
+    store,
+    edge: {
+      siteId: "raiseready",
+      segment: "small_biz_owner",
+      mechanism: "owned_content",
+      surface: "blog",
+      outcome: "verified_exposure",
+      revenueUsd: 0,
+      business: "raiseready",
+    },
+  });
+  const q = await queryKnowledgeGraph({
+    store,
+    siteId: "raiseready",
+    query: { segment: "small_biz_owner" },
+  });
+  assert.equal(q.edges.length, 2);
+  assert.equal(q.aggregate.commercialWins, 1);
+  assert.ok(q.aggregate.revenueUsd >= 199);
+  assert.equal(q.aggregate.topMechanisms[0]!.mechanism, "direct_outreach");
+});
+
+test("attribution-ml gives higher weight to more recent pursuits", async () => {
+  const { attributeSignalToPatterns } = await import("@revenueos/core");
+  const now = new Date("2026-06-01T12:00:00.000Z");
+  const events: any[] = [
+    // Old pursuit — 24h before signal.
+    {
+      id: "e1",
+      pursuitId: "p1",
+      siteId: "s",
+      eventType: "executed",
+      createdAt: "2026-05-31T11:00:00.000Z",
+      detail: { ok: true, patternKey: "old-pattern", actionType: "publish_intent_page" },
+    },
+    // Recent pursuit — 1h before signal.
+    {
+      id: "e2",
+      pursuitId: "p2",
+      siteId: "s",
+      eventType: "executed",
+      createdAt: "2026-06-01T10:30:00.000Z",
+      detail: { ok: true, patternKey: "recent-pattern", actionType: "publish_intent_page" },
+    },
+    // Beacon event that could be attributed to either.
+    {
+      id: "s1",
+      pursuitId: "beacon",
+      siteId: "s",
+      eventType: "beacon",
+      createdAt: "2026-06-01T11:30:00.000Z",
+      detail: { kind: "page_view", url: "https://x.example/t" },
+    },
+  ];
+  const records = attributeSignalToPatterns({ events, now, decayHalfLifeMs: 6 * 3_600_000 });
+  const byKey = new Map<string, number>();
+  for (const r of records) byKey.set(r.patternKey, (byKey.get(r.patternKey) ?? 0) + r.weight);
+  assert.ok(
+    (byKey.get("recent-pattern") ?? 0) > (byKey.get("old-pattern") ?? 0),
+    "recent pursuit must dominate weight",
+  );
+});
+
+test("anomaly-detector fires on traffic spike vs baseline", async () => {
+  const { detectStreamAnomalies } = await import("@revenueos/core");
+  const now = new Date("2026-06-08T12:00:00.000Z");
+  // 7 days of low baseline: 1 view/day.
+  const events: any[] = [];
+  for (let i = 1; i <= 7; i++) {
+    events.push({
+      id: `b${i}`,
+      pursuitId: "beacon",
+      siteId: "raiseready",
+      eventType: "beacon",
+      createdAt: new Date(now.getTime() - (i + 1) * 24 * 3_600_000).toISOString(),
+      detail: { kind: "page_view", url: "https://r.example/t" },
+    });
+  }
+  // Current 24h: 100 views — a huge spike.
+  for (let i = 0; i < 100; i++) {
+    events.push({
+      id: `c${i}`,
+      pursuitId: "beacon",
+      siteId: "raiseready",
+      eventType: "beacon",
+      createdAt: new Date(now.getTime() - (i + 1) * 60_000).toISOString(),
+      detail: { kind: "page_view", url: "https://r.example/t" },
+    });
+  }
+  const found = detectStreamAnomalies({ events, now });
+  const spike = found.find((a) => a.kind === "traffic_spike");
+  assert.ok(spike, "should detect traffic spike");
+  assert.ok((spike!.current ?? 0) > (spike!.baseline ?? 0));
+});
+
+test("self-improving-strategist samples different prompts under different priors", async () => {
+  const { selectStrategistPromptVersion } = await import("@revenueos/core");
+  // Deterministic PRNG so we can compare arms head-to-head.
+  const rand = mulberry32(7);
+  // Give v1_direct many wins, v2_socratic many losses — v1 should dominate.
+  const outcomes = [
+    ...Array.from({ length: 30 }, () => ({ versionId: "v1_direct", siteId: "s", ok: true, ts: "" })),
+    ...Array.from({ length: 30 }, () => ({ versionId: "v2_socratic", siteId: "s", ok: false, ts: "" })),
+  ] as any[];
+  let v1 = 0;
+  let v2 = 0;
+  for (let i = 0; i < 60; i++) {
+    const s = selectStrategistPromptVersion({ outcomes, rand });
+    if (s.version.id === "v1_direct") v1 += 1;
+    else if (s.version.id === "v2_socratic") v2 += 1;
+  }
+  assert.ok(v1 > v2, `v1_direct should dominate; v1=${v1} v2=${v2}`);
+  // With NO outcomes and a different seed, sampling must still choose from >=2 versions.
+  const seen = new Set<string>();
+  const rand2 = mulberry32(11);
+  for (let i = 0; i < 40; i++) {
+    const s = selectStrategistPromptVersion({ outcomes: [], rand: rand2 });
+    seen.add(s.version.id);
+  }
+  assert.ok(seen.size >= 2, "with no outcomes the sampler should explore multiple prompts");
+});
+
+test("ltv-cac-model ranks direct_outreach above owned_content when direct_outreach has commercial signal", async () => {
+  const { mechanismProfitabilityRanking } = await import("@revenueos/core");
+  const posteriors: any = {
+    "outreach-a": {
+      patternKey: "outreach-a",
+      mechanism: "direct_outreach",
+      attempts: 5,
+      distributionAttempts: 0,
+      productionAttempts: 0,
+      verifiedExposures: 4,
+      intents: 3,
+      commercialOutcomes: 2,
+      commercialScore: 60,
+      banned: false,
+      lastAttemptAt: null,
+      firstAttemptAt: null,
+    },
+    "content-a": {
+      patternKey: "content-a",
+      mechanism: "owned_content",
+      attempts: 20,
+      distributionAttempts: 0,
+      productionAttempts: 20,
+      verifiedExposures: 0,
+      intents: 0,
+      commercialOutcomes: 0,
+      commercialScore: 0,
+      banned: false,
+      lastAttemptAt: null,
+      firstAttemptAt: null,
+    },
+  };
+  const ranking = mechanismProfitabilityRanking({
+    posteriors,
+    context: {
+      siteId: "s",
+      displayName: "S",
+      industry: "saas",
+      products: [{ id: "p1", name: "core", priceUsd: 199, marginEstimate: 0.7 }],
+      funnelSteps: [],
+      brandVoice: "",
+      allowedChannels: [],
+      autonomousDailyCapUsd: 0,
+      timezone: "UTC",
+      constraints: [],
+    } as any,
+  });
+  assert.equal(ranking[0]!.mechanism, "direct_outreach");
+  const outreachIdx = ranking.findIndex((r) => r.mechanism === "direct_outreach");
+  const contentIdx = ranking.findIndex((r) => r.mechanism === "owned_content");
+  assert.ok(
+    outreachIdx < contentIdx,
+    `direct_outreach (idx ${outreachIdx}) must rank above owned_content (idx ${contentIdx})`,
+  );
+});
+
+test("compliance-guard rejects URL whose robots.txt disallows POST-like paths", async () => {
+  const { shouldAllowExternalContact } = await import("@revenueos/core");
+  const fetchImpl = (async (url: string) => {
+    if (url.endsWith("/robots.txt")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => "User-agent: *\nDisallow: /submit\n",
+      } as any;
+    }
+    return { ok: false, status: 404, text: async () => "" } as any;
+  }) as unknown as typeof fetch;
+  const verdict = await shouldAllowExternalContact({
+    targetUrl: "https://example.com/submit/form",
+    action: "http_post",
+    fetchImpl,
+    timeoutMs: 200,
+  });
+  assert.equal(verdict.allowed, false);
+  assert.ok(verdict.reasons.some((r) => r.startsWith("robots_disallow")));
+
+  const okVerdict = await shouldAllowExternalContact({
+    targetUrl: "https://example.com/open/path",
+    action: "http_post",
+    fetchImpl,
+    timeoutMs: 200,
+  });
+  assert.equal(okVerdict.allowed, true);
+});
+
+test("target-tracking sets aggressiveness=high when 24h in with <5% progress", async () => {
+  const {
+    progressTowardTarget,
+    aggressivenessDial,
+    TARGET_DAILY_PROFIT_USD_PER_BUSINESS,
+  } = await import("@revenueos/core");
+  const p = progressTowardTarget({
+    observation: { estimatedProfitUsd: 200, revenueUsd: 500 } as any,
+    hoursSinceStart: 24,
+    siteId: "raiseready",
+  });
+  assert.equal(p.targetProfitUsd, TARGET_DAILY_PROFIT_USD_PER_BUSINESS);
+  assert.ok(p.progressPercent < 5);
+  assert.equal(p.status, "behind");
+  const dial = aggressivenessDial({
+    progressPercent: p.progressPercent,
+    hoursSinceStart: p.hoursSinceStart,
+  });
+  assert.equal(dial.level, "high");
+  assert.ok(dial.concurrencyMultiplier >= 2);
+  assert.ok(dial.mechanismExplorationMultiplier >= 2);
+  assert.ok(dial.mutationFrequencyMultiplier >= 2);
+  // On-pace baseline case: no scaling.
+  const baseline = aggressivenessDial({ progressPercent: 60, hoursSinceStart: 12 });
+  assert.equal(baseline.level, "low");
+  assert.equal(baseline.concurrencyMultiplier, 1);
+});
+
+test("owner-dialog falls back deterministically without an OpenAI key", async () => {
+  const { handleOwnerMessage } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const r = await handleOwnerMessage({
+      message: "pause turnoverkit and prioritize raiseready",
+      state: {
+        activeBusinesses: [
+          { siteId: "turnoverkit", displayName: "TurnoverKit", revenueUsd: 0 },
+          { siteId: "raiseready", displayName: "RaiseReady", revenueUsd: 12 },
+        ],
+      },
+    });
+    assert.equal(r.source, "deterministic");
+    const ops = r.proposedChanges.map((c) => c.op);
+    assert.ok(ops.includes("pause_business"));
+    assert.ok(ops.includes("prioritize_business"));
+  } finally {
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+  }
+});
+
+test("knowledge-graph transferrableInsights carries lessons across sites", async () => {
+  const { recordOutcomeEdge, transferrableInsights, createFileExperimentStore } =
+    await import("@revenueos/core");
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-kg-transfer-"));
+  const store = createFileExperimentStore(dir);
+  await recordOutcomeEdge({
+    store,
+    edge: {
+      siteId: "listinglift",
+      business: "listinglift",
+      segment: "airbnb_hosts",
+      mechanism: "community_participation",
+      surface: "hostforum",
+      outcome: "commercial",
+      revenueUsd: 89,
+    },
+  });
+  await recordOutcomeEdge({
+    store,
+    edge: {
+      siteId: "listinglift",
+      business: "listinglift",
+      segment: "airbnb_hosts",
+      mechanism: "community_participation",
+      surface: "hostforum",
+      outcome: "intent",
+    },
+  });
+  const insights = await transferrableInsights({
+    store,
+    sourceSiteId: "listinglift",
+    targetSiteId: "turnoverkit",
+    minScore: 4,
+  });
+  assert.ok(insights.length >= 1);
+  assert.equal(insights[0]!.mechanism, "community_participation");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Executor layer: web-search / buyer-discovery / public-outreach / schema /
+// revenue-hunter / LLM strategist wiring
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Install a stub for global fetch that returns a canned OpenAI Responses API
+ * body for the given payload. Restores the original fetch on `restore()`.
+ */
+function stubOpenAIFetch(
+  responseFor: (body: {
+    model: string;
+    input: unknown;
+    text?: unknown;
+    tools?: unknown;
+  }) => unknown,
+) {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    if (typeof url === "string" && url.includes("api.openai.com")) {
+      calls += 1;
+      const body = init?.body ? JSON.parse(init.body as string) : {};
+      const data = responseFor(body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          output_text: typeof data === "string" ? data : JSON.stringify(data),
+          usage: { input_tokens: 10, output_tokens: 40 },
+        }),
+        text: async () => (typeof data === "string" ? data : JSON.stringify(data)),
+      } as any;
+    }
+    return originalFetch(url as any, init as any);
+  }) as any;
+  return {
+    get calls() {
+      return calls;
+    },
+    restore() {
+      globalThis.fetch = originalFetch;
+    },
+  };
+}
+
+test("llm-strategist returns empty list when OPENAI_API_KEY absent", async () => {
+  const { proposeLlmStrategies } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const res = await proposeLlmStrategies({
+      context: {
+        siteId: "raiseready",
+        displayName: "RaiseReady",
+        industry: "saas",
+        products: [
+          { id: "p1", name: "Kit", priceUsd: 29, marginEstimate: 0.9 },
+        ],
+        funnelSteps: [],
+        brandVoice: "",
+        allowedChannels: [],
+        autonomousDailyCapUsd: 0,
+        timezone: "UTC",
+        constraints: [],
+      } as any,
+      observation: {
+        observedAt: new Date().toISOString(),
+        money: {
+          revenueUsd: 0,
+          purchases: 0,
+          awaitingPayment: 0,
+          refunded: 0,
+          estimatedVariableCostUsd: 0,
+          estimatedProfitUsd: 0,
+          mrr: 0,
+          arr: 0,
+        },
+        funnel: {
+          steps: [],
+          largestDrop: null,
+          landingViews: 0,
+          checkouts: 0,
+          fulfillmentFailed: 0,
+        },
+        bottleneck: { level: 1, label: "n/a", detail: "" },
+        openExperimentIds: [],
+        errors: [],
+      } as any,
+      bannedMechanisms: new Set(),
+      bannedPatterns: new Set(),
+      patternPosteriors: {},
+    });
+    assert.equal(res.opportunities.length, 0);
+    assert.equal(res.hypotheses.length, 0);
+    assert.match(res.reason ?? "", /OPENAI_API_KEY/);
+  } finally {
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+  }
+});
+
+test("web-search parses OpenAI response correctly given mocked fetch", async () => {
+  const { queryWebForBuyingIntent } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "sk-test-1234567890123456789012345";
+  const stub = stubOpenAIFetch(() => ({
+    results: [
+      {
+        url: "https://forum.example.com/thread/1",
+        snippet: "how do I raise starting salary",
+        buyerSignal: "high",
+        angle: "point them to the negotiation kit",
+      },
+      {
+        url: "not-a-url",
+        snippet: "ignore me",
+        buyerSignal: "low",
+        angle: "n/a",
+      },
+    ],
+  }));
+  try {
+    const res = await queryWebForBuyingIntent({
+      topic: "salary negotiation",
+      industry: "career",
+      personas: ["knowledge worker"],
+      maxResults: 4,
+    });
+    assert.equal(res.ok, true);
+    assert.equal(res.results.length, 1);
+    assert.equal(res.results[0]!.buyerSignal, "high");
+    assert.match(res.results[0]!.url, /^https:\/\//);
+    assert.ok(stub.calls >= 1, "should call OpenAI at least once");
+  } finally {
+    stub.restore();
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+    else delete process.env.OPENAI_API_KEY;
+  }
+});
+
+test("buyer-discovery filters low-score leads", async () => {
+  const { discoverBuyers, filterLowScoreLeads } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "sk-test-1234567890123456789012345";
+  const stub = stubOpenAIFetch((body) => {
+    const msgs = ((body.input as any[]) ?? []).map((m) =>
+      (m.content ?? []).map((c: any) => c.text ?? "").join(" "),
+    );
+    const asStr = msgs.join(" ");
+    if (body.tools) {
+      // web_search call — return raw results.
+      return {
+        results: [
+          {
+            url: "https://forum.example.com/a",
+            snippet: "buyer surface",
+            buyerSignal: "high",
+            angle: "kit",
+          },
+        ],
+      };
+    }
+    // second (non-tools) call: return leads with mixed scores.
+    return {
+      leads: [
+        {
+          url: "https://forum.example.com/a",
+          surface: "forum thread",
+          segment: "seg1",
+          whyMatch: "buyer asking specifically about the product",
+          reachMethod: "public_form",
+          score: 82,
+        },
+        {
+          url: "https://blog.example.com/b",
+          surface: "blog comment",
+          segment: "seg2",
+          whyMatch: "tangential",
+          reachMethod: "blog_comment",
+          score: 12,
+        },
+      ],
+    };
+    void asStr;
+  });
+  try {
+    const res = await discoverBuyers({
+      topic: "salary",
+      productName: "RaiseReady",
+      productDescription: "salary negotiation kit",
+      minScore: 40,
+      maxLeads: 5,
+    });
+    assert.equal(res.ok, true);
+    assert.equal(res.leads.length, 1);
+    assert.equal(res.leads[0]!.url, "https://forum.example.com/a");
+    // Direct filter helper should agree.
+    const filtered = filterLowScoreLeads(
+      [
+        {
+          url: "https://a.example",
+          surface: "s",
+          segment: "seg",
+          whyMatch: "w",
+          reachMethod: "public_form",
+          score: 30,
+        },
+        {
+          url: "https://b.example",
+          surface: "s",
+          segment: "seg",
+          whyMatch: "w",
+          reachMethod: "public_form",
+          score: 70,
+        },
+      ],
+      40,
+    );
+    assert.equal(filtered.length, 1);
+    assert.equal(filtered[0]!.url, "https://b.example");
+  } finally {
+    stub.restore();
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+    else delete process.env.OPENAI_API_KEY;
+  }
+});
+
+test("public-outreach rejects when LLM says the message is templated", async () => {
+  const { draftOutreachMessage } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "sk-test-1234567890123456789012345";
+  const stub = stubOpenAIFetch(() => ({
+    subject: "Hello",
+    message:
+      "Hi there — we saw your site and thought you'd love our kit. Learn more today.",
+    templated: true,
+    refusalReason: "no personalization signal from surface",
+  }));
+  try {
+    const res = await draftOutreachMessage({
+      lead: {
+        url: "https://forum.example.com/a",
+        surface: "forum",
+        segment: "s",
+        whyMatch: "",
+        reachMethod: "public_form",
+        score: 55,
+      },
+      brand: {
+        displayName: "RaiseReady",
+        supportEmail: "hi@raiseready.example",
+        productName: "Kit",
+        productPriceUsd: 29,
+      },
+      appUrl: "https://raiseready.example",
+    });
+    assert.equal(res.ok, false);
+    assert.equal(res.templated, true);
+    assert.match(res.reason ?? "", /personalization|templated/i);
+  } finally {
+    stub.restore();
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+    else delete process.env.OPENAI_API_KEY;
+  }
+});
+
+test("schema-enrichment produces valid JSON-LD with Product + Offer types", async () => {
+  const { enrichPageSchema } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "sk-test-1234567890123456789012345";
+  const stub = stubOpenAIFetch(() => ({
+    metaTitle: "Best salary negotiation kit — RaiseReady",
+    metaDescription: "Concrete scripts and templates to raise your salary.",
+    faq: [
+      { q: "Does this work remote?", a: "Yes, all templates work over email." },
+      { q: "How long?", a: "Instant download after purchase." },
+      { q: "Refund?", a: "Full refund within 14 days." },
+    ],
+    howto: {
+      name: "Negotiate a raise in 3 steps",
+      steps: [
+        { name: "Prep", text: "Gather comp data" },
+        { name: "Ask", text: "Send the email template" },
+        { name: "Close", text: "Follow the response ladder" },
+      ],
+    },
+  }));
+  try {
+    const res = await enrichPageSchema({
+      brand: {
+        siteId: "raiseready",
+        displayName: "RaiseReady",
+        domain: "raiseready.example",
+        product: {
+          name: "Salary Negotiation Kit",
+          priceUsd: 29,
+          description: "scripts + templates",
+        },
+      },
+      slug: "how-to-negotiate-salary",
+      door: {
+        slug: "how-to-negotiate-salary",
+        title: "How to negotiate a higher salary",
+        intentQuery: "how to negotiate salary",
+        body: "Long body...",
+      },
+      appUrl: "https://raiseready.example",
+    });
+    assert.equal(res.ok, true);
+    // The output is a <script> tag wrapping a JSON array of schema.org nodes.
+    const inner = res.jsonLd.replace(/^<script[^>]*>/, "").replace(/<\/script>$/, "");
+    const nodes = JSON.parse(inner) as Array<Record<string, unknown>>;
+    assert.ok(Array.isArray(nodes));
+    const product = nodes.find((n) => n["@type"] === "Product");
+    assert.ok(product, "must include a Product node");
+    const offer = (product as any).offers;
+    assert.equal(offer["@type"], "Offer");
+    assert.equal(offer.priceCurrency, "USD");
+    assert.equal(String(offer.price), "29.00");
+    const faq = nodes.find((n) => n["@type"] === "FAQPage");
+    assert.ok(faq, "must include a FAQPage node");
+    assert.ok(res.meta.title.length > 0);
+  } finally {
+    stub.restore();
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+    else delete process.env.OPENAI_API_KEY;
+  }
+});
+
+test("revenue-hunter returns a focus site given portfolio snapshots", async () => {
+  const { huntPortfolioRevenue } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "sk-test-1234567890123456789012345";
+  const stub = stubOpenAIFetch(() => ({
+    focusSiteId: "raiseready",
+    mechanismToScale: "direct_outreach",
+    businessesToSuspendThisCycle: ["waitroom"],
+    portfolioInsight:
+      "RaiseReady has real intent signal; scale outreach to close the first sale.",
+  }));
+  try {
+    const snapshots = [
+      {
+        siteId: "raiseready",
+        displayName: "RaiseReady",
+        sequenceIndex: 1,
+        revenueUsd: 0,
+        contributionProfitUsd: 0,
+        purchases: 0,
+        landingViews: 42,
+        activePursuits: 3,
+        waitingForEvidence: 1,
+        claimableBacklog: 5,
+        firstCustomerMode: true,
+        profitPerVisitor: 0,
+        marginalEvProxy: 12,
+        learningValue: 10,
+        suspended: false,
+        bannedPatternCount: 0,
+      },
+      {
+        siteId: "waitroom",
+        displayName: "Waitroom",
+        sequenceIndex: 2,
+        revenueUsd: 0,
+        contributionProfitUsd: 0,
+        purchases: 0,
+        landingViews: 0,
+        activePursuits: 0,
+        waitingForEvidence: 0,
+        claimableBacklog: 0,
+        firstCustomerMode: true,
+        profitPerVisitor: 0,
+        marginalEvProxy: 4,
+        learningValue: 10,
+        suspended: false,
+        bannedPatternCount: 7,
+      },
+    ];
+    const verdict = await huntPortfolioRevenue({ snapshots });
+    assert.equal(verdict.focusSiteId, "raiseready");
+    assert.equal(verdict.mechanismToScale, "direct_outreach");
+    assert.deepEqual(verdict.businessesToSuspendThisCycle, ["waitroom"]);
+    assert.match(verdict.portfolioInsight, /RaiseReady/);
+    assert.ok(stub.calls >= 1);
+  } finally {
+    stub.restore();
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+    else delete process.env.OPENAI_API_KEY;
+  }
+});
+
+test("revenue-hunter falls back deterministically without an OpenAI key", async () => {
+  const { huntPortfolioRevenue } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const verdict = await huntPortfolioRevenue({
+      snapshots: [
+        {
+          siteId: "shopbeacon",
+          displayName: "ShopBeacon",
+          sequenceIndex: 1,
+          revenueUsd: 0,
+          contributionProfitUsd: 0,
+          purchases: 0,
+          landingViews: 60,
+          activePursuits: 2,
+          waitingForEvidence: 0,
+          claimableBacklog: 0,
+          firstCustomerMode: true,
+          profitPerVisitor: 0.05,
+          marginalEvProxy: 10,
+          learningValue: 10,
+          suspended: false,
+          bannedPatternCount: 0,
+        },
+        {
+          siteId: "bidbinder",
+          displayName: "BidBinder",
+          sequenceIndex: 2,
+          revenueUsd: 0,
+          contributionProfitUsd: 0,
+          purchases: 0,
+          landingViews: 0,
+          activePursuits: 0,
+          waitingForEvidence: 0,
+          claimableBacklog: 0,
+          firstCustomerMode: true,
+          profitPerVisitor: 0,
+          marginalEvProxy: 2,
+          learningValue: 10,
+          suspended: false,
+          bannedPatternCount: 0,
+        },
+      ],
+    });
+    assert.equal(verdict.focusSiteId, "shopbeacon");
+    assert.match(verdict.reason ?? "", /OPENAI_API_KEY|fallback/);
+  } finally {
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+  }
+});
+
+test("producthunt gate returns false when developer token is absent", async () => {
+  const { hasProductHuntToken, executeProductHuntHelpfulReply } = await import(
+    "@revenueos/core"
+  );
+  const prev = process.env.PRODUCTHUNT_DEVELOPER_TOKEN;
+  delete process.env.PRODUCTHUNT_DEVELOPER_TOKEN;
+  try {
+    assert.equal(hasProductHuntToken(), false);
+    // Executor must fail soft (not throw) when the token is missing.
+    const res = await executeProductHuntHelpfulReply({
+      rootDir: "/tmp/revenueos-ph-test-no-token",
+      productName: "Test Product",
+      productPriceUsd: 0,
+      productUrl: "https://example.test",
+      productKeywords: ["test"],
+      brandVoice: "friendly",
+    });
+    assert.equal(res.ok, false);
+    if (!res.ok) {
+      assert.match(res.detail, /PRODUCTHUNT_DEVELOPER_TOKEN|token missing/);
+    }
+  } finally {
+    if (prev !== undefined) process.env.PRODUCTHUNT_DEVELOPER_TOKEN = prev;
+  }
+});
+
+test("indiehackers product listing skipped when OPENAI_API_KEY missing", async () => {
+  const { executeIndieHackersProductListing } = await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const dir = await mkdtemp(path.join(tmpdir(), "revenueos-ih-listing-"));
+    const res = await executeIndieHackersProductListing({
+      rootDir: dir,
+      productName: "Test",
+      productPriceUsd: 12,
+      productUrl: "https://example.test",
+      productDescription: "does a thing",
+      audience: "builders",
+      brandVoice: "friendly",
+    });
+    assert.equal(res.ok, false);
+    if (!res.ok) assert.match(res.detail, /OPENAI_API_KEY|skipped/);
+  } finally {
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+  }
+});
+
+test("indiehackers community post gate returns cleanly with no cookie + no openai key", async () => {
+  const { executeIndieHackersCommunityPost, hasIndieHackersCookie } =
+    await import("@revenueos/core");
+  const prevKey = process.env.OPENAI_API_KEY;
+  const prevCookie = process.env.INDIEHACKERS_SESSION_COOKIE;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.INDIEHACKERS_SESSION_COOKIE;
+  try {
+    assert.equal(hasIndieHackersCookie(), false);
+    const dir = await mkdtemp(path.join(tmpdir(), "revenueos-ih-post-"));
+    const res = await executeIndieHackersCommunityPost({
+      rootDir: dir,
+      productName: "Test",
+      productPriceUsd: 12,
+      productUrl: "https://example.test",
+      productKeywords: ["test"],
+      brandVoice: "friendly",
+    });
+    // Must not throw. May either fail to fetch firehose or short-circuit
+    // on missing OpenAI key — both acceptable, neither should throw.
+    assert.equal(typeof res.ok, "boolean");
+  } finally {
+    if (prevKey !== undefined) process.env.OPENAI_API_KEY = prevKey;
+    if (prevCookie !== undefined)
+      process.env.INDIEHACKERS_SESSION_COOKIE = prevCookie;
+  }
+});
+
+test("hackernews show hn draft skipped when OPENAI_API_KEY missing", async () => {
+  const { executeHackerNewsShowHnDraft, hasHackerNewsWriteCreds } =
+    await import("@revenueos/core");
+  const prev = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    assert.equal(hasHackerNewsWriteCreds(), false);
+    const dir = await mkdtemp(path.join(tmpdir(), "revenueos-hn-show-"));
+    const res = await executeHackerNewsShowHnDraft({
+      rootDir: dir,
+      productName: "Test",
+      productUrl: "https://example.test",
+      productDescription: "does a thing",
+      audience: "builders",
+      brandVoice: "friendly",
+    });
+    assert.equal(res.ok, false);
+    if (!res.ok) assert.match(res.detail, /OPENAI_API_KEY|skipped/);
+  } finally {
+    if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+  }
+});
+
+test("hackernews intent discovery never throws even when firebase is unreachable", async () => {
+  const { executeHackerNewsIntentDiscovery } = await import("@revenueos/core");
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-hn-intent-"));
+  const res = await executeHackerNewsIntentDiscovery({
+    rootDir: dir,
+    productName: "Test",
+    productDescription: "does a thing",
+    productKeywords: ["revenueos-nonexistent-keyword-x9y8"],
+    productUrl: "https://example.test",
+  });
+  // Whatever the outcome, the executor must not throw.
+  assert.equal(typeof res.ok, "boolean");
+});
+
+test("gsc actions gate cleanly when GOOGLE_SERVICE_ACCOUNT_JSON is missing", async () => {
+  const {
+    hasGscCredentials,
+    executeGscQueryImport,
+    executeGscIndexationCheck,
+  } = await import("@revenueos/core");
+  const prev = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  delete process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  try {
+    assert.equal(hasGscCredentials(), false);
+    const dir = await mkdtemp(path.join(tmpdir(), "revenueos-gsc-"));
+    const q = await executeGscQueryImport({
+      rootDir: dir,
+      siteUrl: "sc-domain:example.test",
+      productName: "Test",
+      productDescription: "does a thing",
+    });
+    assert.equal(q.ok, false);
+    if (!q.ok) assert.match(q.detail, /no_gsc_credentials|skipped/);
+    const idx = await executeGscIndexationCheck({
+      rootDir: dir,
+      siteUrl: "sc-domain:example.test",
+      urls: ["https://example.test/"],
+    });
+    assert.equal(idx.ok, false);
+    if (!idx.ok) assert.match(idx.detail, /no_gsc_credentials|skipped/);
+  } finally {
+    if (prev !== undefined) process.env.GOOGLE_SERVICE_ACCOUNT_JSON = prev;
+  }
+});
+
+test("youtube actions gate cleanly when YOUTUBE_API_KEY is missing", async () => {
+  const {
+    hasYouTubeApiKey,
+    hasYouTubeOauthToken,
+    executeYouTubeIntentDiscovery,
+    executeYouTubeCommunityReplyDraft,
+  } = await import("@revenueos/core");
+  const prev = process.env.YOUTUBE_API_KEY;
+  const prevOauth = process.env.YOUTUBE_OAUTH_TOKEN;
+  delete process.env.YOUTUBE_API_KEY;
+  delete process.env.YOUTUBE_OAUTH_TOKEN;
+  try {
+    assert.equal(hasYouTubeApiKey(), false);
+    assert.equal(hasYouTubeOauthToken(), false);
+    const dir = await mkdtemp(path.join(tmpdir(), "revenueos-yt-"));
+    const dsc = await executeYouTubeIntentDiscovery({
+      rootDir: dir,
+      productName: "Test",
+      productDescription: "does a thing",
+      productKeywords: ["test"],
+      productUrl: "https://example.test",
+    });
+    assert.equal(dsc.ok, false);
+    if (!dsc.ok) assert.match(dsc.detail, /YOUTUBE_API_KEY|skipped/);
+    const drf = await executeYouTubeCommunityReplyDraft({
+      rootDir: dir,
+      productName: "Test",
+      productUrl: "https://example.test",
+      brandVoice: "friendly",
+    });
+    assert.equal(drf.ok, false);
+    if (!drf.ok) assert.match(drf.detail, /YOUTUBE_API_KEY|target comment|skipped/);
+  } finally {
+    if (prev !== undefined) process.env.YOUTUBE_API_KEY = prev;
+    if (prevOauth !== undefined) process.env.YOUTUBE_OAUTH_TOKEN = prevOauth;
+  }
+});
+
+test("exit-intent deploy is idempotent and returns a working snippet", async () => {
+  const { executeExitIntentDeploy, buildExitIntentSnippet } = await import(
+    "@revenueos/core"
+  );
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-exit-"));
+  const first = await executeExitIntentDeploy({
+    rootDir: dir,
+    siteId: "test-site",
+    appUrl: "https://example.test",
+  });
+  assert.equal(first.ok, true);
+  assert.match(first.snippet.scriptBody, /revos-exit-modal/);
+  assert.match(first.snippet.beaconEndpoint, /api\/exit-intent-capture$/);
+  // Idempotent: rerunning should not change the version.
+  const second = await executeExitIntentDeploy({
+    rootDir: dir,
+    siteId: "test-site",
+    appUrl: "https://example.test",
+  });
+  assert.equal(second.deployment.version, first.deployment.version);
+  const raw = buildExitIntentSnippet({
+    siteId: "x",
+    appUrl: "https://example.test",
+  });
+  assert.match(raw.scriptTag, /<script/);
+});
+
+test("order-bump deploy writes idempotent config and augments line items", async () => {
+  const {
+    executeStripeOrderBumpDeploy,
+    withStripeOrderBump,
+    loadStripeOrderBumpConfig,
+  } = await import("@revenueos/core");
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-bump-"));
+  const first = await executeStripeOrderBumpDeploy({
+    rootDir: dir,
+    siteId: "test-bump-site",
+    bumpPriceUsd: 9,
+    bumpLabel: "Add coaching",
+  });
+  assert.equal(first.ok, true);
+  if (first.ok) assert.equal(first.changed, true);
+  const second = await executeStripeOrderBumpDeploy({
+    rootDir: dir,
+    siteId: "test-bump-site",
+    bumpPriceUsd: 9,
+    bumpLabel: "Add coaching",
+  });
+  if (second.ok) assert.equal(second.changed, false);
+  const cfg = await loadStripeOrderBumpConfig({
+    rootDir: dir,
+    siteId: "test-bump-site",
+  });
+  assert.ok(cfg);
+  const items = withStripeOrderBump({
+    lineItems: [{ price: "price_primary", quantity: 1 }],
+    config: cfg,
+  });
+  assert.equal(items.length, 2);
+});
+
+test("signed UTM: sign then verify round-trips, mismatched sig rejected", async () => {
+  const { signUtm, verifyUtm, attachSignedUtm, classifyIncomingAttribution } =
+    await import("@revenueos/core");
+  const prev = process.env.REVENUEOS_ATTRIBUTION_SECRET;
+  process.env.REVENUEOS_ATTRIBUTION_SECRET = "test-attrib-secret-01234567890abcdef";
+  try {
+    const ts = Date.now();
+    const sig = await signUtm({
+      business_id: "biz-x",
+      ts,
+      utm_source: "reddit",
+      utm_medium: "revenueos",
+      utm_campaign: "autonomous",
+    });
+    assert.ok(sig, "signUtm should produce a signature when secret set");
+    const v = await verifyUtm({
+      sig: sig!,
+      businessId: "biz-x",
+      utm: {
+        utm_source: "reddit",
+        utm_medium: "revenueos",
+        utm_campaign: "autonomous",
+      },
+    });
+    assert.equal(v.valid, true);
+    // Tampered sig
+    const bad = await verifyUtm({
+      sig: sig! + "AA",
+      businessId: "biz-x",
+      utm: {
+        utm_source: "reddit",
+        utm_medium: "revenueos",
+        utm_campaign: "autonomous",
+      },
+    });
+    assert.equal(bad.valid, false);
+    // attachSignedUtm + classifyIncomingAttribution
+    const url = await attachSignedUtm({
+      url: "https://example.test/",
+      businessId: "biz-x",
+      source: "reddit",
+    });
+    const decoded = new URL(url);
+    assert.equal(decoded.searchParams.get("utm_source"), "reddit");
+    assert.ok(decoded.searchParams.get("utm_sig"), "signed sig should be attached");
+    const cls = await classifyIncomingAttribution({
+      requestUrl: url,
+      businessId: "biz-x",
+    });
+    assert.equal(cls.source, "signed");
+  } finally {
+    if (prev !== undefined)
+      process.env.REVENUEOS_ATTRIBUTION_SECRET = prev;
+    else delete process.env.REVENUEOS_ATTRIBUTION_SECRET;
+  }
+});
+
+test("signed UTM without secret: signUtm returns null, classifier says self-reported", async () => {
+  const { signUtm, classifyIncomingAttribution } = await import(
+    "@revenueos/core"
+  );
+  const prev = process.env.REVENUEOS_ATTRIBUTION_SECRET;
+  delete process.env.REVENUEOS_ATTRIBUTION_SECRET;
+  try {
+    const s = await signUtm({
+      business_id: "b",
+      ts: Date.now(),
+      utm_source: "x",
+    });
+    assert.equal(s, null);
+    const cls = await classifyIncomingAttribution({
+      requestUrl: "https://example.test/?utm_source=reddit",
+      businessId: "b",
+    });
+    assert.equal(cls.source, "self_reported");
+  } finally {
+    if (prev !== undefined) process.env.REVENUEOS_ATTRIBUTION_SECRET = prev;
+  }
+});
+
+test("action-class: new actions get correct class + mechanism", async () => {
+  const { classifyExecutionActionClass, classifyMechanism } = await import(
+    "@revenueos/core"
+  );
+  assert.equal(
+    classifyExecutionActionClass("hackernews_intent_discovery"),
+    "intent",
+  );
+  assert.equal(
+    classifyExecutionActionClass("youtube_intent_discovery"),
+    "intent",
+  );
+  assert.equal(
+    classifyExecutionActionClass("gsc_query_import"),
+    "intent",
+  );
+  assert.equal(
+    classifyExecutionActionClass("gsc_indexation_check"),
+    "distribution",
+  );
+  assert.equal(
+    classifyExecutionActionClass("indiehackers_product_listing_draft"),
+    "production",
+  );
+  assert.equal(
+    classifyExecutionActionClass("hackernews_show_hn_draft"),
+    "production",
+  );
+  assert.equal(
+    classifyMechanism({ actionType: "hackernews_show_hn_draft" }),
+    "external_placement",
+  );
+  assert.equal(
+    classifyMechanism({ actionType: "indiehackers_community_post_draft" }),
+    "community_participation",
+  );
+  assert.equal(
+    classifyMechanism({ actionType: "youtube_community_reply_draft" }),
+    "community_participation",
+  );
+  assert.equal(
+    classifyMechanism({ actionType: "gsc_query_import" }),
+    "owned_content",
+  );
+  assert.equal(
+    classifyMechanism({ actionType: "exit_intent_deploy" }),
+    "conversion_optimization",
+  );
+  assert.equal(
+    classifyMechanism({ actionType: "order_bump_deploy" }),
+    "conversion_optimization",
+  );
+});
+
+test("action registry: new actions registered with proper cooldowns", async () => {
+  const { ACTION_REGISTRY } = await import("@revenueos/core");
+  const required = {
+    indiehackers_product_listing_draft: 43_200,
+    indiehackers_community_post_draft: 240,
+    hackernews_show_hn_draft: 43_200,
+    hackernews_intent_discovery: 60,
+    gsc_query_import: 360,
+    gsc_indexation_check: 720,
+    youtube_intent_discovery: 90,
+    youtube_community_reply_draft: 180,
+    exit_intent_deploy: 43_200,
+    order_bump_deploy: 10_080,
+    gumroad_product_sync: 10_080,
+    gumroad_sales_import: 360,
+  };
+  for (const [t, cd] of Object.entries(required)) {
+    const entry = ACTION_REGISTRY[t];
+    assert.ok(entry, `expected registry entry for ${t}`);
+    assert.equal(entry.cooldownMinutes, cd, `cooldown mismatch for ${t}`);
+  }
+});
+
+test("llm-strategist: new actions in LLM_PROPOSABLE_ACTIONS enum", async () => {
+  const { LLM_PROPOSABLE_ACTIONS } = await import("@revenueos/core");
+  const list = LLM_PROPOSABLE_ACTIONS as readonly string[];
+  for (const t of [
+    "indiehackers_product_listing_draft",
+    "indiehackers_community_post_draft",
+    "hackernews_show_hn_draft",
+    "hackernews_intent_discovery",
+    "gsc_query_import",
+    "gsc_indexation_check",
+    "youtube_intent_discovery",
+    "youtube_community_reply_draft",
+    "exit_intent_deploy",
+    "order_bump_deploy",
+    "gumroad_product_sync",
+    "gumroad_sales_import",
+  ]) {
+    assert.ok(list.includes(t), `LLM_PROPOSABLE_ACTIONS missing ${t}`);
+  }
+});
+
+test("gumroad actions gate cleanly when GUMROAD_ACCESS_TOKEN is missing", async () => {
+  const {
+    hasGumroadCreds,
+    executeGumroadProductSync,
+    executeGumroadSalesImport,
+  } = await import("@revenueos/core");
+  const prev = process.env.GUMROAD_ACCESS_TOKEN;
+  delete process.env.GUMROAD_ACCESS_TOKEN;
+  try {
+    assert.equal(hasGumroadCreds(), false);
+    const dir = await mkdtemp(path.join(tmpdir(), "revenueos-gumroad-"));
+    const sync = await executeGumroadProductSync({
+      rootDir: dir,
+      siteId: "test",
+      productName: "Test Kit",
+      productDescription: "A test product",
+      productUrl: "https://example.test",
+      priceUsd: 19,
+    });
+    assert.equal(sync.ok, false);
+    assert.match(sync.detail, /skipped|GUMROAD_ACCESS_TOKEN/);
+    const sales = await executeGumroadSalesImport({
+      rootDir: dir,
+      siteId: "test",
+    });
+    assert.equal(sales.ok, false);
+    assert.match(sales.detail, /skipped|GUMROAD_ACCESS_TOKEN/);
+  } finally {
+    if (prev !== undefined) process.env.GUMROAD_ACCESS_TOKEN = prev;
+  }
+});
+
+test("channel discovery produces business-specific candidates (mock LLM)", async () => {
+  const { discoverChannels } = await import("@revenueos/core");
+  const resume = await discoverChannels({
+    context: {
+      siteId: "resumeforge",
+      displayName: "ResumeForge",
+      industry: "career_tools",
+      products: [{ name: "ResumeForge Kit", priceUsd: 29, marginEstimate: 0.9 }],
+      funnelSteps: ["landing", "checkout", "purchase"],
+      brandVoice: "direct",
+      allowedChannels: ["organic"],
+      autonomousDailyCapUsd: 0,
+      timezone: "UTC",
+      constraints: ["zero_ad_spend"],
+      audienceSegments: [{ label: "job seekers" }],
+    },
+    maxCandidates: 6,
+    llmOverride: async ({ productName }) => [
+      {
+        platform: "reddit",
+        capabilityId: "reddit",
+        audience: "job seekers rewriting resumes",
+        buyerIntent: "high",
+        intentScore: 88,
+        allowedActionGuess: "helpful_reply",
+        suggestedAction: "reddit_helpful_reply",
+        effortEstimate: 2,
+        evidenceUrls: ["https://reddit.com/r/resumes/example"],
+        angle: "critique-for-ATS",
+        businessSpecificReason: `${productName} helps job seekers on r/resumes with ATS-ready rewrites`,
+        ownedAssetIdea: {
+          kind: "calculator",
+          title: "ATS score calculator",
+          intentQuery: "ats resume score calculator",
+        },
+      },
+    ],
+  });
+  const turnover = await discoverChannels({
+    context: {
+      siteId: "turnoverkit",
+      displayName: "TurnoverKit",
+      industry: "property_management",
+      products: [{ name: "TurnoverKit", priceUsd: 49, marginEstimate: 0.85 }],
+      funnelSteps: ["landing", "checkout", "purchase"],
+      brandVoice: "ops",
+      allowedChannels: ["organic"],
+      autonomousDailyCapUsd: 0,
+      timezone: "UTC",
+      constraints: ["zero_ad_spend"],
+      audienceSegments: [{ label: "Airbnb hosts" }],
+    },
+    maxCandidates: 6,
+    llmOverride: async ({ productName }) => [
+      {
+        platform: "facebook",
+        capabilityId: "major_social_organic",
+        audience: "short-term rental hosts",
+        buyerIntent: "high",
+        intentScore: 80,
+        allowedActionGuess: "draft_post",
+        effortEstimate: 3,
+        evidenceUrls: ["https://example.com/str-host-group"],
+        angle: "turnover checklist",
+        businessSpecificReason: `${productName} is for Airbnb hosts running cleaner turnovers`,
+      },
+    ],
+  });
+  assert.equal(resume.ok, true);
+  assert.equal(turnover.ok, true);
+  const resumeBlob = resume.candidates
+    .map((c) => `${c.businessSpecificReason} ${c.audience} ${c.angle}`)
+    .join(" ")
+    .toLowerCase();
+  const turnoverBlob = turnover.candidates
+    .map((c) => `${c.businessSpecificReason} ${c.audience} ${c.angle}`)
+    .join(" ")
+    .toLowerCase();
+  assert.ok(resumeBlob.includes("resumeforge") || resumeBlob.includes("job seeker"));
+  assert.ok(turnoverBlob.includes("turnoverkit") || turnoverBlob.includes("airbnb"));
+  assert.notEqual(
+    resume.candidates[0]?.platform,
+    turnover.candidates[0]?.platform,
+    "different businesses should surface different top platforms from mocked discovery",
+  );
+  assert.ok(
+    resume.candidates.some((c) => c.capabilityId === "owned_intent_tools" || c.ownedAssetIdea),
+    "owned asset path should appear for ResumeForge calculator idea",
+  );
+});
+
+test("channel registry updates posteriors from commercial signal", async () => {
+  const {
+    channelFromCapability,
+    capabilityById,
+    updateChannelPosterior,
+    computeRevenuePerAction,
+  } = await import("@revenueos/core");
+  const cap = capabilityById("reddit");
+  assert.ok(cap);
+  let ch = channelFromCapability({
+    siteId: "resumeforge",
+    business: "ResumeForge",
+    audience: "job seekers",
+    capability: cap!,
+  });
+  assert.equal(ch.untested, true);
+  assert.equal(ch.experimentsRun, 0);
+  ch = updateChannelPosterior(ch, {
+    actionType: "reddit_helpful_reply",
+    purchases: 1,
+    revenueUsd: 29,
+    qualifiedVisitors: 4,
+    traffic: 12,
+    angle: "ats-critique",
+  });
+  assert.equal(ch.untested, false);
+  assert.equal(ch.purchases, 1);
+  assert.equal(ch.revenue, 29);
+  assert.ok(ch.alpha > 1);
+  assert.ok(ch.revenuePerAction > 0);
+  assert.equal(ch.revenuePerAction, computeRevenuePerAction(ch));
+  assert.ok(ch.winningAngles.includes("ats-critique"));
+});
+
+test("channel allocation prefers high revenue_per_action", async () => {
+  const {
+    channelFromCapability,
+    capabilityById,
+    updateChannelPosterior,
+    allocateChannelEffort,
+  } = await import("@revenueos/core");
+  const reddit = capabilityById("reddit")!;
+  const social = capabilityById("major_social_organic")!;
+  let winner = channelFromCapability({
+    siteId: "site-a",
+    business: "A",
+    capability: reddit,
+  });
+  let loser = channelFromCapability({
+    siteId: "site-a",
+    business: "A",
+    capability: social,
+  });
+  for (let i = 0; i < 6; i++) {
+    winner = updateChannelPosterior(winner, {
+      purchases: 1,
+      revenueUsd: 40,
+      qualifiedVisitors: 3,
+      actionType: "reddit_helpful_reply",
+    });
+  }
+  for (let i = 0; i < 6; i++) {
+    loser = updateChannelPosterior(loser, {
+      purchases: 0,
+      revenueUsd: 0,
+      traffic: 0,
+      actionType: "buyer_discovery",
+      success: false,
+    });
+  }
+  // Deterministic RNG biased high then low — still should rank winner first
+  // across many samples because posterior mass dominates.
+  let winnerFirst = 0;
+  for (let seed = 0; seed < 40; seed++) {
+    let s = seed + 1;
+    const rand = () => {
+      s = (s * 1664525 + 1013904223) % 4294967296;
+      return s / 4294967296;
+    };
+    const arms = allocateChannelEffort({
+      channels: [loser, winner],
+      rand,
+      limit: 2,
+    });
+    if (arms[0]?.channel.id === winner.id) winnerFirst += 1;
+  }
+  assert.ok(
+    winnerFirst >= 28,
+    `expected high-RPA channel to win most allocations, got ${winnerFirst}/40`,
+  );
+});
+
+test("channel registry persists via file store and transfers portfolio winners", async () => {
+  const {
+    createFileExperimentStore,
+    runChannelRegistryTick,
+    channelFromCapability,
+    capabilityById,
+    updateChannelPosterior,
+    transferChannelHypotheses,
+  } = await import("@revenueos/core");
+  const dir = await mkdtemp(path.join(tmpdir(), "revenueos-channels-"));
+  const store = createFileExperimentStore(dir);
+  const context = {
+    siteId: "resumeforge",
+    displayName: "ResumeForge",
+    industry: "career_tools",
+    products: [{ name: "ResumeForge Kit", priceUsd: 29, marginEstimate: 0.9 }],
+    funnelSteps: ["landing", "checkout", "purchase"],
+    brandVoice: "direct",
+    allowedChannels: ["organic"],
+    autonomousDailyCapUsd: 0,
+    timezone: "UTC",
+    constraints: ["zero_ad_spend"],
+    audienceSegments: [{ label: "job seekers" }],
+  };
+  const tick = await runChannelRegistryTick({
+    store,
+    context,
+    candidates: [
+      {
+        platform: "reddit",
+        capabilityId: "reddit",
+        category: "communities",
+        audience: "job seekers",
+        buyerIntent: "high",
+        intentScore: 90,
+        allowedActionGuess: "helpful_reply",
+        suggestedAction: "reddit_helpful_reply",
+        actionTypes: ["reddit_helpful_reply", "reddit_discover_intent"],
+        mechanism: "community_participation",
+        effortEstimate: 2,
+        evidenceUrls: ["https://reddit.com/r/resumes"],
+        angle: "ats",
+        postingRules: [],
+        contentFormats: ["helpful_reply"],
+        businessSpecificReason: "ResumeForge buyers ask ATS questions on Reddit",
+      },
+    ],
+    rand: () => 0.5,
+  });
+  assert.ok(tick.channels.length >= 1);
+  assert.ok(tick.opportunities.some((o) => o.safeActionType));
+  const reloaded = await store.listChannels!("resumeforge");
+  assert.ok(reloaded.length >= 1);
+
+  let peer = channelFromCapability({
+    siteId: "raiseready",
+    business: "RaiseReady",
+    capability: capabilityById("reddit")!,
+  });
+  peer = updateChannelPosterior(peer, {
+    purchases: 2,
+    revenueUsd: 78,
+    angle: "salary-thread",
+  });
+  const transferred = transferChannelHypotheses({
+    local: tick.channels,
+    peerChannels: [peer],
+    context,
+  });
+  const redditLocal = transferred.find((c) => c.capabilityId === "reddit");
+  assert.ok(redditLocal);
+  assert.ok(
+    (redditLocal!.winningAngles ?? []).some((a) => a.includes("transfer:")),
+    "winning peer angle should transfer as hypothesis",
+  );
+});
+
+test("channel actions registered with cooldowns and mechanisms", async () => {
+  const {
+    ACTION_REGISTRY,
+    LLM_PROPOSABLE_ACTIONS,
+    classifyMechanism,
+    PERMISSIONLESS_ORGANIC_TYPES,
+  } = await import("@revenueos/core");
+  for (const t of ["publish_intent_tool", "publish_calculator", "channel_discover"]) {
+    assert.ok(ACTION_REGISTRY[t], `missing ACTION_REGISTRY ${t}`);
+    assert.ok(
+      (LLM_PROPOSABLE_ACTIONS as readonly string[]).includes(t),
+      `missing LLM proposable ${t}`,
+    );
+    assert.ok(PERMISSIONLESS_ORGANIC_TYPES.has(t), `missing permissionless ${t}`);
+  }
+  assert.equal(
+    classifyMechanism({ actionType: "publish_calculator" }),
+    "owned_content",
+  );
+  assert.equal(
+    classifyMechanism({ actionType: "channel_discover" }),
+    "owned_distribution",
+  );
+});
+
+/* -------------------------------------------------------------------------- *
+ *  Exploration floor — HARD invariants that MUST hold every cycle in FCM.
+ *  Regression coverage for the "61 actions, 0 external distribution" failure.
+ * -------------------------------------------------------------------------- */
+
+type FloorOpp = {
+  id: string;
+  title: string;
+  metric: string;
+  category: "acquisition";
+  action: string;
+  expectedImpact: number;
+  confidence: number;
+  effort: number;
+  score: number;
+  safeActionType: string;
+  patternKey: string;
+  precursorMetric: "landing_views";
+};
+
+function floorOpp(
+  id: string,
+  actionType: string,
+  score: number,
+  overrides: Partial<FloorOpp> = {},
+): FloorOpp {
+  return {
+    id,
+    title: id,
+    metric: "landing_views",
+    category: "acquisition",
+    action: id,
+    expectedImpact: 5,
+    confidence: 0.5,
+    effort: 2,
+    score,
+    safeActionType: actionType,
+    patternKey: `p:${id}`,
+    precursorMetric: "landing_views",
+    ...overrides,
+  };
+}
+
+test("exploration floor A: FCM w/ 0 purchases promotes external-mechanism when top-N is all owned", async () => {
+  const { applyExplorationFloor, firstExternalMechanismInTopN } = await import(
+    "@revenueos/core"
+  );
+  const opps = [
+    floorOpp("publish-1", "publish_intent_tool", 100),
+    floorOpp("publish-2", "publish_calculator", 95),
+    floorOpp("publish-3", "publish_howto_cluster", 90),
+    floorOpp("publish-4", "distribute_owned_urls", 85),
+    floorOpp("reddit-help", "reddit_helpful_reply", 40),
+    floorOpp("email-cold", "email_cold_outreach", 35),
+  ];
+  const floor = applyExplorationFloor({
+    opportunities: opps,
+    firstCustomerModeActive: true,
+    purchases: 0,
+    buyerLeadCount: 5,
+    activeChannelCount: 10,
+    recentEvents: [],
+    siteId: "test-site",
+    topN: 4,
+  });
+  assert.equal(
+    floor.forcedExternal,
+    true,
+    "external-mechanism must be forced into top-N when all top-N are owned_content",
+  );
+  const mech = firstExternalMechanismInTopN(floor.opportunities, 4);
+  assert.notEqual(mech, null, "top-N must contain at least one external mechanism");
+});
+
+test("exploration floor B: cold channel registry (<5) forces channel_discover this cycle", async () => {
+  const { applyExplorationFloor } = await import("@revenueos/core");
+  const opps = [
+    floorOpp("publish-1", "publish_intent_tool", 100),
+    floorOpp("publish-2", "publish_calculator", 95),
+  ];
+  const floor = applyExplorationFloor({
+    opportunities: opps,
+    firstCustomerModeActive: true,
+    purchases: 0,
+    buyerLeadCount: 5,
+    activeChannelCount: 2,
+    recentEvents: [],
+    siteId: "test-site",
+    topN: 5,
+  });
+  assert.equal(
+    floor.forcedChannelDiscover,
+    true,
+    "channel_discover must be forced when the registry has <5 usable channels",
+  );
+  assert.ok(
+    floor.opportunities.some((o) => o.safeActionType === "channel_discover"),
+    "channel_discover opportunity must exist in the top-N",
+  );
+});
+
+test("exploration floor C: FCM with 0 buyer leads forces buyer_discovery this cycle", async () => {
+  const { applyExplorationFloor } = await import("@revenueos/core");
+  const opps = [
+    floorOpp("publish-1", "publish_intent_tool", 100),
+    floorOpp("publish-2", "publish_calculator", 95),
+  ];
+  const floor = applyExplorationFloor({
+    opportunities: opps,
+    firstCustomerModeActive: true,
+    purchases: 0,
+    buyerLeadCount: 0,
+    activeChannelCount: 10,
+    recentEvents: [],
+    siteId: "test-site",
+    topN: 5,
+  });
+  assert.equal(
+    floor.forcedBuyerDiscovery,
+    true,
+    "buyer_discovery must be forced when FCM w/ 0 durable leads",
+  );
+  assert.ok(
+    floor.opportunities.some((o) => o.safeActionType === "buyer_discovery"),
+    "buyer_discovery opportunity must exist in the top-N",
+  );
+});
+
+test("exploration floor E: no action type may be enqueued more than 2× per cycle in top-N", async () => {
+  const { applyExplorationFloor } = await import("@revenueos/core");
+  const opps = [
+    floorOpp("p1", "publish_intent_tool", 100),
+    floorOpp("p2", "publish_intent_tool", 99),
+    floorOpp("p3", "publish_intent_tool", 98),
+    floorOpp("p4", "publish_intent_tool", 97),
+    floorOpp("p5", "publish_intent_tool", 96),
+    floorOpp("p6", "publish_intent_tool", 95),
+    floorOpp("distribute", "distribute_owned_urls", 90),
+    floorOpp("reddit", "reddit_helpful_reply", 60),
+    floorOpp("email", "email_cold_outreach", 55),
+  ];
+  const floor = applyExplorationFloor({
+    opportunities: opps,
+    firstCustomerModeActive: true,
+    purchases: 0,
+    buyerLeadCount: 5,
+    activeChannelCount: 10,
+    recentEvents: [],
+    siteId: "test-site",
+    topN: 6,
+  });
+  const topSlice = floor.opportunities.slice(0, 6);
+  const publishHits = topSlice.filter(
+    (o) => o.safeActionType === "publish_intent_tool",
+  ).length;
+  assert.ok(
+    publishHits <= 2,
+    `publish_intent_tool must not appear more than 2× in top-N; saw ${publishHits}`,
+  );
+  assert.ok(
+    floor.cappedActionTypes.includes("publish_intent_tool"),
+    "cappedActionTypes must record the swap",
+  );
+});
+
+test("exploration floor: full stack composes A+B+C+E for a fresh FCM cycle (regression)", async () => {
+  const { applyExplorationFloor, classifyMechanism } = await import(
+    "@revenueos/core"
+  );
+  // Reproduces the 61-actions-0-external cycle: FCM, no purchases, no leads,
+  // cold channel registry, planner keeps proposing publish_intent_tool.
+  const opps = [
+    floorOpp("p1", "publish_intent_tool", 100),
+    floorOpp("p2", "publish_intent_tool", 99),
+    floorOpp("p3", "publish_intent_tool", 98),
+    floorOpp("distribute", "distribute_owned_urls", 90),
+    floorOpp("exit", "exit_intent_deploy", 85),
+    floorOpp("bump", "order_bump_deploy", 80),
+    floorOpp("gum", "gumroad_product_sync", 78),
+    floorOpp("reddit", "reddit_helpful_reply", 20),
+  ];
+  const floor = applyExplorationFloor({
+    opportunities: opps,
+    firstCustomerModeActive: true,
+    purchases: 0,
+    buyerLeadCount: 0,
+    activeChannelCount: 1,
+    recentEvents: [],
+    siteId: "test-site",
+    topN: 8,
+  });
+  assert.equal(floor.forcedChannelDiscover, true, "B must fire");
+  assert.equal(floor.forcedBuyerDiscovery, true, "C must fire");
+  const topSlice = floor.opportunities.slice(0, 8);
+  const externalCount = topSlice.filter((o) => {
+    const m = classifyMechanism({
+      actionType: o.safeActionType,
+      patternKey: o.patternKey,
+      category: o.category,
+    });
+    return (
+      m === "external_placement" ||
+      m === "community_participation" ||
+      m === "direct_outreach"
+    );
+  }).length;
+  assert.ok(
+    externalCount >= 1,
+    `top-N must contain ≥1 external mechanism; saw ${externalCount}`,
+  );
+  const publishHits = topSlice.filter(
+    (o) => o.safeActionType === "publish_intent_tool",
+  ).length;
+  assert.ok(
+    publishHits <= 2,
+    `publish_intent_tool capped at 2 in top-N; saw ${publishHits}`,
+  );
+});
+
+/* -------------------------------------------------------------------------- *
+ *  Exposure URL canonicalization — no deployment/preview hosts leak out.
+ * -------------------------------------------------------------------------- */
+
+test("canonical urls: every mapped site maps to a stable alias, not the deployment host", async () => {
+  const { CANONICAL_APP_URLS, canonicalAppUrl, isPreviewLikeUrl } = await import(
+    "@revenueos/storefront-kit"
+  );
+  for (const [siteId, url] of Object.entries(CANONICAL_APP_URLS)) {
+    assert.equal(
+      isPreviewLikeUrl(url, siteId),
+      false,
+      `canonical ${siteId} must not be preview-like (${url})`,
+    );
+    assert.equal(canonicalAppUrl(siteId), url);
+  }
+  // A deployment host with team suffix is preview-like.
+  assert.equal(
+    isPreviewLikeUrl(
+      "https://raiseready-8pnbiusk5-will739944c-1981s-projects.vercel.app",
+      "raiseready",
+    ),
+    true,
+  );
+  // Long random hex suffix is preview-like even without a team segment.
+  assert.equal(
+    isPreviewLikeUrl("https://bidbinder-abc123def4.vercel.app", "bidbinder"),
+    true,
+  );
+});
+
+test("resolveAppUrl prefers a good env URL and refuses preview URLs, falling back to canonical", async () => {
+  const { resolveAppUrl } = await import("@revenueos/storefront-kit");
+  // Env is canonical → use it.
+  assert.equal(
+    resolveAppUrl({
+      siteId: "raiseready",
+      envUrl: "https://raiseready-seven.vercel.app",
+    }),
+    "https://raiseready-seven.vercel.app",
+  );
+  // Env is a deployment host → fall back to canonical.
+  assert.equal(
+    resolveAppUrl({
+      siteId: "raiseready",
+      envUrl:
+        "https://raiseready-8pnbiusk5-will739944c-1981s-projects.vercel.app",
+    }),
+    "https://raiseready-seven.vercel.app",
+  );
+  // Env missing → canonical.
+  assert.equal(
+    resolveAppUrl({ siteId: "bidbinder", envUrl: undefined }),
+    "https://bidbinder.vercel.app",
+  );
 });

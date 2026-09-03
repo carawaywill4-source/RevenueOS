@@ -1,0 +1,25 @@
+{
+  "name": "@revenueos/portfolio-factory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Durable single-worker portfolio factory — sequential Forge builds with resume/checkpoint.",
+  "scripts": {
+    "start": "tsx src/cli.ts worker",
+    "inventory": "tsx src/cli.ts inventory",
+    "init": "tsx src/cli.ts init",
+    "prove-one": "tsx src/cli.ts prove-one",
+    "status": "tsx src/cli.ts status",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsx --test src/tests/*.test.ts"
+  },
+  "dependencies": {
+    "@revenueos/core": "file:../../packages/revenueos",
+    "@revenueos/storefront-kit": "file:../../packages/storefront-kit"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.23.10",
+    "typescript": "^5"
+  }
+}

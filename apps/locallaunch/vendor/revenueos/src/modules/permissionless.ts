@@ -1,0 +1,130 @@
+/**
+ * Permissionless organic doctrine.
+ *
+ * RevenueOS may autonomously do anything legal/truthful that generates organic
+ * leads WITHOUT owner intervention — as long as it does not require creating
+ * or logging into third-party accounts, spending money, or deception.
+ *
+ * Allowed by default: publish on owned properties, expand long-tail pages,
+ * free resources/tools that funnel to checkout, IndexNow/sitemap pings,
+ * public HTTP indexes, RSS/llms.txt, internal linking, offer/message tests
+ * on owned surfaces.
+ *
+ * Owner-gated: account signup/login, paid ads, cold spam, price changes.
+ */
+
+export const PERMISSIONLESS_DOCTRINE =
+  "Permissionless organic by default: execute any legal, truthful, " +
+  "account-free action that can create buyer exposure or a sale on owned " +
+  "or public surfaces. Never wait for the owner to log into Reddit, " +
+  "directories, social networks, or marketplaces. Ask the owner only when " +
+  "an action requires a new account, an existing login, money spend, or " +
+  "legal approval.";
+
+/**
+ * Actions that always need a human — narrow set per operator mandate:
+ * "no paid ads, no owner login required". Everything else is delegable.
+ */
+export const OWNER_REQUIRED_TYPES = new Set([
+  "create_account",
+  "login_account",
+  "oauth_connect",
+  "spend_ads",
+  "change_price",
+]);
+
+/**
+ * Permissionless organic acquisition + conversion actions the brain may run
+ * without the owner. Expand freely; keep out of OWNER_REQUIRED_TYPES.
+ */
+export const PERMISSIONLESS_ORGANIC_TYPES = new Set([
+  "scorecard_snapshot",
+  "email_daily_review",
+  "indexnow_submit",
+  "sitemap_ping",
+  "ping_search_engines",
+  "record_experiment",
+  "record_lesson",
+  "journal_decision",
+  "merch_optimize",
+  "activate_kit_deal",
+  "clear_promo",
+  "set_homepage_focus",
+  "set_free_shipping_threshold",
+  "feature_product",
+  "change_default_cta",
+  "publish_bundle",
+  "market_research",
+  "publish_intent_page",
+  "discovery_attack",
+  "retire_discovery_door",
+  "publish_free_resource",
+  "publish_programmatic_door",
+  "publish_lead_magnet",
+  "publish_howto_cluster",
+  "publish_comparison_page",
+  "publish_template_landing",
+  "publish_intent_tool",
+  "publish_calculator",
+  "publish_llms_txt",
+  "publish_rss_feed",
+  "distribute_owned_urls",
+  "internal_link_boost",
+  "refresh_discovery_door",
+  "rewrite_page_copy",
+  // Agent-tier permissionless actions (LLM + internet powered):
+  "web_research",
+  "buyer_discovery",
+  "channel_discover",
+  "public_form_outreach",
+  "directory_submit",
+  "syndicate_content",
+  "schema_enrichment",
+  "llm_hypothesize",
+  "deep_content_generate",
+  "cross_portfolio_link",
+  // Outreach to publicly-listed contact surfaces (public forms only, not PII):
+  "send_commercial_outreach",
+  // Reddit Devvit / draft path + Resend cold email (no owner login):
+  "reddit_helpful_reply",
+  "reddit_discover_intent",
+  "email_cold_outreach",
+  // Product Hunt developer-token comment path (no owner login at runtime):
+  "producthunt_helpful_reply",
+  // Indie Hackers (DRAFT by default, optional session-cookie writes):
+  "indiehackers_product_listing_draft",
+  "indiehackers_community_post_draft",
+  // Hacker News (DRAFT-first; discovery via public Firebase API):
+  "hackernews_show_hn_draft",
+  "hackernews_intent_discovery",
+  // Google Search Console (read-only signal ingestion):
+  "gsc_query_import",
+  "gsc_indexation_check",
+  // YouTube Data API v3 (read-only intent + optional write for replies):
+  "youtube_intent_discovery",
+  "youtube_community_reply_draft",
+  // Owned-property production features:
+  "exit_intent_deploy",
+  "order_bump_deploy",
+  // Gumroad marketplace (access-token writes + sales import):
+  "gumroad_product_sync",
+  "gumroad_sales_import",
+  // Zero-cost free listing / visual surfaces (draft-first):
+  "gbp_post",
+  "gbp_qa_answer",
+  "bing_places_post",
+  "apple_business_showcase",
+  "nextdoor_business_post",
+  "yelp_business_post",
+  "yelp_review_response",
+  "youtube_shorts_publish",
+]);
+
+export function isPermissionlessOrganic(type: string): boolean {
+  if (OWNER_REQUIRED_TYPES.has(type)) return false;
+  return PERMISSIONLESS_ORGANIC_TYPES.has(type);
+}
+
+export function isOwnerRequired(type: string): boolean {
+  return OWNER_REQUIRED_TYPES.has(type);
+}

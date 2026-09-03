@@ -17,11 +17,11 @@ export const KNOWN_CAPABILITY_GAPS = {
     importance: "high" as CapabilityImportance,
   },
   outreach_executor: {
-    desiredAction: "Run consented organic outreach / directory placement",
+    desiredAction: "Owner login for optional third-party accounts",
     reason:
-      "High-EV acquisition plays repeatedly require outreach the brain cannot execute autonomously.",
-    expectedValueUsd: 600,
-    importance: "high" as CapabilityImportance,
+      "Only account/login channels need the owner. Permissionless owned-property distribution is autonomous — do not block progress waiting for Reddit/directory logins.",
+    expectedValueUsd: 200,
+    importance: "medium" as CapabilityImportance,
   },
   paid_ads: {
     desiredAction: "Run paid acquisition tests under a spend cap",
@@ -46,6 +46,26 @@ export function importanceFromEv(
   if (pressure >= 800 || timesBlocked >= 7) return "high";
   if (pressure >= 200 || timesBlocked >= 3) return "medium";
   return "low";
+}
+
+/**
+ * Strip safeActionType when the adapter cannot execute it so ranking, money
+ * plan, and hunting stop treating missing limbs as executable.
+ */
+export function demoteUnavailableSafeActions(
+  opportunities: Opportunity[],
+  availableActionTypes: Set<string>,
+): Opportunity[] {
+  return opportunities.map((opportunity) => {
+    if (
+      !opportunity.safeActionType ||
+      availableActionTypes.has(opportunity.safeActionType)
+    ) {
+      return opportunity;
+    }
+    const { safeActionType: _removed, ...rest } = opportunity;
+    return rest;
+  });
 }
 
 export function capabilityForBlockedOpportunity(input: {

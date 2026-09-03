@@ -64,6 +64,11 @@ export default async function OwnerPage({
     return (
       <main className="mx-auto max-w-xl px-6 py-24 text-stone-700">
         <h1 className="font-serif text-3xl text-stone-900">Owner dashboard</h1>
+        <p className="mt-2 text-sm text-stone-600">
+          <a className="underline" href="/owner/portfolio">
+            Portfolio of 12 businesses
+          </a>
+        </p>
         <p className="mt-4 text-sm leading-6">
           This page is private. Open it with the dashboard token as{" "}
           <code className="rounded bg-stone-100 px-1">?t=…</code>.
@@ -90,6 +95,11 @@ export default async function OwnerPage({
         <h1 className="mt-2 font-serif text-4xl text-stone-900">
           Owner dashboard
         </h1>
+        <p className="mt-2 text-sm">
+          <a className="text-stone-700 underline" href="/owner/portfolio">
+            Portfolio · 12 businesses · effort order
+          </a>
+        </p>
         <p className="mt-2 text-sm text-stone-500">
           Generated {snapshot.generatedAt}. Not indexed.
           {snapshot.cycle

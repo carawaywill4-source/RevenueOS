@@ -1,0 +1,5 @@
+Activity_ID,Trade_Contractor,Zone_Area,Scope_Description,Crew_Size,Start_Date,Finish_Date,Predecessors,Inspection_Required,Critical_Notes
+ACT-101,Apex Concrete,Building A - Level 1,Pour Slab on Grade Grid A-E,8,Monday W1,Tuesday W1,ACT-098,Yes - City Inspector,Concrete pump arriving 06:30 AM
+ACT-102,Tri-State Steel,Building A - Level 2,Erect Structural Steel Framing,6,Wednesday W1,Friday W1,ACT-101,Yes - Special Deputy,Crane permit active through Friday
+ACT-103,Summit MEP,Building A - Level 1,Underground Rough-in Plumbing,4,Monday W2,Wednesday W2,ACT-101,Yes - Plumbing Rough,Pressure test required prior to backfill
+ACT-104,Elite Drywall,Building B - Level 2,Top-out Metal Stud Framing,6,Thursday W2,Tuesday W3,ACT-102,No,Awaiting RFI-004 ceiling height confirmation

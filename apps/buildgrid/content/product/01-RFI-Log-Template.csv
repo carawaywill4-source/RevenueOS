@@ -1,0 +1,5 @@
+RFI_Number,Date_Initiated,Spec_Section,Subject,Subcontractor,Assigned_To,Date_Required,Date_Answered,Status,Impact_Schedule,Impact_Cost,Notes
+RFI-001,2026-08-01,03 30 00,Slab Edge Reinforcement Detail at Grid D/4,Apex Concrete,Structural Eng,2026-08-06,2026-08-05,CLOSED,No,No,Approved as noted in Sketch SK-102
+RFI-002,2026-08-03,08 71 00,Level 2 Door Hardware Spec Conflict with Card Access,Tri-State Framing,Architect,2026-08-08,,OPEN,Yes,TBD,Awaiting revised hardware schedule from consultant
+RFI-003,2026-08-05,23 00 00,RTU-2 Duct Penetration vs Shear Wall Conflict,Summit MEP,Structural Eng,2026-08-10,,OPEN,No,No,Proposed 6-inch offset to the east
+RFI-004,2026-08-07,09 22 00,Ceiling Height Conflict in Corridor 104,Elite Drywall,Architect,2026-08-12,,PENDING,No,No,Field verify existing plumbing drop height

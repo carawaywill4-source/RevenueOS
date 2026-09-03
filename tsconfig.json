@@ -20,7 +20,8 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@revenueos/core": ["./packages/revenueos/src/index.ts"]
+      "@revenueos/core": ["./packages/revenueos/src/index.ts"],
+      "@revenueos/storefront-kit": ["./packages/storefront-kit/src/index.ts"]
     }
   },
   "include": [
@@ -31,5 +32,15 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "apps"]
+  "exclude": [
+    "node_modules",
+    "apps",
+    "revenueos",
+    "packages",
+    "services",
+    "tests",
+    "macos",
+    ".data",
+    "scripts"
+  ]
 }

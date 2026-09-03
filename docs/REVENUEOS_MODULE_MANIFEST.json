@@ -1,0 +1,2276 @@
+{
+  "generatedAt": "2026-08-09T22:39:19.326Z",
+  "package": "packages/revenueos",
+  "totalFiles": 110,
+  "modulesCount": 71,
+  "intelligenceCount": 17,
+  "memoryCount": 5,
+  "rule": "No RevenueOS brain module may be deleted without explicit owner approval.",
+  "modules": [
+    {
+      "filename": "adapters/example-static.ts",
+      "purpose": "Portability proof: a second adapter with no TributeReady imports that still satisfies SiteAdapter. Used in tests and as a template for Riley/etc.",
+      "imports": [
+        "./types",
+        "../ledger/file-store",
+        "../modules/conversion",
+        "../modules/economics",
+        "../types"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "adapters/types.ts",
+      "purpose": "Portable plug. Every site — TributeReady, Riley, any future customer — implements this and nothing else. The brain never imports a product's CMS,",
+      "imports": [
+        "../types",
+        "../ledger/seed",
+        "../ledger/store",
+        "../modules/profit-maximizer",
+        "../modules/organic-mastery"
+      ],
+      "callers": [
+        "adapters/example-static.ts",
+        "executive.ts",
+        "modules/operator-adapter.ts",
+        "modules/operator-loop.ts",
+        "modules/pursuit-engine.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "executive.ts",
+      "purpose": "The full loop: Observe → Model → Find Opportunity → Predict ROI → Prioritize → Act →",
+      "imports": [
+        "./adapters/types",
+        "./models",
+        "./modules/strategy",
+        "./modules/experimentation",
+        "./modules/attribution",
+        "./modules/diagnosis",
+        "./modules/economics",
+        "./modules/planner",
+        "./modules/ambition",
+        "./modules/money",
+        "./intelligence/calibration",
+        "./intelligence/bandit",
+        "./intelligence/forecast",
+        "./intelligence/anomaly",
+        "./intelligence/decision",
+        "./intelligence/shortfall",
+        "./intelligence/regime",
+        "./intelligence/meta",
+        "./intelligence/curriculum",
+        "./intelligence/kelly",
+        "./intelligence/hour",
+        "./intelligence/planner-quota",
+        "./modules/action-registry",
+        "./modules/discovery-governor",
+        "./modules/capability-gaps",
+        "./modules/profit-maximizer",
+        "./modules/organic-mastery",
+        "./memory/portable",
+        "./policy",
+        "./scorecard",
+        "./ledger/seed",
+        "./ledger/store",
+        "./types"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "index.ts",
+      "purpose": "(no docstring) index.ts",
+      "imports": [],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "stripe",
+        "openai",
+        "reddit",
+        "youtube",
+        "producthunt",
+        "gumroad"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/anomaly.ts",
+      "purpose": "Vigilance: catch sudden regressions in money precursors before they bleed. Compares the current observation against the recent scorecard history and",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "executive.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/bandit.ts",
+      "purpose": "Explore/exploit intelligence. The brain balances doubling down on levers that have won before against testing under-explored levers that might win more.",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/audience.ts",
+        "modules/pursuit-plan.ts",
+        "modules/strategy.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/calibration.ts",
+      "purpose": "Meta-learning: the brain scores its own past predictions against reality. If a category (say acquisition) systematically over-promises, its future expected",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/pursuit-plan.ts",
+        "modules/strategy.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/credible.ts",
+      "purpose": "Deterministic \"Thompson-like\" scoring via the upper credible bound of each arm's win-rate posterior. Explores uncertain high-upside arms without",
+      "imports": [
+        "../types",
+        "./statistics"
+      ],
+      "callers": [
+        "intelligence/decision.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/curriculum.ts",
+      "purpose": "Active learning curriculum under the organic mastery era. RevenueOS is the sole business manager. Until organic leads→sales is mastered,",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/decision.ts",
+      "purpose": "Decision theory: which experiment is worth running is NOT simply the one with the highest expected value. A lever we already understand teaches us little;",
+      "imports": [
+        "../types",
+        "./credible"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/forecast.ts",
+      "purpose": "Ordinary least-squares slope of y over evenly spaced cycles (oldest→newest).",
+      "imports": [
+        "../knowledge/commerce",
+        "../modules/northstar",
+        "../types"
+      ],
+      "callers": [
+        "executive.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/hour.ts",
+      "purpose": "Overdrive only when the adapter actually measured a $0 clock hour.",
+      "imports": [
+        "../types",
+        "../memory/portable"
+      ],
+      "callers": [
+        "executive.ts",
+        "intelligence/meta.ts",
+        "modules/ambition.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/hunting.ts",
+      "purpose": "Never wait on a single owner-gated channel. Concurrent bets must keep the machine hunting money on executable / open levers even while owner asks",
+      "imports": [
+        "../types"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/kelly.ts",
+      "purpose": "Kelly-inspired bet sizing. Maps edge and aggression into how many parallel experiments to run — more when the edge is uncertain and the shortfall is",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/meta.ts",
+      "purpose": "Meta-learner: the policy over policies. Because a $10k day is improbable for most early businesses, the brain must keep learning — exploration stays high",
+      "imports": [
+        "../types",
+        "./hour"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/planner-quota.ts",
+      "purpose": "Reject planner output that references unknown opportunities or unsafe actions.",
+      "imports": [
+        "node:crypto",
+        "../types"
+      ],
+      "callers": [
+        "executive.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/press.ts",
+      "purpose": "Money press: reverse-engineer the highest-velocity path from current state to a $10k day and mint concrete, ranked \"print\" moves — compound acquisition,",
+      "imports": [
+        "../types",
+        "../modules/northstar"
+      ],
+      "callers": [
+        "modules/strategy.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/regime.ts",
+      "purpose": "Detect the growth regime from scorecard history so the brain adapts its playbook: pre-revenue discovery, stagnation breakout, compounding scale, or",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/shortfall.ts",
+      "purpose": "Every day under the north star is a lost day = failing software. Money made for the customer is the only success. Learning exists to destroy",
+      "imports": [
+        "../types",
+        "../modules/northstar",
+        "../modules/success",
+        "../memory/portable"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/ambition.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/simulator.ts",
+      "purpose": "Lightweight scenario simulation. A one-time conversion win pays once; an acquisition win compounds as traffic accumulates; retention compounds on the",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "modules/planner.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "intelligence/statistics.ts",
+      "purpose": "Probabilistic reasoning primitives. The brain should be honest about how much it actually knows: small samples produce wide intervals and shrunken",
+      "imports": [],
+      "callers": [
+        "intelligence/credible.ts",
+        "modules/strategy.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "knowledge/audiences.ts",
+      "purpose": "Portable buyer archetypes — transferable \"stereotypes\" of who buys and why. These are evergreen behavioral models, not individuals: no end-user PII ever",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "modules/acquisition.ts",
+        "modules/audience.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "knowledge/commerce.ts",
+      "purpose": "Portable, evergreen commerce and unit-economics knowledge the brain consults when modeling and ranking. This is global transferable memory — not copy, not",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "intelligence/forecast.ts",
+        "modules/economics.ts",
+        "modules/strategy.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "knowledge/shopping-psychology.ts",
+      "purpose": "Transferable shopper-behavior patterns. These describe *why* buyers hesitate and how to reduce friction ethically — no dark patterns, no fake scarcity.",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "modules/conversion.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "knowledge/trends.ts",
+      "purpose": "Evergreen online-selling heuristics. Deliberately NOT a live news/scraping feed in this slice — these are durable patterns that survive across cycles and",
+      "imports": [],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "ledger/file-store.ts",
+      "purpose": "Durable enough for MVP and serverless-hostile environments where Supabase DDL has not been applied yet. Prefer Supabase store in production when ready.",
+      "imports": [
+        "node:fs/promises",
+        "node:path",
+        "../types",
+        "./store"
+      ],
+      "callers": [
+        "adapters/example-static.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [
+        "supabase",
+        "filesystem"
+      ],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "ledger/seed.ts",
+      "purpose": "Shape accepted for seeding; timestamps are filled by the executive.",
+      "imports": [
+        "../types",
+        "./store"
+      ],
+      "callers": [
+        "adapters/types.ts",
+        "executive.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "ledger/store.ts",
+      "purpose": "When set, prefer jobs whose actionType is not already waiting.",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "adapters/types.ts",
+        "executive.ts",
+        "ledger/file-store.ts",
+        "ledger/seed.ts",
+        "memory/portable.ts",
+        "modules/agent-executors.ts",
+        "modules/attribution.ts",
+        "modules/beacon.ts",
+        "modules/capability-gaps.ts",
+        "modules/channel-registry.ts",
+        "modules/experimentation.ts",
+        "modules/knowledge-graph.ts",
+        "modules/operator-adapter.ts",
+        "modules/pursuit-engine.ts",
+        "modules/pursuit-plan.ts",
+        "modules/self-improving-strategist.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "market/model.ts",
+      "purpose": "Build a portable market model from what the adapter can legally observe plus funnel evidence. The brain never scrapes competitor sites; it reasons over",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "models.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "memory/global.ts",
+      "purpose": "Global lessons travel with the product across sites. No PII.",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "memory/portable.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "memory/industry.ts",
+      "purpose": "(no docstring) industry.ts",
+      "imports": [
+        "../types"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "memory/portable.ts",
+      "purpose": "Portable memory — learning survives across businesses. Transferable lessons are stored as industry (or global) scope with stable ids",
+      "imports": [
+        "../ledger/store",
+        "../types",
+        "./global"
+      ],
+      "callers": [
+        "executive.ts",
+        "intelligence/hour.ts",
+        "intelligence/shortfall.ts",
+        "modules/attribution.ts",
+        "modules/discovery-governor.ts",
+        "modules/organic-mastery.ts",
+        "modules/pursuit-engine.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "memory/similarity.ts",
+      "purpose": "Similarity-aware lesson application + negative-transfer guards. Question: under what commercial conditions did this work, and how similar",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "memory/site.ts",
+      "purpose": "(no docstring) site.ts",
+      "imports": [
+        "../types"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "models.ts",
+      "purpose": "Compose the three portable models the executive reasons over. Pure function of context + observation + optional market signals — no site imports.",
+      "imports": [
+        "./modules/economics",
+        "./modules/conversion",
+        "./modules/audience",
+        "./market/model",
+        "./types"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/acquisition.ts",
+      "purpose": "Acquisition engine: get more qualified strangers in front of the offer. Traffic is never the excuse. The audience model always hands us a ranked plan",
+      "imports": [
+        "../knowledge/audiences",
+        "../types",
+        "./conversion"
+      ],
+      "callers": [
+        "modules/strategy.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/action-class.ts",
+      "purpose": "Action class taxonomy: production ≠ pursuit. RevenueOS is forbidden from confusing content creation with customer pursuit.",
+      "imports": [],
+      "callers": [
+        "modules/attribution-ml.ts",
+        "modules/channel-catalog.ts",
+        "modules/channel-discovery.ts",
+        "modules/channel-registry.ts",
+        "modules/concrete-escalations.ts",
+        "modules/exploration-floor.ts",
+        "modules/llm-strategist.ts",
+        "modules/ltv-cac-model.ts",
+        "modules/mechanism-bandit.ts",
+        "modules/mechanism-diversity.ts",
+        "modules/pattern-posterior.ts",
+        "modules/pursuit-engine.ts",
+        "modules/revenue-priority.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "reddit",
+        "google",
+        "youtube",
+        "producthunt",
+        "gumroad"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/action-registry.ts",
+      "purpose": "Canonical registry of autonomous actions the brain may execute.",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/pursuit-engine.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "reddit",
+        "google",
+        "youtube",
+        "producthunt",
+        "gumroad"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/agent-executors.ts",
+      "purpose": "Agent executors — the \"doing\" limb. These are the new-generation executors invoked by the pursuit engine when a",
+      "imports": [
+        "../ledger/store",
+        "../types",
+        "./web-intelligence",
+        "./openai-client"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "openai"
+      ],
+      "executionDependencies": [
+        "http"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/ambition.ts",
+      "purpose": "Competitive drive aimed at money made for the customer. Matching the prior record while under $10k/day is still failure.",
+      "imports": [
+        "../types",
+        "./northstar",
+        "../intelligence/shortfall",
+        "../intelligence/hour"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/anomaly-detector.ts",
+      "purpose": "Stream-anomaly detector. Runs over the durable pursuit-event stream to catch unusual signal that the",
+      "imports": [
+        "../types"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/attribution-ml.ts",
+      "purpose": "Attribution-ML: better credit assignment than the current attempt-share. Model: time-decay exponential. A signal received at time T attributes to",
+      "imports": [
+        "../types",
+        "./pattern-posterior",
+        "./action-class"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/attribution.ts",
+      "purpose": "An experiment is due for a verdict once its signal window has elapsed.",
+      "imports": [
+        "../ledger/store",
+        "../memory/portable",
+        "./success",
+        "../types"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/pursuit-engine.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/audience.ts",
+      "purpose": "Model who we sell to, where to reach them, and how hard the sale is. Two philosophies are baked in:",
+      "imports": [
+        "../knowledge/audiences",
+        "../intelligence/bandit",
+        "../types"
+      ],
+      "callers": [
+        "models.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/beacon.ts",
+      "purpose": "First-party analytics beacon. A published page is production, not exposure. RevenueOS was blind to whether",
+      "imports": [
+        "../ledger/store",
+        "../types"
+      ],
+      "callers": [
+        "modules/operator-adapter.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/business-suspension.ts",
+      "purpose": "A business with an owner-side blocker (supplier gate, missing tribute draft, legally-required approval) cannot legally take money right now. Consuming",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/buyer-discovery.ts",
+      "purpose": "Buyer discovery executor. Uses web-search.ts + LLM synthesis to identify SPECIFIC external surfaces",
+      "imports": [
+        "./openai-client",
+        "./web-search"
+      ],
+      "callers": [
+        "modules/hackernews.ts",
+        "modules/public-outreach.ts",
+        "modules/youtube.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "openai",
+        "youtube"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/capability-gaps.ts",
+      "purpose": "Strip safeActionType when the adapter cannot execute it so ranking, money plan, and hunting stop treating missing limbs as executable.",
+      "imports": [
+        "../ledger/store",
+        "../policy",
+        "../types"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "reddit"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/channel-catalog.ts",
+      "purpose": "Channel capability catalog. This is NOT an action loop. It enumerates distribution surfaces RevenueOS",
+      "imports": [
+        "./action-class"
+      ],
+      "callers": [
+        "modules/channel-discovery.ts",
+        "modules/channel-registry.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "resend",
+        "reddit",
+        "google",
+        "youtube",
+        "producthunt",
+        "gumroad"
+      ],
+      "executionDependencies": [
+        "browser-sidecar"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/channel-discovery.ts",
+      "purpose": "Channel Discovery Engine. Per business: product → buyer → buyer intent → where buyers congregate →",
+      "imports": [
+        "../types",
+        "./action-class",
+        "./channel-catalog",
+        "./openai-client",
+        "./web-search"
+      ],
+      "callers": [
+        "modules/channel-registry.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "openai",
+        "reddit"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/channel-registry.ts",
+      "purpose": "Channel Registry — durable, compounding channel knowledge. Persists per-(business, platform, account) channel records with commercial",
+      "imports": [
+        "../ledger/store",
+        "../types",
+        "./action-class",
+        "./channel-catalog",
+        "./channel-discovery",
+        "./revenue-priority"
+      ],
+      "callers": [
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/compliance-guard.ts",
+      "purpose": "Compliance guard for external HTTP execution. RevenueOS is aggressive but must not violate host policies or crawler rules.",
+      "imports": [],
+      "callers": [
+        "modules/google-search-console.ts",
+        "modules/hackernews.ts",
+        "modules/indiehackers.ts",
+        "modules/youtube.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/concrete-escalations.ts",
+      "purpose": "Concrete owner-actionable escalations. When all permissionless mechanisms have exhausted their attempt budget with",
+      "imports": [
+        "./action-class"
+      ],
+      "callers": [
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "stripe",
+        "openai",
+        "resend",
+        "reddit",
+        "google",
+        "youtube",
+        "gumroad"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/conversion-lab.ts",
+      "purpose": "Conversion laboratory. Once verified_exposure > 0 but purchases = 0, the problem is no longer",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "stripe"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/conversion.ts",
+      "purpose": "Model why shoppers hesitate, from funnel evidence + portable psychology.",
+      "imports": [
+        "../types",
+        "../knowledge/shopping-psychology"
+      ],
+      "callers": [
+        "adapters/example-static.ts",
+        "models.ts",
+        "modules/acquisition.ts",
+        "modules/operator-adapter.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/diagnosis.ts",
+      "purpose": "Self-evaluation. When the brain is not making financial progress it must diagnose *why* and change approach — never quietly stop or celebrate activity.",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "executive.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/discovery-governor.ts",
+      "purpose": "Suppress publish opportunities for killed clusters; boost expanding ones.",
+      "imports": [
+        "../memory/portable",
+        "../types"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/economics.ts",
+      "purpose": "Contribution margin per sale from the primary product offer.",
+      "imports": [
+        "../types",
+        "../knowledge/commerce"
+      ],
+      "callers": [
+        "adapters/example-static.ts",
+        "executive.ts",
+        "models.ts",
+        "modules/operator-adapter.ts",
+        "modules/pursuit-plan.ts",
+        "modules/strategy.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "stripe"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/email-outreach.ts",
+      "purpose": "Email outreach executor (Resend REST). Sends 1:1 personalized outreach authored by the LLM. Never bulk. Never",
+      "imports": [
+        "./openai-client"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "openai",
+        "resend"
+      ],
+      "executionDependencies": [
+        "http"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/exit-intent.ts",
+      "purpose": "Exit-intent email capture. Emits a page-level snippet (JS + minimal HTML/CSS) returned to the beacon",
+      "imports": [
+        "node:fs/promises",
+        "node:path"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": true,
+      "persistenceDependencies": [
+        "filesystem"
+      ],
+      "externalServiceDependencies": [],
+      "executionDependencies": [
+        "http"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/experimentation.ts",
+      "purpose": "Create a proposed experiment with an attached measurement plan. A lever without a measurement plan is a guess — so every experiment declares which",
+      "imports": [
+        "../types",
+        "../ledger/store",
+        "./strategy"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/pursuit-engine.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/exploration-floor.ts",
+      "purpose": "Exploration floor invariants — hard rules the planner MUST honor per cycle. The previous planner could return a cycle of pure `publish_*` +",
+      "imports": [
+        "../types",
+        "./action-class"
+      ],
+      "callers": [
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "reddit",
+        "youtube"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/first-customer-mode.ts",
+      "purpose": "FIRST_CUSTOMER_MODE priority ladder (purchases = 0): buyer exposure → qualified visits → offer/message testing → checkout starts",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/free-listings.ts",
+      "purpose": "Zero-cost local / visual listing limbs. These are NOT spend-match \"free ad credits\". They are genuinely free",
+      "imports": [
+        "./openai-client",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": true,
+      "persistenceDependencies": [
+        "filesystem"
+      ],
+      "externalServiceDependencies": [
+        "openai",
+        "youtube"
+      ],
+      "executionDependencies": [
+        "http",
+        "browser-sidecar"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/google-search-console.ts",
+      "purpose": "Google Search Console executor — read-only signal ingestion. Auth: a service-account JSON blob in GOOGLE_SERVICE_ACCOUNT_JSON. If it's",
+      "imports": [
+        "./openai-client",
+        "./compliance-guard",
+        "node:fs/promises",
+        "node:path",
+        "node:crypto"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": true,
+      "persistenceDependencies": [
+        "filesystem"
+      ],
+      "externalServiceDependencies": [
+        "openai",
+        "google"
+      ],
+      "executionDependencies": [
+        "http"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/gumroad.ts",
+      "purpose": "Gumroad marketplace limb — sync product listings + import sales. Auth: GUMROAD_ACCESS_TOKEN (personal access token). Never throws.",
+      "imports": [
+        "node:fs/promises",
+        "node:path"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": true,
+      "persistenceDependencies": [
+        "filesystem"
+      ],
+      "externalServiceDependencies": [
+        "gumroad"
+      ],
+      "executionDependencies": [
+        "http"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/hackernews.ts",
+      "purpose": "Hacker News executor — Show HN draft + buying-intent discovery. HN has no OAuth; reads use the public Firebase API at",
+      "imports": [
+        "./openai-client",
+        "./compliance-guard",
+        "./buyer-discovery",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": true,
+      "persistenceDependencies": [
+        "filesystem"
+      ],
+      "externalServiceDependencies": [
+        "openai"
+      ],
+      "executionDependencies": [
+        "http"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/indiehackers.ts",
+      "purpose": "Indie Hackers executor — product listing drafts + community post drafts. IH has no OAuth/API for third-party writes. Two paths:",
+      "imports": [
+        "./openai-client",
+        "./compliance-guard",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": true,
+      "persistenceDependencies": [
+        "filesystem"
+      ],
+      "externalServiceDependencies": [
+        "openai"
+      ],
+      "executionDependencies": [
+        "http"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/knowledge-graph.ts",
+      "purpose": "Persistent portfolio-wide learning memory (Knowledge Graph). A revenue system that operates across 10 businesses cannot afford to relearn",
+      "imports": [
+        "../ledger/store",
+        "../types"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/llm-strategist.ts",
+      "purpose": "LLM strategist — the thinking layer. Every plan cycle, this feeds the current commercial state (context, banned",
+      "imports": [
+        "../types",
+        "./action-class",
+        "./pattern-posterior",
+        "./revenue-priority",
+        "./openai-client"
+      ],
+      "callers": [
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "openai",
+        "reddit",
+        "google",
+        "youtube",
+        "producthunt",
+        "gumroad"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/ltv-cac-model.ts",
+      "purpose": "LTV / CAC model per mechanism. Ranks mechanisms by (estimated LTV) − (estimated CAC), so downstream planners",
+      "imports": [
+        "../types",
+        "./pattern-posterior",
+        "./action-class"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/mechanism-bandit.ts",
+      "purpose": "Thompson-sampling bandit over acquisition mechanism classes. Static ranking sends every business through the same catalog every cycle.",
+      "imports": [
+        "../types",
+        "./action-class",
+        "./pattern-posterior",
+        "./revenue-priority"
+      ],
+      "callers": [
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/mechanism-diversity.ts",
+      "purpose": "Mechanism diversity enforcement. When we enqueue a wave of pursuits, we cap the number of jobs sharing the",
+      "imports": [
+        "../types",
+        "./action-class"
+      ],
+      "callers": [
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/money.ts",
+      "purpose": "Money-printing allocator. Funds the highest profit-per-effort levers under an effort budget, heavily preferring executable (safeActionType) levers so the",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "executive.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/northstar.ts",
+      "purpose": "Absolute money north star. Record-beating stretch is not enough — the machine aims at a $10,000 contribution-profit day. Anything short is a lost day and a",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "intelligence/forecast.ts",
+        "intelligence/press.ts",
+        "intelligence/shortfall.ts",
+        "modules/ambition.ts",
+        "modules/organic-mastery.ts",
+        "modules/profit-maximizer.ts",
+        "modules/success.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/openai-client.ts",
+      "purpose": "Zero-dependency OpenAI client (uses global fetch). Kept as a thin, deterministic surface: structured-JSON output only, per-call",
+      "imports": [],
+      "callers": [
+        "modules/agent-executors.ts",
+        "modules/buyer-discovery.ts",
+        "modules/channel-discovery.ts",
+        "modules/email-outreach.ts",
+        "modules/free-listings.ts",
+        "modules/google-search-console.ts",
+        "modules/hackernews.ts",
+        "modules/indiehackers.ts",
+        "modules/llm-strategist.ts",
+        "modules/owner-dialog.ts",
+        "modules/producthunt.ts",
+        "modules/public-outreach.ts",
+        "modules/reddit-executor.ts",
+        "modules/revenue-hunter.ts",
+        "modules/schema-enrichment.ts",
+        "modules/web-intelligence.ts",
+        "modules/web-search.ts",
+        "modules/youtube.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "openai"
+      ],
+      "executionDependencies": [
+        "http"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/operator-adapter.ts",
+      "purpose": "Portable operator adapter. Every app in the portfolio has its own SiteAdapter wired into a Next.js",
+      "imports": [
+        "../adapters/types",
+        "./economics",
+        "./conversion",
+        "./beacon",
+        "../ledger/store",
+        "../types"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [
+        "supabase"
+      ],
+      "externalServiceDependencies": [
+        "stripe",
+        "reddit"
+      ],
+      "executionDependencies": [
+        "browser-sidecar",
+        "scheduler-loop"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/operator-claims.ts",
+      "purpose": "Operator claim handoff — Vercel cron must no-op when Mac/Fly Core holds a live lease on this siteId. Prevents dual-execution during migration.",
+      "imports": [],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [
+        "supabase"
+      ],
+      "externalServiceDependencies": [],
+      "executionDependencies": [
+        "http",
+        "scheduler-loop"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/operator-loop.ts",
+      "purpose": "Persistent operator loop. The serverless form fragments the brain into 60-second cron bursts and",
+      "imports": [
+        "../adapters/types",
+        "./pursuit-plan",
+        "./revenue-priority",
+        "./pursuit-engine"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [
+        "supabase"
+      ],
+      "externalServiceDependencies": [],
+      "executionDependencies": [
+        "scheduler-loop"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/organic-mastery.ts",
+      "purpose": "Organic mastery era. RevenueOS is the business manager — solely responsible for making the site",
+      "imports": [
+        "../types",
+        "./northstar",
+        "../memory/portable"
+      ],
+      "callers": [
+        "adapters/types.ts",
+        "executive.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/owner-dialog.ts",
+      "purpose": "Owner Dialog — backend for the operator chat interface. The owner drops a plain-English message. We turn that message + current",
+      "imports": [
+        "./openai-client"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "openai"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/pattern-posterior.ts",
+      "purpose": "Per-pattern commercial posteriors. Every acquisition mechanism (identified by patternKey) is judged only on",
+      "imports": [
+        "../types",
+        "./action-class"
+      ],
+      "callers": [
+        "modules/attribution-ml.ts",
+        "modules/llm-strategist.ts",
+        "modules/ltv-cac-model.ts",
+        "modules/mechanism-bandit.ts",
+        "modules/pursuit-plan.ts",
+        "modules/revenue-priority.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/permissionless.ts",
+      "purpose": "Permissionless organic doctrine. RevenueOS may autonomously do anything legal/truthful that generates organic",
+      "imports": [],
+      "callers": [
+        "policy.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "resend",
+        "reddit",
+        "google",
+        "youtube",
+        "producthunt",
+        "gumroad"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/planner.ts",
+      "purpose": "Turn a ranked opportunity list into a COHERENT, sequenced plan rather than a single greedy pick. Respects funnel dependencies: protect fulfillment first,",
+      "imports": [
+        "../intelligence/simulator",
+        "../types"
+      ],
+      "callers": [
+        "executive.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/portfolio-digest.ts",
+      "purpose": "One portfolio owner email — never N separate business digests. Email is a receipt of work already performed, not the work itself.",
+      "imports": [],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/portfolio.ts",
+      "purpose": "Portfolio operator: exploit winners, keep controlled exploration on weak/new. Does not kill businesses — reorders attention.",
+      "imports": [
+        "../types"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/producthunt.ts",
+      "purpose": "Product Hunt executor — discover product-intent discussions + post genuinely helpful comments on active launches.",
+      "imports": [
+        "./openai-client",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": true,
+      "persistenceDependencies": [
+        "filesystem"
+      ],
+      "externalServiceDependencies": [
+        "openai",
+        "reddit",
+        "producthunt"
+      ],
+      "executionDependencies": [
+        "http"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/profit-maximizer.ts",
+      "purpose": "Profit maximizer — money made for the customer is the only success. Traffic, topics, and research are tools. $0 is failing software.",
+      "imports": [
+        "./northstar",
+        "./success",
+        "../types"
+      ],
+      "callers": [
+        "adapters/types.ts",
+        "executive.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/public-outreach.ts",
+      "purpose": "Public outreach executor. Given a DurableBuyerLead + brand context, use the LLM to draft a",
+      "imports": [
+        "./openai-client",
+        "./buyer-discovery"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "openai"
+      ],
+      "executionDependencies": [
+        "http"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/pursuit-engine.ts",
+      "purpose": "High-frequency organic actions must re-fire often — never sit 7 days idle.",
+      "imports": [
+        "../adapters/types",
+        "../ledger/store",
+        "./action-registry",
+        "./experimentation",
+        "./attribution",
+        "./strategy",
+        "../memory/portable",
+        "../policy",
+        "../types",
+        "./action-class"
+      ],
+      "callers": [
+        "modules/operator-loop.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": true,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/pursuit-plan.ts",
+      "purpose": "Portfolio insight sentence returned by the LLM strategist this cycle.",
+      "imports": [
+        "../adapters/types",
+        "../models",
+        "../memory/portable",
+        "../ledger/seed",
+        "./strategy",
+        "../intelligence/calibration",
+        "../intelligence/bandit",
+        "../intelligence/shortfall",
+        "../intelligence/decision",
+        "../intelligence/curriculum",
+        "./ambition",
+        "./economics",
+        "../intelligence/kelly",
+        "../intelligence/meta",
+        "../intelligence/regime",
+        "./discovery-governor",
+        "./organic-mastery",
+        "./profit-maximizer",
+        "./capability-gaps",
+        "../policy",
+        "./pursuit-engine",
+        "./first-customer-mode",
+        "./stagnation",
+        "./pattern-posterior",
+        "./llm-strategist",
+        "./mechanism-diversity",
+        "./exploration-floor",
+        "./revenue-priority",
+        "./mechanism-bandit",
+        "./conversion-lab",
+        "./concrete-escalations",
+        "./business-suspension",
+        "../memory/similarity",
+        "../ledger/store",
+        "./channel-discovery",
+        "./channel-registry",
+        "../types"
+      ],
+      "callers": [
+        "modules/operator-loop.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "reddit"
+      ],
+      "executionDependencies": [
+        "scheduler-loop"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/reddit-executor.ts",
+      "purpose": "Reddit executor — discover buying-intent threads + helpful replies. Reality as of Nov 2025: Reddit killed self-service `/prefs/apps` OAuth.",
+      "imports": [
+        "./openai-client",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": true,
+      "persistenceDependencies": [
+        "filesystem"
+      ],
+      "externalServiceDependencies": [
+        "openai",
+        "reddit"
+      ],
+      "executionDependencies": [
+        "http",
+        "scheduler-loop"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/retention.ts",
+      "purpose": "Retention levers only make sense once real sales exist. Before that, the brain should not waste ranking budget imagining loyalty programs for zero buyers.",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "modules/strategy.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/revenue-hunter.ts",
+      "purpose": "Revenue hunter — portfolio-level LLM meta-strategist. Given all portfolio sites' snapshots, asks GPT to identify:",
+      "imports": [
+        "./openai-client",
+        "../types"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "openai"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/revenue-priority.ts",
+      "purpose": "Revenue-priority scoring. RevenueOS has one objective: real, collected revenue. Every opportunity is",
+      "imports": [
+        "../types",
+        "./action-class",
+        "./pattern-posterior"
+      ],
+      "callers": [
+        "modules/channel-registry.ts",
+        "modules/llm-strategist.ts",
+        "modules/mechanism-bandit.ts",
+        "modules/operator-loop.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/schema-enrichment.ts",
+      "purpose": "Schema.org JSON-LD enrichment. Generates Product / FAQ / HowTo / Offer JSON-LD blocks for a topic slug",
+      "imports": [
+        "./openai-client"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "openai"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/self-improving-strategist.ts",
+      "purpose": "Self-improving strategist: A/B test prompt variants over time. Maintains a small registry of prompt versions with per-version outcome",
+      "imports": [
+        "../ledger/store",
+        "../types"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "openai"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/signed-utm.ts",
+      "purpose": "Signed UTM attribution. When RevenueOS emits an outbound URL (in a Reddit reply, an IH product",
+      "imports": [
+        "node:crypto"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "reddit"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/stagnation.ts",
+      "purpose": "Execution stagnation: when consecutive cycles observe the same commercial state and repeat the same action types with no new buyer signal, the operator",
+      "imports": [
+        "../types"
+      ],
+      "callers": [
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/strategy.ts",
+      "purpose": "Honest incremental-unit estimates. Never invent a traffic windfall — fake \"max(40, …)\" landing lifts made discovery look more profitable than closing",
+      "imports": [
+        "./acquisition",
+        "./retention",
+        "./economics",
+        "../knowledge/commerce",
+        "../intelligence/statistics",
+        "../intelligence/bandit",
+        "../intelligence/calibration",
+        "../intelligence/press",
+        "../types"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/experimentation.ts",
+        "modules/pursuit-engine.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/stripe-order-bumps.ts",
+      "purpose": "Stripe order-bump upsell composer. Given a Checkout Session's line items and a catalog of related products,",
+      "imports": [
+        "node:fs/promises",
+        "node:path"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": true,
+      "persistenceDependencies": [
+        "filesystem"
+      ],
+      "externalServiceDependencies": [
+        "stripe"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/success.ts",
+      "purpose": "The only success criterion for RevenueOS. Money made for the customer = success.",
+      "imports": [
+        "../types",
+        "./northstar"
+      ],
+      "callers": [
+        "intelligence/shortfall.ts",
+        "modules/attribution.ts",
+        "modules/profit-maximizer.ts",
+        "objective.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/target-tracking.ts",
+      "purpose": "Per-business target tracking. RevenueOS runs against a hard, non-negotiable daily target:",
+      "imports": [
+        "../types"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/web-intelligence.ts",
+      "purpose": "Web intelligence — the perception layer. Uses OpenAI's web-search tool to pull real, current information from the",
+      "imports": [
+        "./openai-client"
+      ],
+      "callers": [
+        "modules/agent-executors.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "openai",
+        "reddit"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/web-search.ts",
+      "purpose": "Web search executor. Thin wrapper over openai-client.ts with `webSearch: true`. The LLM can then",
+      "imports": [
+        "./openai-client"
+      ],
+      "callers": [
+        "modules/buyer-discovery.ts",
+        "modules/channel-discovery.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "openai"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "modules/youtube.ts",
+      "purpose": "YouTube executor — buying-intent discovery via YouTube Data API v3 + community-reply drafts to discovered intent comments.",
+      "imports": [
+        "./openai-client",
+        "./compliance-guard",
+        "./buyer-discovery",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "callers": [],
+      "mutatesLearning": true,
+      "assumesVercelServerless": true,
+      "persistenceDependencies": [
+        "filesystem"
+      ],
+      "externalServiceDependencies": [
+        "openai",
+        "google",
+        "youtube"
+      ],
+      "executionDependencies": [
+        "http"
+      ],
+      "doNotDelete": true
+    },
+    {
+      "filename": "objective.ts",
+      "purpose": "The operating philosophy is encoded as an objective function plus hard boundaries — not as anger, deception, or aggression toward people.",
+      "imports": [
+        "./modules/success"
+      ],
+      "callers": [],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [
+        "reddit"
+      ],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "policy.ts",
+      "purpose": "Autonomous allowlist = permissionless organic doctrine. Anything that creates leads/sales without accounts/logins/spend is safe.",
+      "imports": [
+        "./types",
+        "./modules/permissionless"
+      ],
+      "callers": [
+        "executive.ts",
+        "modules/capability-gaps.ts",
+        "modules/pursuit-engine.ts",
+        "modules/pursuit-plan.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "scorecard.ts",
+      "purpose": "(no docstring) scorecard.ts",
+      "imports": [
+        "./types"
+      ],
+      "callers": [
+        "executive.ts"
+      ],
+      "mutatesLearning": false,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    },
+    {
+      "filename": "types.ts",
+      "purpose": "Risk tier for an action the brain may request.",
+      "imports": [],
+      "callers": [
+        "adapters/example-static.ts",
+        "adapters/types.ts",
+        "executive.ts",
+        "intelligence/anomaly.ts",
+        "intelligence/bandit.ts",
+        "intelligence/calibration.ts",
+        "intelligence/credible.ts",
+        "intelligence/curriculum.ts",
+        "intelligence/decision.ts",
+        "intelligence/forecast.ts",
+        "intelligence/hour.ts",
+        "intelligence/hunting.ts",
+        "intelligence/kelly.ts",
+        "intelligence/meta.ts",
+        "intelligence/planner-quota.ts",
+        "intelligence/press.ts",
+        "intelligence/regime.ts",
+        "intelligence/shortfall.ts",
+        "intelligence/simulator.ts",
+        "knowledge/audiences.ts",
+        "knowledge/commerce.ts",
+        "knowledge/shopping-psychology.ts",
+        "ledger/file-store.ts",
+        "ledger/seed.ts",
+        "ledger/store.ts",
+        "market/model.ts",
+        "memory/global.ts",
+        "memory/industry.ts",
+        "memory/portable.ts",
+        "memory/similarity.ts",
+        "memory/site.ts",
+        "models.ts",
+        "modules/acquisition.ts",
+        "modules/action-registry.ts",
+        "modules/agent-executors.ts",
+        "modules/ambition.ts",
+        "modules/anomaly-detector.ts",
+        "modules/attribution-ml.ts",
+        "modules/attribution.ts",
+        "modules/audience.ts",
+        "modules/beacon.ts",
+        "modules/business-suspension.ts",
+        "modules/capability-gaps.ts",
+        "modules/channel-discovery.ts",
+        "modules/channel-registry.ts",
+        "modules/conversion-lab.ts",
+        "modules/conversion.ts",
+        "modules/diagnosis.ts",
+        "modules/discovery-governor.ts",
+        "modules/economics.ts",
+        "modules/experimentation.ts",
+        "modules/exploration-floor.ts",
+        "modules/first-customer-mode.ts",
+        "modules/knowledge-graph.ts",
+        "modules/llm-strategist.ts",
+        "modules/ltv-cac-model.ts",
+        "modules/mechanism-bandit.ts",
+        "modules/mechanism-diversity.ts",
+        "modules/money.ts",
+        "modules/northstar.ts",
+        "modules/operator-adapter.ts",
+        "modules/organic-mastery.ts",
+        "modules/pattern-posterior.ts",
+        "modules/planner.ts",
+        "modules/portfolio.ts",
+        "modules/profit-maximizer.ts",
+        "modules/pursuit-engine.ts",
+        "modules/pursuit-plan.ts",
+        "modules/retention.ts",
+        "modules/revenue-hunter.ts",
+        "modules/revenue-priority.ts",
+        "modules/self-improving-strategist.ts",
+        "modules/stagnation.ts",
+        "modules/strategy.ts",
+        "modules/success.ts",
+        "modules/target-tracking.ts",
+        "policy.ts",
+        "scorecard.ts"
+      ],
+      "mutatesLearning": true,
+      "assumesVercelServerless": false,
+      "persistenceDependencies": [],
+      "externalServiceDependencies": [],
+      "executionDependencies": [],
+      "doNotDelete": true
+    }
+  ]
+}

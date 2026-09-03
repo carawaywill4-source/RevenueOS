@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  RevenueOSCore — persistent macOS LaunchAgent.
+  Install via: bash services/operator/macos/install-launchd.sh
+  Runs independently of Cursor, Terminal, and RevenueOS.app.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.revenueos.core</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>__TSX__</string>
+    <string>__INDEX__</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__OPERATOR_DIR__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__PATH__</string>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>REVENUEOS_MAC_BRAIN</key>
+    <string>1</string>
+    <key>REVENUEOS_MODE</key>
+    <string>LIVE</string>
+    <key>REVENUEOS_VERCEL_BRAIN</key>
+    <string>0</string>
+    <key>REVENUEOS_DATA_PROVIDER</key>
+    <string>postgres</string>
+    <key>REVENUEOS_DATABASE_URL</key>
+    <string>postgresql://revenueos:revenueos_local_dev@127.0.0.1:55432/revenueos</string>
+    <key>SUPABASE_DISABLED</key>
+    <string>1</string>
+    <key>SUPABASE</key>
+    <string>DISABLED</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/RevenueOS/core.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/RevenueOS/core.stderr.log</string>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+</dict>
+</plist>

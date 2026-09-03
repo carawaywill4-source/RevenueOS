@@ -1,0 +1,28 @@
+{
+  "suite": "REVENUEOS_NEXUS_ACTIVATION",
+  "generated_at": "2026-08-10T04:43:30.000Z",
+  "mode": "STAGING",
+  "note": "SKIPPED ≠ PASS. LIVE blocked only by owner Stripe live keys (+ OpenAI credits for full LLM limbs).",
+  "results": [
+    { "id": "core_healthz_8080", "status": "PASS", "evidence": "LaunchAgent com.revenueos.core" },
+    { "id": "core_heartbeat_suspend_gap", "status": "PASS", "evidence": "/heartbeat mode=STAGING suspend_gap=false" },
+    { "id": "launchagent_keepalive_restart", "status": "PASS", "evidence": "SIGKILL → auto recover" },
+    { "id": "hosting_plane_8090", "status": "PASS", "evidence": "LaunchAgent com.revenueos.hosting" },
+    { "id": "control_plane_disconnect", "status": "PASS", "evidence": "hosting stayed up while Core killed" },
+    { "id": "nexus_titan_apex_ticks", "status": "PASS", "evidence": "heartbeat last_*_tick populated" },
+    { "id": "scopeguard_hosting_deploy", "status": "PASS", "evidence": "port 9102 healthy DEPLOYED" },
+    { "id": "hosting_bad_deploy_known_good", "status": "PASS", "evidence": "missing app rejected; plane up" },
+    { "id": "browser_chromium_webkit_firefox", "status": "PASS", "evidence": ".data/gauntlet/scopeguard-*-final.png Buy enabled" },
+    { "id": "stripe_test_checkout_session", "status": "PASS", "evidence": "Vercel + local /api/checkout return cs_test_ URL" },
+    { "id": "stripe_webhook_endpoint", "status": "PASS", "evidence": "we_* created for ScopeGuard vercel webhook" },
+    { "id": "fifty_business_simulation", "status": "PASS", "evidence": "1000 events, 50 claims, steal blocked" },
+    { "id": "conflict_war_game", "status": "PASS", "evidence": "landing/product, retirement, stale, kill switch" },
+    { "id": "openai_credits", "status": "SKIPPED_EXTERNAL_DEPENDENCY", "evidence": "owner must add OpenAI billing credits" },
+    { "id": "stripe_live_keys", "status": "SKIPPED_EXTERNAL_DEPENDENCY", "evidence": "only sk_test_ present — blocks REVENUEOS_MODE=LIVE for stranger money" },
+    { "id": "overnight_endurance", "status": "DEGRADED", "evidence": "runtime left running + caffeinate; multi-hour window not yet elapsed this session" }
+  ],
+  "go_live_owner_only": [
+    "Replace STRIPE_SECRET_KEY with sk_live_ in Core + ScopeGuard Vercel + recreate live webhook",
+    "Add OpenAI organization credits (optional for deterministic acquisition; required for LLM limbs)"
+  ]
+}

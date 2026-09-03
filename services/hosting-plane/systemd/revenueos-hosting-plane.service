@@ -1,0 +1,25 @@
+[Unit]
+Description=RevenueOS Hosting Plane (native Azure storefronts)
+After=network.target
+Wants=revenueos-operator.service
+
+[Service]
+Type=simple
+User=azureuser
+WorkingDirectory=/opt/revenueos/app
+EnvironmentFile=-/etc/revenueos/revenueos.env
+Environment=REVENUEOS_REPO_ROOT=/opt/revenueos/app
+Environment=HOSTING_DATA_DIR=/opt/revenueos/data/hosting-plane
+Environment=HOSTING_RUNTIME=static
+Environment=HOSTING_PLANE_BIND=127.0.0.1
+Environment=HOSTING_PLANE_PORT=8090
+Environment=HOSTING_STOREFRONT_API_PORT=8091
+Environment=HOSTING_PUBLIC_BASE_HOST=130.131.15.68.sslip.io
+Environment=HOSTING_STOREFRONT_API=127.0.0.1:8091
+ExecStart=/opt/revenueos/app/node_modules/.bin/tsx /opt/revenueos/app/services/hosting-plane/src/index.ts
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

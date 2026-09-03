@@ -1,0 +1,25 @@
+{
+  "name": "@revenueos/infra",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "RevenueOS native infrastructure — PostgreSQL lifecycle, migrations, backup/restore.",
+  "bin": {
+    "revenueos-infra": "./src/cli.ts"
+  },
+  "scripts": {
+    "cli": "tsx src/cli.ts",
+    "test": "tsx --test src/tests/*.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@revenueos/data": "file:../../packages/revenueos-data",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/pg": "^8.15.5",
+    "tsx": "^4.23.10",
+    "typescript": "^5"
+  }
+}

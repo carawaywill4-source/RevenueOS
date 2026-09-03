@@ -1,14 +1,27 @@
 import type {
   Attribution,
   CapabilityGap,
+  ChannelRecord,
   CycleReportRecord,
   DiscoveryDoor,
   Experiment,
   ExposureRecord,
   Lesson,
   PlannerRunRecord,
+  PursuitEvent,
+  PursuitJob,
   Scorecard,
 } from "../types";
+
+export type ClaimPursuitsInput = {
+  siteId: string;
+  limit: number;
+  owner: string;
+  leaseMs: number;
+  now?: Date;
+  /** When set, prefer jobs whose actionType is not already waiting. */
+  excludeActionTypes?: string[];
+};
 
 export type ExperimentStore = {
   listExperiments(siteId: string): Promise<Experiment[]>;
@@ -35,6 +48,31 @@ export type ExperimentStore = {
   saveDiscoveryDoor?(door: DiscoveryDoor): Promise<void>;
   listCapabilityGaps?(siteId?: string): Promise<CapabilityGap[]>;
   saveCapabilityGap?(gap: CapabilityGap): Promise<void>;
+
+  /** Durable channel registry (acquisition surfaces + posteriors). */
+  listChannels?(siteId: string): Promise<ChannelRecord[]>;
+  saveChannel?(channel: ChannelRecord): Promise<void>;
+
+  /** Persistent pursuit queue */
+  listPursuits?(siteId: string, opts?: { states?: string[]; limit?: number }): Promise<PursuitJob[]>;
+  savePursuit?(job: PursuitJob): Promise<void>;
+  claimPursuits?(input: ClaimPursuitsInput): Promise<PursuitJob[]>;
+  appendPursuitEvent?(event: PursuitEvent): Promise<void>;
+  listPursuitEvents?(
+    siteId: string,
+    opts?: { since?: string; limit?: number },
+  ): Promise<PursuitEvent[]>;
+  /**
+   * Acquire a named lease. Returns true if this caller owns it.
+   * Used for tick/report/action-rate locks.
+   */
+  claimLease?(input: {
+    id: string;
+    siteId: string;
+    kind: string;
+    leaseUntil: string;
+    document?: Record<string, unknown>;
+  }): Promise<boolean>;
 };
 
 export function newId(prefix: string) {

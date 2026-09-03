@@ -2,7 +2,34 @@
 export type ActionRisk = "safe" | "owner_gate" | "forbidden";
 
 /** Where a lesson may be reused. Never includes end-user PII. */
-export type LessonScope = "global" | "industry" | "site";
+/**
+ * Hierarchical lesson scopes for similarity-aware transfer.
+ * Narrower scopes override broader ones when conditions match.
+ */
+export type LessonScope =
+  | "global"
+  | "business_model"
+  | "industry"
+  | "audience"
+  | "price_band"
+  | "consideration"
+  | "channel"
+  | "business"
+  | "product"
+  | "site";
+
+/** Commercial conditions under which a lesson or experiment ran. */
+export type CommercialContext = {
+  businessModel?: string;
+  industry?: string;
+  audience?: string;
+  priceBand?: string;
+  considerationLevel?: string;
+  channel?: string;
+  productId?: string;
+  priceUsd?: number;
+  marginEstimate?: number;
+};
 
 /** Whether a lesson encourages or discourages a pattern. */
 export type LessonSentiment = "positive" | "negative" | "neutral";
@@ -271,6 +298,10 @@ export type BusinessContext = {
    * portable archetypes. Only `label` is required.
    */
   audienceSegments?: Array<Partial<AudiencePersona> & { label: string }>;
+  /** Portfolio commercial context for portable learning / negative transfer. */
+  commercial?: CommercialContext;
+  /** Launch sequence index for learning-transfer experiments (1..N). */
+  portfolioSequenceIndex?: number;
 };
 
 export type MoneyObservation = {
@@ -556,8 +587,56 @@ export type Lesson = {
   cooldownUntil?: string;
   /** Sites that contributed evidence (portable industry/global lessons). */
   originSiteIds?: string[];
+  /** Conditions under which this lesson applies — used to prevent negative transfer. */
+  commercial?: CommercialContext;
   createdAt: string;
   updatedAt: string;
+};
+
+/** Operating regime when a business has zero paying customers. */
+export type FirstCustomerMode = {
+  active: boolean;
+  reason: string;
+  /** Current ladder stage while purchases = 0 (or conversion_optimization after). */
+  stage:
+    | "buyer_exposure"
+    | "qualified_visits"
+    | "offer_testing"
+    | "checkout_starts"
+    | "purchase"
+    | "conversion_optimization";
+  priority: "buyer_exposure";
+  /** Boost pattern keys that can put a real buyer in front of the offer. */
+  preferredActionTypes: string[];
+};
+
+export type PortfolioBusinessSnapshot = {
+  siteId: string;
+  displayName: string;
+  sequenceIndex: number;
+  revenueUsd: number;
+  contributionProfitUsd: number;
+  purchases: number;
+  landingViews: number;
+  activePursuits: number;
+  waitingForEvidence: number;
+  claimableBacklog: number;
+  firstCustomerMode: boolean;
+  profitPerVisitor: number;
+  marginalEvProxy: number;
+  learningValue: number;
+  /** Owner-blocker suspension state — do not spend autonomous budget here. */
+  suspended?: boolean;
+  /** Number of banned patterns for this site (surface exhaustion signal). */
+  bannedPatternCount?: number;
+};
+
+export type PortfolioAllocation = {
+  generatedAt: string;
+  businesses: PortfolioBusinessSnapshot[];
+  /** siteIds ordered by where the next unit of effort is most valuable. */
+  effortOrder: string[];
+  notes: string[];
 };
 
 export type AttributionVerdict = "won" | "lost" | "inconclusive";
@@ -809,6 +888,170 @@ export type Scorecard = {
   hourPlan?: HourPlan;
 };
 
+/** Persistent Revenue Pursuit Engine job states. */
+export type PursuitState =
+  | "DISCOVER"
+  | "QUALIFY"
+  | "EXECUTE"
+  | "WAITING_FOR_EVIDENCE"
+  | "ATTRIBUTE"
+  | "LEARN"
+  | "REPLENISH"
+  | "DONE"
+  | "FAILED";
+
+export type PursuitKind =
+  | "organic_revenue"
+  | "discovery_door"
+  | "conversion"
+  | "ops";
+
+export type PursuitEventType =
+  | "enqueued"
+  | "claimed"
+  | "executed"
+  | "wait"
+  | "attributed"
+  | "learned"
+  | "replenished"
+  | "failed"
+  | "done"
+  | "beacon";
+
+/** Durable organic revenue work item — waiting jobs do not idle the operator. */
+export type PursuitJob = {
+  id: string;
+  siteId: string;
+  state: PursuitState;
+  kind: PursuitKind;
+  patternKey?: string;
+  actionType?: string;
+  priority: number;
+  effort: number;
+  experimentId?: string;
+  opportunityId?: string;
+  idempotencyKey: string;
+  leaseOwner?: string | null;
+  leaseUntil?: string | null;
+  notBefore?: string | null;
+  attempts: number;
+  maxAttempts: number;
+  lastError?: string;
+  title: string;
+  action: string;
+  channel?: string;
+  persona?: string;
+  workSummary?: string;
+  hypothesis?: Hypothesis;
+  predicted?: PredictedImpact;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PursuitEvent = {
+  id: string;
+  pursuitId: string;
+  siteId: string;
+  eventType: PursuitEventType;
+  detail: Record<string, unknown>;
+  createdAt: string;
+};
+
+/**
+ * Durable acquisition-channel record (Channel Registry).
+ * Tracks outcomes so effort allocation compounds by revenue_per_action.
+ */
+export type ChannelRecord = {
+  id: string;
+  siteId: string;
+  platform: string;
+  capabilityId?: string;
+  account: string;
+  business: string;
+  audience: string;
+  buyerIntent: "high" | "medium" | "low";
+  allowedActions: string[];
+  postingRules: string[];
+  rateLimits: {
+    cooldownMinutes: number;
+    maxActionsPerDay: number;
+  };
+  contentFormats: string[];
+  lastAction: string | null;
+  lastActionAt: string | null;
+  trafficGenerated: number;
+  qualifiedVisitors: number;
+  checkoutStarts: number;
+  purchases: number;
+  revenue: number;
+  conversionRate: number;
+  revenuePerAction: number;
+  alpha: number;
+  beta: number;
+  confidence: number;
+  experimentsRun: number;
+  winningAngles: string[];
+  losingAngles: string[];
+  nextAction: string | null;
+  mechanism: string;
+  actionTypes: string[];
+  evidenceUrls: string[];
+  intentScore: number;
+  effortEstimate: number;
+  untested: boolean;
+  status: "active" | "paused" | "banned";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PursuitLease = {
+  id: string;
+  siteId: string;
+  kind: string;
+  leaseUntil: string;
+  document?: Record<string, unknown>;
+  createdAt: string;
+};
+
+/** Hourly Owner Report — work done, not wake-up checklist. */
+export type OwnerReportSummary = {
+  siteId: string;
+  windowStart: string;
+  windowEnd: string;
+  actionsAttempted: number;
+  actionsCompleted: number;
+  experimentsLaunched: number;
+  experimentsStillMeasuring: number;
+  attributionsClosed: number;
+  lessonsLearned: number;
+  doorsKilled: number;
+  doorsExpanded: number;
+  activePursuits: number;
+  waitingForEvidence: number;
+  blockedOrFailed: number;
+  claimableBacklog: number;
+  workLines: string[];
+  ownerAsks: string[];
+  nextQueue: string[];
+  /** Audiences / intent queries pursued this hour. */
+  audiencesPursued: string[];
+  /** Published / distributed / contacted / tested surfaces. */
+  distributionLines: string[];
+  /** What changed because of learning. */
+  learningChanges: string[];
+  /** Where portfolio effort moves next. */
+  effortNext: string[];
+  firstCustomerMode: boolean;
+  firstCustomerStage?: string;
+  hourCheckouts: number;
+  /** True when profit is zero, capacity existed, and almost no work progressed. */
+  operationalFailure: boolean;
+  operationalFailureReason?: string;
+  hourRevenueUsd: number;
+  hourPurchases: number;
+  hourLandingViews: number;
+};
+
 export type CycleResult = {
   observedAt: string;
   observation: Observation;
@@ -832,6 +1075,8 @@ export type CycleResult = {
   metaPolicy: MetaPolicy;
   curriculum: Curriculum;
   hourPlan: HourPlan;
+  pursuitsEnqueued?: number;
+  pursuitsAdvanced?: number;
   /** Cycle order: money made for the customer is the only success. */
   profitMandate?: {
     northStarDailyProfitUsd: number;
