@@ -47,6 +47,7 @@ import {
   measureDiscoveryDoorMetrics,
 } from "@/lib/metrics";
 import { ownerGates } from "@/lib/readiness";
+import { readSearchConsoleCoverage } from "@/lib/search-console";
 import { createDurableExperimentStore } from "@/revenueos/durable-store";
 import { planOpportunityDecision } from "@/revenueos/ai-planner";
 import { MENDHAUS_SEED_LESSONS } from "@/revenueos/seeds";
@@ -495,10 +496,14 @@ export function createMendhausAdapter(): SiteAdapter {
     async getMarketSignals(): Promise<MarketSignals> {
       const gates = ownerGates();
       const [urls, discovery] = await Promise.all([publicUrls(), loadDiscoveryState()]);
+      const coverage = await readSearchConsoleCoverage();
       return {
         indexCoverage: {
           knownUrls: urls.length,
-          indexedUrls: discovery.publishedTopics.length,
+          // Only real Search Console counts — never publishedTopics.length.
+          ...(coverage.indexedUrls != null
+            ? { indexedUrls: coverage.indexedUrls }
+            : {}),
         },
         channels: [
           { channel: "organic_search", status: "open" },

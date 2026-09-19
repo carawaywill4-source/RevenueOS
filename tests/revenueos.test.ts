@@ -1768,3 +1768,54 @@ test("capability gaps upsert across siteIds and count blocked EV", async () => {
   assert.ok(gsc!.timesBlocked >= 1);
   assert.ok(gsc!.expectedValueUsd > 0);
 });
+
+test("demoteUnavailableSafeActions strips limbs the adapter cannot run", async () => {
+  const { demoteUnavailableSafeActions } = await import("@revenueos/core");
+  const demoted = demoteUnavailableSafeActions(
+    [
+      {
+        id: "a",
+        title: "Publish",
+        metric: "views",
+        category: "acquisition",
+        action: "publish",
+        expectedImpact: 8,
+        confidence: 0.5,
+        effort: 1,
+        score: 10,
+        safeActionType: "publish_intent_page",
+        predicted: {
+          precursorMetric: "landing_views",
+          expectedProfitUsd: 100,
+          confidence: 0.4,
+          effort: 1,
+          costUsd: 0,
+          timeToSignalDays: 7,
+        },
+      },
+      {
+        id: "b",
+        title: "IndexNow",
+        metric: "views",
+        category: "acquisition",
+        action: "index",
+        expectedImpact: 5,
+        confidence: 0.5,
+        effort: 1,
+        score: 8,
+        safeActionType: "indexnow_submit",
+        predicted: {
+          precursorMetric: "landing_views",
+          expectedProfitUsd: 40,
+          confidence: 0.4,
+          effort: 1,
+          costUsd: 0,
+          timeToSignalDays: 3,
+        },
+      },
+    ],
+    new Set(["indexnow_submit"]),
+  );
+  assert.equal(demoted[0]!.safeActionType, undefined);
+  assert.equal(demoted[1]!.safeActionType, "indexnow_submit");
+});

@@ -48,6 +48,26 @@ export function importanceFromEv(
   return "low";
 }
 
+/**
+ * Strip safeActionType when the adapter cannot execute it so ranking, money
+ * plan, and hunting stop treating missing limbs as executable.
+ */
+export function demoteUnavailableSafeActions(
+  opportunities: Opportunity[],
+  availableActionTypes: Set<string>,
+): Opportunity[] {
+  return opportunities.map((opportunity) => {
+    if (
+      !opportunity.safeActionType ||
+      availableActionTypes.has(opportunity.safeActionType)
+    ) {
+      return opportunity;
+    }
+    const { safeActionType: _removed, ...rest } = opportunity;
+    return rest;
+  });
+}
+
 export function capabilityForBlockedOpportunity(input: {
   opportunity: Opportunity;
   availableActionTypes: Set<string>;

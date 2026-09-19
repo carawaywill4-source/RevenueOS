@@ -1,6 +1,7 @@
 import type { DiscoveryDoorMetrics, HourPulse } from "@revenueos/core";
 import { PRODUCTS } from "@/catalog/products";
 import { MH_EVENTS } from "./events";
+import { readSearchConsoleDoorMetrics } from "./search-console";
 import { supabaseConfigured, getSupabaseAdmin } from "./supabase";
 
 export type FunnelCounts = Partial<Record<string, number>>;
@@ -357,15 +358,29 @@ export async function measureDiscoveryDoorMetrics(input: {
       purchases += 1;
       revenueUsd += Number(order.gross_revenue_usd ?? 0);
     }
-    const { count } = await sb
-      .from("mh_events")
-      .select("id", { count: "exact", head: true })
-      .eq("event_name", "checkout_started")
-      .gte("created_at", since);
-    checkouts = count ?? 0;
+    // Prefer product-scoped checkouts; fall back to topic_slug. Never use
+    // site-wide checkout_started — that leaks credit across doors.
+    const [byProduct, byTopic] = await Promise.all([
+      sb
+        .from("mh_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_name", "checkout_started")
+        .gte("created_at", since)
+        .in("product_id", input.productIds),
+      sb
+        .from("mh_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_name", "checkout_started")
+        .gte("created_at", since)
+        .contains("metadata", { topic_slug: input.slug }),
+    ]);
+    checkouts = Math.max(byProduct.count ?? 0, byTopic.count ?? 0);
   }
 
   const topicViews = Math.max(landing.count ?? 0, pageViews.count ?? 0);
+  const serp = await readSearchConsoleDoorMetrics(
+    `https://mendhaus.shop/topics/${input.slug}`,
+  );
   return {
     submitted: true,
     topicViews,
@@ -374,8 +389,8 @@ export async function measureDiscoveryDoorMetrics(input: {
     checkouts,
     purchases,
     revenueUsd: Number(revenueUsd.toFixed(2)),
-    indexed: null,
-    impressions: null,
-    clicks: null,
+    indexed: serp.indexed,
+    impressions: serp.impressions,
+    clicks: serp.clicks,
   };
 }
