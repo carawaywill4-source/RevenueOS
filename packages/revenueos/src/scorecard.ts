@@ -126,12 +126,12 @@ export function formatCycleReport(
     result.profitMandate?.successDeclaration ??
       "SUCCESS = money made for the customer. Everything else is a tool. Failure is not an option.",
     "",
-    "ORGANIC MASTERY ERA (business manager — ads locked until lethal)",
+    "ORGANIC MASTERY ERA (business manager — paid strategically deferred until lethal)",
     result.organicMastery
       ? [
           result.organicMastery.verdict,
           result.organicMastery.mission,
-          `Ads readiness: ${result.organicMastery.adsReadiness}`,
+          `Strategic ads readiness: ${result.organicMastery.adsReadiness} (spend_ads still owner-gated until budget grant)`,
           ...(result.organicMastery.gaps.length
             ? [`Gaps: ${result.organicMastery.gaps.join("; ")}`]
             : []),
